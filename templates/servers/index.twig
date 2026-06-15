@@ -50,7 +50,7 @@
                 {% endif %}
             </div>
             
-            <div class="grid grid-cols-2 gap-2 mb-4 text-xs">
+            <div class="grid grid-cols-2 gap-2 mb-2 text-xs">
                 <div class="bg-slate-800/50 p-2 rounded">
                     <span class="text-slate-500 block mb-0.5">VPN Port</span>
                     <span class="text-slate-300 font-mono">{{ server.vpn_port }}</span>
@@ -58,6 +58,23 @@
                 <div class="bg-slate-800/50 p-2 rounded">
                     <span class="text-slate-500 block mb-0.5">Clients</span>
                     <span class="text-slate-300">{{ server.client_count|default(0) }}</span>
+                </div>
+            </div>
+            
+            <div class="bg-slate-800/50 p-2 rounded mb-4 text-xs flex justify-between items-center">
+                <span class="text-slate-500">Live Traffic Speed</span>
+                <div class="font-mono text-slate-300">
+                    {% if server.speed_up_kbps > 0 or server.speed_down_kbps > 0 %}
+                        <span class="text-emerald-400 font-semibold">
+                            ↑{% if server.speed_up_kbps >= 1000 %}{{ (server.speed_up_kbps / 1000)|number_format(1) }} Mbps{% else %}{{ server.speed_up_kbps|number_format(0) }} Kbps{% endif %}
+                        </span>
+                        <span class="text-slate-600 mx-1">|</span>
+                        <span class="text-indigo-400 font-semibold">
+                            ↓{% if server.speed_down_kbps >= 1000 %}{{ (server.speed_down_kbps / 1000)|number_format(1) }} Mbps{% else %}{{ server.speed_down_kbps|number_format(0) }} Kbps{% endif %}
+                        </span>
+                    {% else %}
+                        <span class="text-slate-500">Idle (0 Kbps)</span>
+                    {% endif %}
                 </div>
             </div>
             

@@ -22,7 +22,7 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="panel p-5">
             <div class="flex items-center justify-between mb-3">
                 <span class="text-sm font-medium text-slate-400 uppercase tracking-wide text-xs">Total Servers</span>
@@ -37,6 +37,28 @@
                 <i class="fas fa-users text-cyan-400"></i>
             </div>
             <div class="text-3xl font-bold text-white">{{ clients|length }}</div>
+        </div>
+
+        <div class="panel p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-sm font-medium text-slate-400 uppercase tracking-wide text-xs">Live Network Speed</span>
+                <i class="fas fa-chart-line text-emerald-400"></i>
+            </div>
+            {% set total_speed_up = 0 %}
+            {% set total_speed_down = 0 %}
+            {% for server in servers %}
+                {% set total_speed_up = total_speed_up + server.speed_up_kbps|default(0) %}
+                {% set total_speed_down = total_speed_down + server.speed_down_kbps|default(0) %}
+            {% endfor %}
+            <div class="text-3xl font-bold text-white flex items-baseline gap-2">
+                <span class="text-emerald-400 text-lg font-semibold">
+                    ↑{% if total_speed_up >= 1000 %}{{ (total_speed_up / 1000)|number_format(1) }} <span class="text-[10px] font-normal text-slate-500">Mbps</span>{% else %}{{ total_speed_up|number_format(0) }} <span class="text-[10px] font-normal text-slate-500">Kbps</span>{% endif %}
+                </span>
+                <span class="text-slate-600 text-sm">/</span>
+                <span class="text-indigo-400 text-lg font-semibold">
+                    ↓{% if total_speed_down >= 1000 %}{{ (total_speed_down / 1000)|number_format(1) }} <span class="text-[10px] font-normal text-slate-500">Mbps</span>{% else %}{{ total_speed_down|number_format(0) }} <span class="text-[10px] font-normal text-slate-500">Kbps</span>{% endif %}
+                </span>
+            </div>
         </div>
     </div>
 
@@ -53,6 +75,7 @@
                     <tr class="bg-slate-800/50">
                         <th class="px-5 py-3 text-left text-[10px] uppercase tracking-widest text-slate-500 font-semibold">Name</th>
                         <th class="px-5 py-3 text-left text-[10px] uppercase tracking-widest text-slate-500 font-semibold">Host</th>
+                        <th class="px-5 py-3 text-left text-[10px] uppercase tracking-widest text-slate-500 font-semibold">Live Speed</th>
                         <th class="px-5 py-3 text-right text-[10px] uppercase tracking-widest text-slate-500 font-semibold">Actions</th>
                     </tr>
                 </thead>
@@ -69,6 +92,15 @@
                         </td>
                         <td class="px-5 py-4">
                             <code class="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded">{{ server.host }}</code>
+                        </td>
+                        <td class="px-5 py-4 font-mono text-xs">
+                            {% if server.speed_up_kbps > 0 or server.speed_down_kbps > 0 %}
+                                <span class="text-emerald-400 font-semibold">↑{% if server.speed_up_kbps >= 1000 %}{{ (server.speed_up_kbps / 1000)|number_format(1) }} Mbps{% else %}{{ server.speed_up_kbps|number_format(0) }} Kbps{% endif %}</span>
+                                <span class="text-slate-600 mx-1">|</span>
+                                <span class="text-indigo-400 font-semibold">↓{% if server.speed_down_kbps >= 1000 %}{{ (server.speed_down_kbps / 1000)|number_format(1) }} Mbps{% else %}{{ server.speed_down_kbps|number_format(0) }} Kbps{% endif %}</span>
+                            {% else %}
+                                <span class="text-slate-500">Idle</span>
+                            {% endif %}
                         </td>
                         <td class="px-5 py-4 text-right">
                             <a href="/servers/{{ server.id }}" class="btn-secondary px-3 py-1.5 text-xs inline-flex items-center">

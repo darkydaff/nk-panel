@@ -734,13 +734,30 @@ class VpnClient {
             }
         }
         
+        $speedUp = $this->formatSpeed((float)($this->data['speed_up_kbps'] ?? 0));
+        $speedDown = $this->formatSpeed((float)($this->data['speed_down_kbps'] ?? 0));
+        
         return [
             'sent' => $sent,
             'received' => $received,
             'total' => $total,
             'last_seen' => $lastSeen,
-            'is_online' => !empty($this->data['last_handshake']) && (time() - strtotime($this->data['last_handshake'])) < 300
+            'is_online' => !empty($this->data['last_handshake']) && (time() - strtotime($this->data['last_handshake'])) < 300,
+            'speed_up' => $speedUp,
+            'speed_down' => $speedDown,
+            'speed_up_raw' => (float)($this->data['speed_up_kbps'] ?? 0),
+            'speed_down_raw' => (float)($this->data['speed_down_kbps'] ?? 0),
         ];
+    }
+    
+    /**
+     * Format speed in Kbps to human-readable string (Kbps or Mbps)
+     */
+    private function formatSpeed(float $kbps): string {
+        if ($kbps >= 1000) {
+            return number_format($kbps / 1000, 1) . ' Mbps';
+        }
+        return number_format($kbps, 0) . ' Kbps';
     }
     
     /**

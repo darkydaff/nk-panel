@@ -77,7 +77,7 @@ class VpnServer
     /**
      * Deploy VPN server using amnezia_deploy_v2.php logic
      */
-    public function deploy(): array
+    public function deploy(?string $panelUrl = null): array
     {
         if (!$this->data) {
             throw new Exception('Server not loaded');
@@ -158,6 +158,16 @@ class VpnServer
 
             // Reload data
             $this->load();
+
+            // Deploy monitoring agent if panelUrl is provided
+            if ($panelUrl) {
+                try {
+                    $this->deployMonitoringAgent($panelUrl);
+                } catch (Exception $e) {
+                    // Log warning but don't fail deployment since VPN is already running
+                    error_log("Failed to deploy monitoring agent: " . $e->getMessage());
+                }
+            }
 
             return [
                 'success' => true,
@@ -732,14 +742,17 @@ public static function getMimicryPresets(): array
     public static function listByUser(int $userId): array
     {
         $pdo = DB::conn();
-        $stmt = $pdo->prepare('
-            SELECT s.*, COUNT(c.id) as client_count 
+        $stmt = $pdo->prepare("
+            SELECT s.*, 
+                   COUNT(c.id) as client_count,
+                   COALESCE(SUM(IF(c.status = 'active', c.speed_up_kbps, 0)), 0) as speed_up_kbps,
+                   COALESCE(SUM(IF(c.status = 'active', c.speed_down_kbps, 0)), 0) as speed_down_kbps
             FROM vpn_servers s 
             LEFT JOIN vpn_clients c ON s.id = c.server_id 
             WHERE s.user_id = ? 
             GROUP BY s.id 
             ORDER BY s.created_at DESC
-        ');
+        ");
         $stmt->execute([$userId]);
         return $stmt->fetchAll();
     }
@@ -750,14 +763,18 @@ public static function getMimicryPresets(): array
     public static function listAll(): array
     {
         $pdo = DB::conn();
-        $stmt = $pdo->query('
-            SELECT s.*, ANY_VALUE(u.email) as user_email, COUNT(c.id) as client_count 
+        $stmt = $pdo->query("
+            SELECT s.*, 
+                   ANY_VALUE(u.email) as user_email, 
+                   COUNT(c.id) as client_count,
+                   COALESCE(SUM(IF(c.status = 'active', c.speed_up_kbps, 0)), 0) as speed_up_kbps,
+                   COALESCE(SUM(IF(c.status = 'active', c.speed_down_kbps, 0)), 0) as speed_down_kbps
             FROM vpn_servers s 
             LEFT JOIN users u ON s.user_id = u.id 
             LEFT JOIN vpn_clients c ON s.id = c.server_id 
             GROUP BY s.id 
             ORDER BY s.created_at DESC
-        ');
+        ");
         return $stmt->fetchAll();
     }
 
@@ -1055,5 +1072,144 @@ public static function getMimicryPresets(): array
         $stmt = $pdo->prepare('SELECT * FROM server_backups WHERE id = ?');
         $stmt->execute([$backupId]);
         return $stmt->fetch() ?: null;
+    }
+
+    /**
+     * Deploy monitoring agent script and systemd service on remote server
+     */
+    public function deployMonitoringAgent(string $panelUrl): void
+    {
+        if (!$this->data) {
+            throw new Exception('Server not loaded');
+        }
+
+        $containerName = $this->data['container_name'] ?: 'nk-awg-v2';
+        $token = $this->data['secret_token'] ?? null;
+        
+        if (empty($token)) {
+            // Generate token if not exists
+            $token = bin2hex(random_bytes(32));
+            $pdo = DB::conn();
+            $pdo->prepare('UPDATE vpn_servers SET secret_token = ? WHERE id = ?')
+                ->execute([$token, $this->serverId]);
+            $this->data['secret_token'] = $token;
+        }
+
+        // Install curl on remote host if missing
+        $this->executeCommand("apt-get update && apt-get install -y curl || true", true);
+
+        // Generate script content
+        $scriptContent = $this->generateMonitorScript($token, $panelUrl, $containerName);
+
+        // Upload script
+        $base64Script = base64_encode($scriptContent);
+        $this->executeCommand("mkdir -p /opt/amnezia", true);
+        $this->executeCommand("echo '{$base64Script}' | base64 -d > /opt/amnezia/nk-monitor.sh", true);
+        $this->executeCommand("chmod +x /opt/amnezia/nk-monitor.sh", true);
+
+        // Upload systemd service
+        $serviceContent = <<<INI
+[Unit]
+Description=Nk VPN Panel Monitoring Agent
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /opt/amnezia/nk-monitor.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+INI;
+
+        $base64Service = base64_encode($serviceContent);
+        $this->executeCommand("echo '{$base64Service}' | base64 -d > /etc/systemd/system/nk-monitor.service", true);
+        
+        // Reload systemd and start service
+        $this->executeCommand("systemctl daemon-reload", true);
+        $this->executeCommand("systemctl enable nk-monitor.service", true);
+        $this->executeCommand("systemctl restart nk-monitor.service", true);
+    }
+
+    /**
+     * Generate the monitor script template
+     */
+    private function generateMonitorScript(string $token, string $panelUrl, string $containerName): string
+    {
+        return <<<BASH
+#!/bin/bash
+
+# Configuration
+TOKEN="{$token}"
+PANEL_URL="{$panelUrl}"
+CONTAINER_NAME="{$containerName}"
+INTERVAL=30
+
+# Clean up function
+cleanup() {
+    echo "Stopping nk-monitor..."
+    exit 0
+}
+trap cleanup SIGINT SIGTERM
+
+while true; do
+    start_time=\$(date +%s)
+    
+    # Clients Metrics from AWG
+    clients_json=""
+    if docker ps --format '{{.Names}}' | grep -q "^\${CONTAINER_NAME}\$"; then
+        dump_output=\$(docker exec "\${CONTAINER_NAME}" /usr/local/bin/awg show wg0 dump 2>/dev/null)
+        
+        first_line=true
+        while read -r line; do
+            [ -z "\$line" ] && continue
+            
+            if [ "\$first_line" = true ]; then
+                first_line=false
+                continue
+            fi
+            
+            parts=(\$line)
+            if [ \${#parts[@]} -ge 7 ]; then
+                pub_key="\${parts[0]}"
+                handshake="\${parts[4]}"
+                rx="\${parts[5]}" 
+                tx="\${parts[6]}" 
+                
+                if [ -n "\$clients_json" ]; then
+                    clients_json="\${clients_json},"
+                fi
+                clients_json="\${clients_json}{\\"public_key\\":\\"\${pub_key}\\",\\"bytes_sent\\":\${tx},\\"bytes_received\\":\${rx},\\"last_handshake\\":\${handshake}}"
+            fi
+        done <<< "\$dump_output"
+    fi
+    
+    # Construct Payload
+    payload=\$(cat <<EOF
+{
+  "token": "\${TOKEN}",
+  "clients": [
+    \${clients_json}
+  ]
+}
+EOF
+)
+
+    # POST to panel
+    curl -s -X POST \
+         -H "Content-Type: application/json" \
+         -d "\$payload" \
+         "\${PANEL_URL}/api/servers/report-metrics" > /dev/null
+         
+    end_time=\$(date +%s)
+    elapsed=\$((end_time - start_time))
+    sleep_time=\$((INTERVAL - elapsed))
+    if [ \$sleep_time -gt 0 ]; then
+        sleep \$sleep_time
+    fi
+done
+BASH;
     }
 }

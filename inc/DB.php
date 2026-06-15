@@ -20,6 +20,28 @@ class DB {
     // Explicitly set UTF-8 encoding for connection
     self::$pdo->exec("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
     
+    // Auto-run schema updates if columns are missing
+    self::checkAndRunMigrations(self::$pdo);
+    
     return self::$pdo;
+  }
+
+  private static function checkAndRunMigrations(PDO $pdo): void {
+    try {
+      // Check if secret_token column exists in vpn_servers
+      $stmt = $pdo->query("SHOW COLUMNS FROM vpn_servers LIKE 'secret_token'");
+      $hasSecretToken = $stmt->rowCount() > 0;
+      
+      if (!$hasSecretToken) {
+        // Run migration script
+        $sqlPath = __DIR__ . '/../migrations/017_add_server_secret_token_and_speeds.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
+    } catch (Throwable $e) {
+      error_log("Database self-healing migration failed: " . $e->getMessage());
+    }
   }
 }

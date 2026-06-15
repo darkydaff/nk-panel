@@ -469,10 +469,16 @@ Router::get('/servers/{id}', function ($params) {
             }
         }
         
+        $agentOnline = false;
+        if (!empty($serverData['last_check_at'])) {
+            $agentOnline = (time() - strtotime($serverData['last_check_at'])) < 120;
+        }
+        
         View::render('servers/view.twig', [
             'server' => $serverData,
             'clients' => $clients,
             'import_message' => $importMessage,
+            'agent_online' => $agentOnline,
         ]);
     } catch (Exception $e) {
         error_log('Server view error: ' . $e->getMessage() . ' at ' . $e->getFile() . ':' . $e->getLine());
@@ -817,6 +823,181 @@ Router::post('/servers/{id}/sync-stats', function ($params) {
         $synced = VpnClient::syncAllStatsForServer($serverId);
         echo json_encode(['success' => true, 'synced' => $synced]);
     } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+});
+
+// Deploy monitoring agent for server
+Router::post('/servers/{id}/deploy-monitoring', function ($params) {
+    requireAuth();
+    $serverId = (int)$params['id'];
+    
+    header('Content-Type: application/json');
+    
+    try {
+        $server = new VpnServer($serverId);
+        $serverData = $server->getData();
+        
+        // Check ownership
+        $user = Auth::user();
+        if ($serverData['user_id'] != $user['id'] && !Auth::isAdmin()) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Forbidden']);
+            return;
+        }
+        
+        $scheme = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
+        $panelUrl = $scheme . '://' . $_SERVER['HTTP_HOST'];
+        
+        $server->deployMonitoringAgent($panelUrl);
+        
+        echo json_encode(['success' => true]);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+});
+
+// API: Report metrics from remote server (used by push agent)
+Router::post('/api/servers/report-metrics', function () {
+    header('Content-Type: application/json');
+    
+    $raw = file_get_contents('php://input');
+    $data = json_decode($raw, true);
+    
+    $token = $data['token'] ?? '';
+    if (empty($token)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Token is required']);
+        return;
+    }
+    
+    $pdo = DB::conn();
+    
+    // Find server by token
+    $stmt = $pdo->prepare('SELECT id FROM vpn_servers WHERE secret_token = ?');
+    $stmt->execute([$token]);
+    $serverId = $stmt->fetchColumn();
+    
+    if (!$serverId) {
+        http_response_code(401);
+        echo json_encode(['error' => 'Invalid server token']);
+        return;
+    }
+    
+    try {
+        $pdo->beginTransaction();
+        
+        // Update last_check_at for the server to show the agent is online
+        $stmt = $pdo->prepare('UPDATE vpn_servers SET last_check_at = NOW() WHERE id = ?');
+        $stmt->execute([$serverId]);
+        
+        // Process client metrics
+        if (isset($data['clients']) && is_array($data['clients'])) {
+            foreach ($data['clients'] as $c) {
+                $publicKey = $c['public_key'] ?? '';
+                if (empty($publicKey)) continue;
+                
+                // Find client by public_key and server_id
+                $stmt = $pdo->prepare('SELECT id, bytes_sent, bytes_received FROM vpn_clients WHERE server_id = ? AND public_key = ?');
+                $stmt->execute([$serverId, $publicKey]);
+                $client = $stmt->fetch(PDO::FETCH_ASSOC);
+                
+                if ($client) {
+                    $clientId = $client['id'];
+                    $rawBytesSent = (int)($c['bytes_sent'] ?? 0);
+                    $rawBytesReceived = (int)($c['bytes_received'] ?? 0);
+                    $lastHandshakeVal = (int)($c['last_handshake'] ?? 0);
+                    
+                    // Fetch latest recorded raw metrics to calculate speed and traffic deltas
+                    $stmt = $pdo->prepare('
+                        SELECT bytes_sent, bytes_received, collected_at 
+                        FROM client_metrics 
+                        WHERE client_id = ? 
+                        ORDER BY collected_at DESC 
+                        LIMIT 1
+                    ');
+                    $stmt->execute([$clientId]);
+                    $prev = $stmt->fetch(PDO::FETCH_ASSOC);
+                    
+                    $speedUp = 0;
+                    $speedDown = 0;
+                    $deltaSent = $rawBytesSent;
+                    $deltaReceived = $rawBytesReceived;
+                    
+                    if ($prev) {
+                        $timeDiff = time() - strtotime($prev['collected_at']);
+                        if ($timeDiff > 0) {
+                            $rawBytesDiffSent = $rawBytesSent - (int)$prev['bytes_sent'];
+                            $rawBytesDiffReceived = $rawBytesReceived - (int)$prev['bytes_received'];
+                            
+                            // Handle potential stats reset on container/interface restart
+                            if ($rawBytesDiffSent >= 0) {
+                                $deltaSent = $rawBytesDiffSent;
+                            }
+                            if ($rawBytesDiffReceived >= 0) {
+                                $deltaReceived = $rawBytesDiffReceived;
+                            }
+                            
+                            // speedUp = Client Upload = Received by Server (rawBytesDiffReceived)
+                            // speedDown = Client Download = Transmitted by Server (rawBytesDiffSent)
+                            $speedUp = round(($deltaReceived * 8) / $timeDiff / 1000, 2);
+                            $speedDown = round(($deltaSent * 8) / $timeDiff / 1000, 2);
+                        }
+                    }
+                    
+                    // Save raw client metrics for speed calculations
+                    $stmt = $pdo->prepare('
+                        INSERT INTO client_metrics 
+                        (client_id, bytes_sent, bytes_received, speed_up_kbps, speed_down_kbps)
+                        VALUES (?, ?, ?, ?, ?)
+                    ');
+                    $stmt->execute([
+                        $clientId,
+                        $rawBytesSent,
+                        $rawBytesReceived,
+                        $speedUp,
+                        $speedDown
+                    ]);
+                    
+                    // Accumulate client traffic in main table to prevent resets
+                    $newTotalSent = (int)$client['bytes_sent'] + $deltaSent;
+                    $newTotalReceived = (int)$client['bytes_received'] + $deltaReceived;
+                    
+                    $lastHandshake = $lastHandshakeVal > 0 ? date('Y-m-d H:i:s', $lastHandshakeVal) : null;
+                    $stmt = $pdo->prepare('
+                        UPDATE vpn_clients 
+                        SET bytes_sent = ?, 
+                            bytes_received = ?, 
+                            speed_up_kbps = ?, 
+                            speed_down_kbps = ?, 
+                            last_handshake = ?, 
+                            last_sync_at = NOW()
+                        WHERE id = ?
+                    ');
+                    $stmt->execute([
+                        $newTotalSent,
+                        $newTotalReceived,
+                        $speedUp,
+                        $speedDown,
+                        $lastHandshake,
+                        $clientId
+                    ]);
+                }
+            }
+        }
+        
+        $pdo->commit();
+        
+        // Clean old metrics (older than 24h)
+        ServerMonitoring::cleanOldMetrics();
+        
+        echo json_encode(['success' => true]);
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
     }

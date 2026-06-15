@@ -177,6 +177,23 @@ class ServerMonitoring
     }
     
     /**
+     * Get aggregated upload/download speeds for a server from its active clients
+     */
+    public static function getAggregatedServerSpeed(int $serverId): array
+    {
+        $db = DB::conn();
+        $stmt = $db->prepare("
+            SELECT 
+                COALESCE(SUM(speed_up_kbps), 0) as speed_up,
+                COALESCE(SUM(speed_down_kbps), 0) as speed_down
+            FROM vpn_clients
+            WHERE server_id = ? AND status = 'active'
+        ");
+        $stmt->execute([$serverId]);
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: ['speed_up' => 0.00, 'speed_down' => 0.00];
+    }
+    
+    /**
      * Clean old metrics (older than 24 hours)
      */
     public static function cleanOldMetrics(): void
