@@ -220,47 +220,94 @@
         .toast-close:hover { color: var(--text-primary); }
     </style>
 </head>
-<body class="text-slate-100">
+<body class="text-slate-100 bg-slate-950 font-sans">
     {% if user %}
-    <nav class="nav shadow-lg sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16">
-                <div class="flex">
-                    <div class="flex-shrink-0 flex items-center">
-                        <img src="/img/logo.svg" alt="Logo" class="w-8 h-8 mr-3">
-                        <span class="text-white text-xl font-bold">{{ app_name }}</span>
+    <div class="flex min-h-screen bg-slate-950">
+        <!-- Off-canvas Mobile Sidebar Overlay -->
+        <div id="sidebarOverlay" class="fixed inset-0 z-30 bg-black/60 hidden transition-opacity duration-300 md:hidden" onclick="toggleMobileSidebar()"></div>
+
+        <!-- Vertical Left Sidebar -->
+        <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 w-64 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out border-r border-slate-800 bg-slate-900 flex flex-col">
+            <!-- Sidebar Header (Logo & Brand) -->
+            <div class="h-16 flex items-center px-6 border-b border-slate-800 gap-3 shrink-0">
+                <img src="/img/logo.svg" alt="Logo" class="w-8 h-8">
+                <span class="text-white text-lg font-bold tracking-tight">{{ app_name }}</span>
+            </div>
+
+            <!-- Main Navigation Links -->
+            <nav class="flex-grow px-4 py-6 space-y-1.5 overflow-y-auto">
+                <a href="/dashboard" class="text-slate-300 hover:text-white hover:bg-slate-800/50 px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center gap-3 {% if current_uri == '/dashboard' %}bg-slate-800 text-white font-semibold{% endif %}">
+                    <i class="fas fa-tachometer-alt w-5 text-center opacity-70"></i>
+                    <span>{{ t('menu.dashboard') }}</span>
+                </a>
+                <a href="/servers" class="text-slate-300 hover:text-white hover:bg-slate-800/50 px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center gap-3 {% if current_uri starts with '/servers' %}bg-slate-800 text-white font-semibold{% endif %}">
+                    <i class="fas fa-server w-5 text-center opacity-70"></i>
+                    <span>{{ t('menu.servers') }}</span>
+                </a>
+            </nav>
+
+            <!-- Sidebar Footer (Settings, Profile & Logout) -->
+            <div class="mt-auto border-t border-slate-800 p-4 space-y-4 bg-slate-900/50 shrink-0">
+                <div class="space-y-1">
+                    <a href="/settings" class="text-slate-300 hover:text-white hover:bg-slate-800/50 px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center gap-3 {% if current_uri starts with '/settings' %}bg-slate-800 text-white font-semibold{% endif %}">
+                        <i class="fas fa-cog w-5 text-center opacity-70"></i>
+                        <span>{{ t('menu.settings') }}</span>
+                    </a>
+                    <a href="/logout" class="text-slate-400 hover:text-red-400 hover:bg-red-500/10 px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center gap-3">
+                        <i class="fas fa-sign-out-alt w-5 text-center"></i>
+                        <span>{{ t('menu.logout') }}</span>
+                    </a>
+                </div>
+
+                <div class="border-t border-slate-800 my-2"></div>
+
+                <!-- User Widget -->
+                <div class="flex items-center gap-3 px-2 py-1.5 rounded-lg bg-slate-950/40">
+                    <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-semibold text-xs text-sky-400 border border-slate-700 select-none">
+                        {{ user.name|slice(0, 2)|upper }}
                     </div>
-                    <div class="hidden md:ml-8 md:flex md:space-x-2 items-center">
-                        <a href="/dashboard" class="text-slate-300 hover:text-white hover:bg-white/5 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center">
-                            <i class="fas fa-tachometer-alt mr-2 opacity-70"></i>{{ t('menu.dashboard') }}
-                        </a>
-                        <a href="/servers" class="text-slate-300 hover:text-white hover:bg-white/5 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center">
-                            <i class="fas fa-server mr-2 opacity-70"></i>{{ t('menu.servers') }}
-                        </a>
-                        {% if user.role == 'admin' %}
-                        <a href="/settings" class="text-slate-300 hover:text-white hover:bg-white/5 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center">
-                            <i class="fas fa-cog mr-2 opacity-70"></i>{{ t('menu.settings') }}
-                        </a>
-                        {% endif %}
+                    <div class="flex flex-col min-w-0">
+                        <span class="text-xs font-semibold text-white truncate">{{ user.name }}</span>
+                        <span class="text-[9px] text-slate-500 uppercase tracking-wider">{{ user.role }}</span>
                     </div>
                 </div>
+            </div>
+        </aside>
+
+        <!-- Right side Viewport -->
+        <div class="flex-1 flex flex-col min-w-0 md:pl-64">
+            <!-- Top Utility Bar -->
+            <header class="h-16 border-b border-slate-800 bg-slate-900/30 backdrop-blur sticky top-0 z-30 flex items-center justify-between px-4 sm:px-6">
+                <!-- Breadcrumbs & Hamburger Menu -->
+                <div class="flex items-center gap-3">
+                    <button onclick="toggleMobileSidebar()" type="button" class="md:hidden text-slate-300 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition-colors focus:outline-none">
+                        <i class="fas fa-bars text-lg"></i>
+                    </button>
+                    <div class="flex items-center text-xs font-medium text-slate-500 gap-1 sm:gap-2">
+                        {% block breadcrumbs %}
+                            <a href="/dashboard" class="hover:text-slate-300 transition-colors">Home</a>
+                        {% endblock %}
+                    </div>
+                </div>
+
+                <!-- Right Utils (Language Dropdown) -->
                 <div class="flex items-center">
-                    <div class="relative mr-4">
-                        <button onclick="toggleLanguageDropdown()" class="text-slate-300 hover:text-white flex items-center px-3 py-2 rounded-lg hover:bg-white/5 transition-colors focus:outline-none">
+                    <div class="relative">
+                        <button onclick="toggleLanguageDropdown()" class="text-slate-300 hover:text-white flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 transition-colors focus:outline-none text-sm font-medium">
                             {% for lang in languages %}
                                 {% if lang.code == current_language %}
                                     <span class="mr-2">{{ getFlag(lang.code) }}</span>
                                 {% endif %}
                             {% endfor %}
-                            <i class="fas fa-chevron-down ml-1 text-xs opacity-70"></i>
+                            <i class="fas fa-chevron-down ml-1.5 text-[10px] opacity-70"></i>
                         </button>
-                        <div id="languageDropdown" class="language-dropdown absolute right-0 mt-2 w-48 panel z-50 shadow-xl p-1">
+                        <div id="languageDropdown" class="language-dropdown absolute right-0 mt-2 w-48 panel z-50 shadow-xl p-1 bg-slate-900 border border-slate-800 rounded-lg">
                             {% for lang in languages %}
                             <form method="POST" action="/language/change" class="block">
                                 <input type="hidden" name="language" value="{{ lang.code }}">
                                 <input type="hidden" name="redirect" value="{{ current_uri }}">
-                                <button type="submit" class="w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-white/10 rounded-lg flex items-center transition-colors
-                                    {% if lang.code == current_language %}bg-white/10 text-white font-medium{% endif %}">
+                                <button type="submit" class="w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg flex items-center transition-colors
+                                    {% if lang.code == current_language %}bg-slate-800 text-white font-medium{% endif %}">
                                     <span class="mr-3">{{ getFlag(lang.code) }}</span>
                                     <span>{{ lang.name }}</span>
                                     {% if lang.code == current_language %}
@@ -271,75 +318,38 @@
                             {% endfor %}
                         </div>
                     </div>
-                    
-                    <div class="hidden md:flex items-center pl-4 border-l border-slate-700 space-x-4">
-                        <div class="flex items-center text-slate-300">
-                            <div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center mr-2">
-                                <i class="fas fa-user text-sm opacity-80"></i>
-                            </div>
-                            <span class="text-sm font-medium">{{ user.name }}</span>
-                        </div>
-                        <a href="/logout" class="text-slate-400 hover:text-white px-3 py-2 rounded-lg hover:bg-red-500/20 hover:text-red-400 transition-colors flex items-center" title="{{ t('menu.logout') }}">
-                            <i class="fas fa-sign-out-alt"></i>
-                        </a>
-                    </div>
-
-                    <div class="md:hidden flex items-center ml-2">
-                        <button onclick="toggleMobileMenu()" type="button" class="text-slate-300 hover:text-white p-2.5 rounded-lg hover:bg-white/10 focus:outline-none transition-colors">
-                            <i class="fas fa-bars text-xl"></i>
-                        </button>
-                    </div>
                 </div>
-            </div>
-        </div>
+            </header>
 
-        <div id="mobileMenu" class="mobile-menu md:hidden border-t border-slate-700 panel mt-1 mx-2 mb-4 shadow-xl">
-            <div class="px-3 pt-3 pb-4 space-y-1.5">
-                <a href="/dashboard" class="text-slate-300 hover:text-white hover:bg-white/10 block px-4 py-3.5 rounded-lg text-base font-medium flex items-center transition-colors">
-                    <i class="fas fa-tachometer-alt mr-4 w-6 text-center opacity-70 text-accent"></i>{{ t('menu.dashboard') }}
-                </a>
-                <a href="/servers" class="text-slate-300 hover:text-white hover:bg-white/10 block px-4 py-3.5 rounded-lg text-base font-medium flex items-center transition-colors">
-                    <i class="fas fa-server mr-4 w-6 text-center opacity-70 text-accent"></i>{{ t('menu.servers') }}
-                </a>
-                {% if user.role == 'admin' %}
-                <a href="/settings" class="text-slate-300 hover:text-white hover:bg-white/10 block px-4 py-3.5 rounded-lg text-base font-medium flex items-center transition-colors">
-                    <i class="fas fa-cog mr-4 w-6 text-center opacity-70 text-accent"></i>{{ t('menu.settings') }}
-                </a>
-                {% endif %}
-                <div class="border-t border-slate-700 my-2 mx-1"></div>
-                <div class="text-slate-300 px-4 py-3 flex items-center bg-white/5 rounded-lg mx-1 mb-2">
-                    <div class="w-9 h-9 rounded-full bg-slate-700 flex items-center justify-center mr-3">
-                        <i class="fas fa-user text-sm opacity-80 text-accent"></i>
-                    </div>
-                    <div class="flex flex-col">
-                        <span class="text-sm font-semibold text-white">{{ user.name }}</span>
-                        <span class="text-[10px] text-slate-500 uppercase tracking-widest">{{ user.role }}</span>
-                    </div>
+            <!-- Main Content Workspace -->
+            <main class="flex-grow py-6 px-4 sm:px-6 lg:px-8 w-full max-w-7xl mx-auto flex flex-col">
+                {% block content %}{% endblock %}
+            </main>
+
+            <!-- Main Footer -->
+            <footer class="mt-auto border-t border-slate-800 py-4 bg-slate-900/10 text-center shrink-0">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <span class="text-xs text-slate-600">{{ app_name }} &copy; {{ "now"|date("Y") }}</span>
                 </div>
-                <a href="/logout" class="text-red-400 hover:text-red-300 hover:bg-red-500/20 block px-4 py-3.5 rounded-lg text-base font-medium flex items-center transition-colors">
-                    <i class="fas fa-sign-out-alt mr-4 w-6 text-center"></i>{{ t('menu.logout') }}
-                </a>
-            </div>
+            </footer>
         </div>
-    </nav>
-    {% endif %}
-
-    <main class="flex-grow flex flex-col {% if user %}py-6 px-3 sm:py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full{% endif %}">
+    </div>
+    {% else %}
+    <main class="flex-grow flex flex-col">
         {% block content %}{% endblock %}
     </main>
+    {% endif %}
 
     <div id="toastContainer" class="toast-container"></div>
 
-    <footer class="mt-auto border-t border-slate-700 py-4 nav shrink-0">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <span class="text-sm text-slate-500">{{ app_name }} &copy; {{ "now"|date("Y") }}</span>
-        </div>
-    </footer>
-
     <script>
-        function toggleMobileMenu() {
-            const menu = document.getElementById('mobileMenu');
-            menu.classList.toggle('active');
+        function toggleMobileSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            if (sidebar && overlay) {
+                sidebar.classList.toggle('-translate-x-full');
+                overlay.classList.toggle('hidden');
+            }
         }
 
         function toggleLanguageDropdown() {

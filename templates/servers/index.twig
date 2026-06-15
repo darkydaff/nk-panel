@@ -2,6 +2,12 @@
 
 {% block title %}{{ t('servers.title') }}{% endblock %}
 
+{% block breadcrumbs %}
+    <a href="/dashboard" class="hover:text-slate-300 transition-colors">Home</a>
+    <i class="fas fa-chevron-right text-[10px] text-slate-700 mx-1"></i>
+    <span class="text-slate-300">Servers</span>
+{% endblock %}
+
 {% block content %}
 <div class="w-full">
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">

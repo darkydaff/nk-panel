@@ -1,5 +1,14 @@
 {% extends "layout.twig" %}
 {% block title %}Add Server{% endblock %}
+
+{% block breadcrumbs %}
+    <a href="/dashboard" class="hover:text-slate-300 transition-colors">Home</a>
+    <i class="fas fa-chevron-right text-[10px] text-slate-700 mx-1"></i>
+    <a href="/servers" class="hover:text-slate-300 transition-colors">Servers</a>
+    <i class="fas fa-chevron-right text-[10px] text-slate-700 mx-1"></i>
+    <span class="text-slate-300">Add Server</span>
+{% endblock %}
+
 {% block content %}
 <div class="max-w-3xl mx-auto px-4 w-full py-6">
     <div class="mb-6">

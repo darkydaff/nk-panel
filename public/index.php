@@ -587,9 +587,14 @@ Router::get('/clients/{id}', function ($params) {
         }
         $stats = $client->getFormattedStats();
         
+        // Fetch server details for client breadcrumbs
+        $server = new VpnServer($clientData['server_id']);
+        $serverData = $server->getData();
+        
         View::render('clients/view.twig', [
             'client' => $clientData,
-            'stats' => $stats
+            'stats' => $stats,
+            'server' => $serverData
         ]);
     } catch (Exception $e) {
         http_response_code(404);

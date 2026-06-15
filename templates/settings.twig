@@ -2,6 +2,12 @@
 
 {% block title %}{{ t('menu.settings') }} - {{ app_name }}{% endblock %}
 
+{% block breadcrumbs %}
+    <a href="/dashboard" class="hover:text-slate-300 transition-colors">Home</a>
+    <i class="fas fa-chevron-right text-[10px] text-slate-700 mx-1"></i>
+    <span class="text-slate-300">Settings</span>
+{% endblock %}
+
 {% block content %}
 <div class="max-w-5xl mx-auto px-4 w-full">
     <div class="mb-6">

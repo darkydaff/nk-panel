@@ -2,6 +2,10 @@
 
 {% block title %}{{ t('dashboard.title') }} - {{ app_name }}{% endblock %}
 
+{% block breadcrumbs %}
+    <span class="text-slate-300">Dashboard</span>
+{% endblock %}
+
 {% block content %}
 <div class="w-full space-y-6">
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">

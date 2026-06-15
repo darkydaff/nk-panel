@@ -1,5 +1,16 @@
 {% extends "layout.twig" %}
 {% block title %}Deploy {{ server.name }}{% endblock %}
+
+{% block breadcrumbs %}
+    <a href="/dashboard" class="hover:text-slate-300 transition-colors">Home</a>
+    <i class="fas fa-chevron-right text-[10px] text-slate-700 mx-1"></i>
+    <a href="/servers" class="hover:text-slate-300 transition-colors">Servers</a>
+    <i class="fas fa-chevron-right text-[10px] text-slate-700 mx-1"></i>
+    <a href="/servers/{{ server.id }}" class="hover:text-slate-300 transition-colors">{{ server.name }}</a>
+    <i class="fas fa-chevron-right text-[10px] text-slate-700 mx-1"></i>
+    <span class="text-slate-300">Deployment</span>
+{% endblock %}
+
 {% block content %}
 <div class="max-w-4xl mx-auto px-4 py-8 w-full">
     <div class="mb-8 text-center">
