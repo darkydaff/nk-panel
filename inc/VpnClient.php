@@ -617,6 +617,9 @@ class VpnClient {
         try {
             $stats = self::getClientStatsFromServer($serverData, $this->data['public_key']);
             
+            // Update GeoIP information if endpoint IP has changed
+            self::updateGeoIpForClient($this->clientId, $stats['endpoint'] ?? null, $this->data['last_endpoint_ip'] ?? null);
+            
             $pdo = DB::conn();
             $stmt = $pdo->prepare('
                 UPDATE vpn_clients 
@@ -641,6 +644,56 @@ class VpnClient {
     }
     
     /**
+     * Update client GeoIP data based on its endpoint if the endpoint changed
+     */
+    public static function updateGeoIpForClient(int $clientId, ?string $endpoint, ?string $currentEndpointIp): void {
+        if (empty($endpoint) || $endpoint === '(none)') {
+            return;
+        }
+
+        // Extract IP address from endpoint (IP:PORT or [IPv6]:PORT)
+        $ip = '';
+        if (strpos($endpoint, '[') === 0) {
+            $endPos = strpos($endpoint, ']');
+            if ($endPos !== false) {
+                $ip = substr($endpoint, 1, $endPos - 1);
+            }
+        } else {
+            $lastColon = strrpos($endpoint, ':');
+            if ($lastColon !== false) {
+                $ip = substr($endpoint, 0, $lastColon);
+            } else {
+                $ip = $endpoint;
+            }
+        }
+
+        if (empty($ip) || $ip === $currentEndpointIp) {
+            return;
+        }
+
+        // Lookup GeoIP
+        $geo = GeoIP::lookup($ip);
+        if ($geo) {
+            $pdo = DB::conn();
+            $stmt = $pdo->prepare('
+                UPDATE vpn_clients 
+                SET last_endpoint_ip = ?, 
+                    country = ?, 
+                    city = ?, 
+                    isp = ? 
+                WHERE id = ?
+            ');
+            $stmt->execute([
+                $ip,
+                $geo['country'],
+                $geo['city'],
+                $geo['isp'],
+                $clientId
+            ]);
+        }
+    }
+    
+    /**
      * Get client statistics from server
      */
     private static function getClientStatsFromServer(array $serverData, string $publicKey): array {
@@ -653,7 +706,8 @@ class VpnClient {
         $stats = [
             'bytes_sent' => 0,
             'bytes_received' => 0,
-            'last_handshake' => 0
+            'last_handshake' => 0,
+            'endpoint' => null
         ];
         
         // Parse awg dump output
@@ -673,6 +727,7 @@ class VpnClient {
             // Match by public key
             if ($parts[0] === $publicKey) {
                 $stats['last_handshake'] = (int)$parts[4];
+                $stats['endpoint'] = $parts[2];
                 $stats['bytes_sent'] = (int)$parts[5];      // transfer_rx - client sent
                 $stats['bytes_received'] = (int)$parts[6];  // transfer_tx - client received
                 break;

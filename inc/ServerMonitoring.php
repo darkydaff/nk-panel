@@ -30,7 +30,7 @@ class ServerMonitoring
             
             $stats = $this->getClientStats($client);
             if ($stats) {
-                $this->saveClientMetrics($client['id'], $stats);
+                $this->saveClientMetrics($client, $stats);
                 $results[] = [
                     'client_id' => $client['id'],
                     'client_name' => $client['name'],
@@ -54,17 +54,18 @@ class ServerMonitoring
         $containerName = $this->serverData['container_name'];
         $publicKey = $client['public_key'];
         
-        $cmd = "docker exec {$containerName} /usr/local/bin/awg show all dump | grep '{$publicKey}' | awk '{print \$6, \$7, \$8}'";
+        $cmd = "docker exec {$containerName} /usr/local/bin/awg show all dump | grep '{$publicKey}' | awk '{print \$4, \$6, \$7, \$8}'";
         $result = $this->execSSH($cmd);
         
         if (!$result) return null;
         
         $parts = explode(' ', trim($result));
-        if (count($parts) < 3) return null;
+        if (count($parts) < 4) return null;
         
-        $lastHandshake = (int)$parts[0];
-        $bytesReceived = $parts[1];
-        $bytesSent = $parts[2];
+        $endpoint = $parts[0];
+        $lastHandshake = (int)$parts[1];
+        $bytesReceived = $parts[2];
+        $bytesSent = $parts[3];
         
         // Get previous metrics (30 seconds ago)
         $stmt = $db->prepare("
@@ -100,15 +101,20 @@ class ServerMonitoring
             'speed_up_kbps' => $speedUp,
             'speed_down_kbps' => $speedDown,
             'last_handshake' => $lastHandshake,
+            'endpoint' => $endpoint,
         ];
     }
     
     /**
      * Save client metrics to database
      */
-    private function saveClientMetrics(int $clientId, array $stats): void
+    private function saveClientMetrics(array $client, array $stats): void
     {
+        $clientId = $client['id'];
         $db = DB::conn();
+        
+        // Update GeoIP information if endpoint IP has changed
+        VpnClient::updateGeoIpForClient($clientId, $stats['endpoint'] ?? null, $client['last_endpoint_ip'] ?? null);
         
         $stmt = $db->prepare("
             INSERT INTO client_metrics 

@@ -20,6 +20,7 @@ require_once __DIR__ . '/../inc/Translator.php';
 require_once __DIR__ . '/../inc/JWT.php';
 require_once __DIR__ . '/../inc/PanelImporter.php';
 require_once __DIR__ . '/../inc/ServerMonitoring.php';
+require_once __DIR__ . '/../inc/GeoIP.php';
 
 // Load environment configuration
 Config::load(__DIR__ . '/../.env');
@@ -905,12 +906,15 @@ Router::post('/api/servers/report-metrics', function () {
                 if (empty($publicKey)) continue;
                 
                 // Find client by public_key and server_id
-                $stmt = $pdo->prepare('SELECT id, bytes_sent, bytes_received FROM vpn_clients WHERE server_id = ? AND public_key = ?');
+                $stmt = $pdo->prepare('SELECT id, bytes_sent, bytes_received, last_endpoint_ip FROM vpn_clients WHERE server_id = ? AND public_key = ?');
                 $stmt->execute([$serverId, $publicKey]);
                 $client = $stmt->fetch(PDO::FETCH_ASSOC);
                 
                 if ($client) {
                     $clientId = $client['id'];
+                    
+                    // Update GeoIP information if endpoint IP has changed
+                    VpnClient::updateGeoIpForClient($clientId, $c['endpoint'] ?? null, $client['last_endpoint_ip'] ?? null);
                     $rawBytesSent = (int)($c['bytes_sent'] ?? 0);
                     $rawBytesReceived = (int)($c['bytes_received'] ?? 0);
                     $lastHandshakeVal = (int)($c['last_handshake'] ?? 0);

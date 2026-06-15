@@ -1174,6 +1174,7 @@ while true; do
             parts=(\$line)
             if [ \${#parts[@]} -ge 7 ]; then
                 pub_key="\${parts[0]}"
+                endpoint="\${parts[2]}"
                 handshake="\${parts[4]}"
                 rx="\${parts[5]}" 
                 tx="\${parts[6]}" 
@@ -1181,7 +1182,7 @@ while true; do
                 if [ -n "\$clients_json" ]; then
                     clients_json="\${clients_json},"
                 fi
-                clients_json="\${clients_json}{\\"public_key\\":\\"\${pub_key}\\",\\"bytes_sent\\":\${tx},\\"bytes_received\\":\${rx},\\"last_handshake\\":\${handshake}}"
+                clients_json="\${clients_json}{\\"public_key\\":\\"\${pub_key}\\",\\"endpoint\\":\\"\${endpoint}\\",\\"bytes_sent\\":\${tx},\\"bytes_received\\":\${rx},\\"last_handshake\\":\${handshake}}"
             fi
         done <<< "\$dump_output"
     fi

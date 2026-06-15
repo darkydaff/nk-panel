@@ -40,6 +40,19 @@ class DB {
           $pdo->exec($sql);
         }
       }
+
+      // Check if last_endpoint_ip column exists in vpn_clients
+      $stmt2 = $pdo->query("SHOW COLUMNS FROM vpn_clients LIKE 'last_endpoint_ip'");
+      $hasGeoIP = $stmt2->rowCount() > 0;
+      
+      if (!$hasGeoIP) {
+        // Run GeoIP migration script
+        $sqlPath = __DIR__ . '/../migrations/018_add_client_geoip.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
     } catch (Throwable $e) {
       error_log("Database self-healing migration failed: " . $e->getMessage());
     }
