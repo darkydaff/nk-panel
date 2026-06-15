@@ -7,6 +7,9 @@
 session_name(getenv('SESSION_NAME') ?: 'amnezia_panel_session');
 session_start();
 
+// Standardize PHP timezone to UTC
+date_default_timezone_set('UTC');
+
 // Load dependencies
 require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../inc/Config.php';

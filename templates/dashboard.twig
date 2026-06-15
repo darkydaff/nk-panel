@@ -303,8 +303,9 @@ document.addEventListener('DOMContentLoaded', function() {
     function getClientActivity(lastHandshake) {
         if (!lastHandshake) return { status: 'offline', text: 'Offline', colorClass: 'badge-error' };
         
-        // lastHandshake is string Y-m-d H:i:s
-        const lastSeenDate = new Date(lastHandshake.replace(/-/g, '/'));
+        // Convert Y-m-d H:i:s UTC string to standard ISO 8601 UTC string (YYYY-MM-DDTHH:MM:SSZ)
+        const utcString = lastHandshake.trim().replace(' ', 'T') + 'Z';
+        const lastSeenDate = new Date(utcString);
         const now = new Date();
         const diffSeconds = Math.floor((now.getTime() - lastSeenDate.getTime()) / 1000);
         

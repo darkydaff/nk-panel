@@ -20,6 +20,9 @@ class DB {
     // Explicitly set UTF-8 encoding for connection
     self::$pdo->exec("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
     
+    // Standardize MySQL connection timezone to UTC
+    self::$pdo->exec("SET time_zone = '+00:00'");
+    
     // Auto-run schema updates if columns are missing
     self::checkAndRunMigrations(self::$pdo);
     
