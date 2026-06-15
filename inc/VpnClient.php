@@ -816,11 +816,18 @@ class VpnClient {
     }
     
     /**
-     * Format bytes to human-readable string (always in MB)
+     * Format bytes to human-readable string (KB, MB, GB, TB depending on value)
      */
     private function formatBytes(int $bytes): string {
-        $mb = $bytes / 1048576; // 1024 * 1024
-        return number_format($mb, 2) . ' MB';
+        if ($bytes <= 0) {
+            return '0 MB';
+        }
+        $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+        $i = (int)floor(log($bytes, 1024));
+        $i = max(0, min($i, count($units) - 1));
+        $val = $bytes / pow(1024, $i);
+        $decimals = $i === 0 ? 0 : ($i === 1 ? 1 : 2); // 0 dec for B, 1 dec for KB, 2 dec for MB/GB/TB
+        return number_format($val, $decimals) . ' ' . $units[$i];
     }
     
     /**

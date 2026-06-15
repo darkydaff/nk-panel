@@ -146,8 +146,8 @@
                             </td>
                             <td class="px-4 py-3">
                                 <div class="flex gap-1 text-xs">
-                                    <span class="text-cyan-400 font-mono upload-bytes">↑{{ (client.bytes_sent|default(0) / 1024 / 1024)|number_format(1) }}MB</span>
-                                    <span class="text-blue-400 font-mono download-bytes">↓{{ (client.bytes_received|default(0) / 1024 / 1024)|number_format(1) }}MB</span>
+                                    <span class="text-cyan-400 font-mono upload-bytes">↑{{ client.bytes_sent|default(0)|format_bytes }}</span>
+                                    <span class="text-blue-400 font-mono download-bytes">↓{{ client.bytes_received|default(0)|format_bytes }}</span>
                                 </div>
                                 <div class="text-[10px] text-slate-400 mt-1 flex gap-1.5 font-mono speed-container">
                                     {% if client.status == 'active' and (client.speed_up_kbps > 0 or client.speed_down_kbps > 0) %}
@@ -208,8 +208,8 @@
                 <div class="grid grid-cols-2 gap-2 mb-3 text-xs">
                     <div class="bg-slate-800/50 p-2 rounded">
                         <span class="text-slate-500 block">Traffic</span>
-                        <span class="text-cyan-400 font-mono upload-bytes">↑{{ (client.bytes_sent|default(0) / 1024 / 1024)|number_format(1) }}MB</span>
-                        <span class="text-blue-400 font-mono download-bytes">↓{{ (client.bytes_received|default(0) / 1024 / 1024)|number_format(1) }}MB</span>
+                        <span class="text-cyan-400 font-mono upload-bytes">↑{{ client.bytes_sent|default(0)|format_bytes }}</span>
+                        <span class="text-blue-400 font-mono download-bytes">↓{{ client.bytes_received|default(0)|format_bytes }}</span>
                         <div class="text-[10px] text-slate-400 mt-1 flex flex-col font-mono speed-container">
                             {% if client.status == 'active' and (client.speed_up_kbps > 0 or client.speed_down_kbps > 0) %}
                                 {% if client.speed_up_kbps >= 1000 %}
@@ -343,8 +343,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const serverId = {{ server.id }};
     
     function formatBytes(bytes) {
-        const mb = bytes / (1024 * 1024);
-        return mb.toFixed(1) + 'MB';
+        if (bytes <= 0) return '0 MB';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        const clampedI = Math.max(0, Math.min(i, sizes.length - 1));
+        const val = bytes / Math.pow(k, clampedI);
+        const decimals = clampedI === 0 ? 0 : (clampedI === 1 ? 1 : 2);
+        return val.toFixed(decimals) + ' ' + sizes[clampedI];
     }
 
     function formatSpeed(kbps, arrow, colorClass, labelClass) {

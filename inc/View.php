@@ -2,6 +2,7 @@
 use Twig\Environment;
 use Twig\Loader\FilesystemLoader;
 use Twig\TwigFunction;
+use Twig\TwigFilter;
 
 class View {
   private static ?Environment $twig = null;
@@ -21,6 +22,26 @@ class View {
       return Translator::t($key, $params, $default);
     });
     self::$twig->addFunction($tFunc);
+
+    // Add format_bytes filter
+    $formatBytesFilter = new TwigFilter('format_bytes', function ($bytes, bool $splitUnit = false) {
+      $bytes = (int)$bytes;
+      if ($bytes <= 0) {
+        return $splitUnit ? '0 <span class="text-xs text-slate-500">MB</span>' : '0 MB';
+      }
+      $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+      $i = (int)floor(log($bytes, 1024));
+      $i = max(0, min($i, count($units) - 1));
+      $val = $bytes / pow(1024, $i);
+      $decimals = $i === 0 ? 0 : ($i === 1 ? 1 : 2); // 0 dec for B, 1 dec for KB, 2 dec for MB/GB/TB
+      
+      $formattedNum = number_format($val, $decimals);
+      if ($splitUnit) {
+        return $formattedNum . ' <span class="text-xs text-slate-500">' . $units[$i] . '</span>';
+      }
+      return $formattedNum . ' ' . $units[$i];
+    }, ['is_safe' => ['html']]);
+    self::$twig->addFilter($formatBytesFilter);
 
     // Add flag emoji function
     $flagFunc = new TwigFunction('getFlag', function (string $langCode) {

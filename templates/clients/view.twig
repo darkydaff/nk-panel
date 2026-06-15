@@ -39,14 +39,14 @@
                 <span class="text-xs font-medium text-slate-500 uppercase tracking-wide">Uploaded</span>
                 <i class="fas fa-arrow-up text-cyan-400 text-sm"></i>
             </div>
-            <div class="text-2xl font-bold text-white font-mono">{{ (client.bytes_sent / 1024 / 1024)|number_format(2) }} <span class="text-xs text-slate-500">MB</span></div>
+            <div class="text-2xl font-bold text-white font-mono">{{ client.bytes_sent|format_bytes(true) }}</div>
         </div>
         <div class="panel p-5">
             <div class="flex items-center justify-between mb-2">
                 <span class="text-xs font-medium text-slate-500 uppercase tracking-wide">Downloaded</span>
                 <i class="fas fa-arrow-down text-blue-400 text-sm"></i>
             </div>
-            <div class="text-2xl font-bold text-white font-mono">{{ (client.bytes_received / 1024 / 1024)|number_format(2) }} <span class="text-xs text-slate-500">MB</span></div>
+            <div class="text-2xl font-bold text-white font-mono">{{ client.bytes_received|format_bytes(true) }}</div>
         </div>
         <div class="panel p-5">
             <div class="flex items-center justify-between mb-2">
