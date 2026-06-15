@@ -1,0 +1,17 @@
+{
+    "name": "Nk-VPN Panel",
+    "short_name": "Nk-VPN",
+    "description": "Premium VPN Management Panel",
+    "start_url": "/dashboard",
+    "display": "standalone",
+    "background_color": "#0f172a",
+    "theme_color": "#8b5cf6",
+    "icons": [
+        {
+            "src": "/img/logo.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any maskable"
+        }
+    ]
+}

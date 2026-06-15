@@ -1,0 +1,58 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Brand Gradient (Indigo to Purple) -->
+    <linearGradient id="brand-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#a855f7;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Accent Gradient (Purple to Pink) -->
+    <linearGradient id="accent-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#a855f7;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ec4899;stop-opacity:1" />
+    </linearGradient>
+
+    <!-- Glass Effect Gradient -->
+    <linearGradient id="glass-grad" x1="0%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.4" />
+      <stop offset="100%" style="stop-color:#ffffff;stop-opacity:0.05" />
+    </linearGradient>
+
+    <!-- Outer Glow Filter -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="15" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background Layer (Subtle Outer Glow) -->
+  <path d="M256 40C180 40 120 70 80 110V250C80 360 180 440 256 480C332 440 432 360 432 250V110C392 70 332 40 256 40Z" 
+        fill="url(#brand-grad)" opacity="0.15" filter="url(#glow)" />
+
+  <!-- The Shield Core (Brand Gradient) -->
+  <path d="M256 60C190 60 135 85 100 115V245C100 345 190 425 256 465C322 425 412 345 412 245V115C377 85 322 60 256 60Z" 
+        fill="url(#brand-grad)" />
+
+  <!-- Glass Overlays -->
+  <!-- Top Right Gloss -->
+  <path d="M412 115V245C412 290 395 330 365 365L100 115C135 85 190 60 256 60C322 60 377 85 412 115Z" 
+        fill="url(#glass-grad)" />
+
+  <!-- Bottom Accent (Pink) -->
+  <path d="M256 465C190 425 100 345 100 245H412C412 345 322 425 256 465Z" 
+        fill="url(#accent-grad)" opacity="0.4" />
+
+  <!-- Central Network/Bolt Symbol -->
+  <!-- Network Circle -->
+  <circle cx="256" cy="270" r="70" stroke="white" stroke-width="8" stroke-opacity="0.2" fill="none" />
+  
+  <!-- Stylized "V" Bolt -->
+  <path d="M256 160L210 270H256L230 380L340 240H270L300 160H256Z" fill="white" filter="url(#glow)" />
+
+  <!-- Inner Shine Border -->
+  <path d="M256 75C200 75 150 95 115 125V240C115 330 195 405 256 445" 
+        stroke="white" stroke-width="4" stroke-opacity="0.3" fill="none" />
+</svg>

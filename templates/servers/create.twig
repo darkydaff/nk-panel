@@ -1,0 +1,154 @@
+{% extends "layout.twig" %}
+{% block title %}Add Server{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 w-full py-6">
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold text-white flex items-center">
+            <div class="w-10 h-10 rounded-lg bg-slate-700 text-accent flex items-center justify-center mr-3">
+                <i class="fas fa-plus-circle"></i>
+            </div>
+            Add New Server
+        </h1>
+        <p class="mt-2 ml-13 text-slate-400">Deploy a new Amnezia VPN instance or import existing config.</p>
+    </div>
+
+    {% if error %}
+    <div class="mb-6 bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded-lg flex items-center">
+        <i class="fas fa-exclamation-circle mr-3 text-red-400"></i>
+        {{ error }}
+    </div>
+    {% endif %}
+
+    <form method="POST" enctype="multipart/form-data" class="panel p-6 space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-slate-300 mb-2">Server Name</label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
+                        <i class="fas fa-tag"></i>
+                    </div>
+                    <input name="name" required class="input-field w-full pl-11 pr-4 py-2.5" placeholder="e.g. US East Prod">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">Server Host / IP</label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
+                        <i class="fas fa-network-wired text-xs"></i>
+                    </div>
+                    <input name="host" required class="input-field w-full pl-11 pr-4 py-2.5" placeholder="8.8.8.8">
+                </div>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">SSH Port</label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
+                        <i class="fas fa-plug text-xs"></i>
+                    </div>
+                    <input name="port" type="number" required class="input-field w-full pl-11 pr-4 py-2.5" value="22">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">VPN Port (UDP)</label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
+                        <i class="fas fa-door-open text-xs"></i>
+                    </div>
+                    <input name="vpn_port" type="number" required class="input-field w-full pl-11 pr-4 py-2.5" value="{{ random_port }}">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">SSH Username</label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <input name="username" value="root" class="input-field w-full pl-11 pr-4 py-2.5 font-mono">
+                </div>
+            </div>
+
+            <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-slate-300 mb-2">SSH Password</label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
+                        <i class="fas fa-key"></i>
+                    </div>
+                    <input name="password" type="password" required class="input-field w-full pl-11 pr-4 py-2.5 font-mono">
+                </div>
+            </div>
+        </div>
+
+        <div class="border-t border-slate-700 pt-6">
+            <h3 class="text-base font-semibold text-white mb-4 flex items-center">
+                <i class="fas fa-shield-alt mr-2 text-accent"></i>
+                AmneziaWG 2.0 Settings
+            </h3>
+            
+            <div class="p-4 bg-slate-800/30 rounded-lg border border-slate-700">
+                <label class="block text-sm font-medium text-slate-300 mb-2">Protocol Mimicry (Obfuscation)</label>
+                <div class="relative mb-3">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
+                        <i class="fas fa-mask"></i>
+                    </div>
+                    <select name="mimicry_type" class="input-field w-full pl-11 pr-10 py-2.5 appearance-none">
+                        <option value="quic">QUIC (HTTP/3) - High performance, modern</option>
+                        <option value="dns">DNS (UDP/53) - High stealth, universal</option>
+                        <option value="stun">STUN (WebRTC) - Low latency video calls</option>
+                        <option value="sip">SIP (VoIP) - Voice traffic mimicry</option>
+                        <option value="none">None - Standard Obfuscation (V1)</option>
+                    </select>
+                    <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-500">
+                        <i class="fas fa-chevron-down text-xs"></i>
+                    </div>
+                </div>
+                <p class="text-xs text-slate-500">Header ranges and padding will be auto-generated.</p>
+            </div>
+        </div>
+        
+        <div class="border-t border-slate-700 pt-6">
+            <label class="flex items-center cursor-pointer">
+                <input type="checkbox" id="enableImport" name="enable_import" class="sr-only" onchange="toggleImportFields()">
+                <div class="w-10 h-6 bg-slate-700 rounded-full peer peer-checked:bg-accent transition-colors relative cursor-pointer">
+                    <div class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform peer-checked:translate-x-4"></div>
+                </div>
+                <span class="ml-3 text-sm font-medium text-slate-300">Import from existing panel</span>
+            </label>
+            
+            <div id="importFields" style="display: none;" class="mt-4 p-4 bg-slate-800/30 rounded-lg border border-slate-700 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Panel Type</label>
+                    <select name="panel_type" class="input-field w-full px-4 py-2.5">
+                        <option value="">-- Select --</option>
+                        <option value="wg-easy">wg-easy</option>
+                        <option value="3x-ui">3x-ui</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Backup File</label>
+                    <input type="file" name="backup_file" accept=".json" class="input-field w-full px-4 py-2.5 text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:bg-slate-700 file:text-slate-300 hover:file:bg-slate-600 cursor-pointer">
+                    <p class="mt-2 text-xs text-slate-500">wg-easy: db.json | 3x-ui: export.json</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="pt-4">
+            <button type="submit" class="btn-primary w-full py-3 text-sm font-semibold">
+                <i class="fas fa-save mr-2"></i>Create Server
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+function toggleImportFields() {
+    const checkbox = document.getElementById('enableImport');
+    const fields = document.getElementById('importFields');
+    fields.style.display = checkbox.checked ? 'block' : 'none';
+}
+</script>
+{% endblock %}

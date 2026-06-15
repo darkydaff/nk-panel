@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ app_name }}{% endblock %}</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Nk-VPN">
+    <link rel="apple-touch-icon" href="/img/logo.svg">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/svg+xml" href="/img/logo.svg">
+    
+    <script>
+        tailwind = { 
+            config: { 
+                darkMode: 'class',
+                theme: {
+                    extend: {
+                        fontFamily: {
+                            sans: ['Outfit', 'sans-serif'],
+                        }
+                    }
+                } 
+            } 
+        };
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    {% block styles %}{% endblock %}
+    
+    <style>
+        :root {
+            --bg-base: #0f172a;
+            --bg-elevated: #1e293b;
+            --bg-panel: #1e293b;
+            --accent: #5b8def;
+            --accent-hover: #4a7dd8;
+            --accent-cyan: #38bdf8;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border: #334155;
+            --border-light: #475569;
+            --status-active: #38bdf8;
+            --status-warning: #fbbf24;
+            --status-error: #f87171;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-base);
+            background-image: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+            background-attachment: fixed;
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+        }
+
+        .nav {
+            background: rgba(15, 23, 42, 0.95);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .input-field {
+            background: var(--bg-base);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            border-radius: 8px;
+            transition: border-color 0.2s ease;
+        }
+
+        .input-field:focus {
+            border-color: var(--accent);
+            outline: none;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: background-color 0.2s ease;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-secondary {
+            background: rgba(91, 141, 239, 0.1);
+            color: var(--accent);
+            border: 1px solid rgba(91, 141, 239, 0.3);
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(91, 141, 239, 0.2);
+        }
+
+        .badge-active {
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--status-active);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+
+        .badge-warning {
+            background: rgba(251, 191, 36, 0.15);
+            color: var(--status-warning);
+            border: 1px solid rgba(251, 191, 36, 0.3);
+        }
+
+        .badge-error {
+            background: rgba(248, 113, 113, 0.15);
+            color: var(--status-error);
+            border: 1px solid rgba(248, 113, 113, 0.3);
+        }
+
+        .text-muted { color: var(--text-muted) !important; }
+        .text-secondary { color: var(--text-secondary) !important; }
+        .text-primary { color: var(--text-primary) !important; }
+        .text-accent { color: var(--accent) !important; }
+        .text-cyan { color: var(--status-active) !important; }
+
+        .bg-panel { background: var(--bg-panel) !important; }
+        .bg-base { background: var(--bg-base) !important; }
+        .border-default { border-color: var(--border) !important; }
+
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+        .mobile-menu { display: none; }
+        .mobile-menu.active { display: block; }
+        .language-dropdown { display: none; }
+        .language-dropdown.active { display: block; }
+
+        @media (max-width: 768px) {
+            .table-wrapper {
+                display: block;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            .hide-mobile { display: none !important; }
+        }
+
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 18px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            min-width: 280px;
+            max-width: 400px;
+            animation: toastIn 0.3s ease;
+        }
+
+        .toast.toast-out {
+            animation: toastOut 0.3s ease forwards;
+        }
+
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateX(100%); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        @keyframes toastOut {
+            from { opacity: 1; transform: translateX(0); }
+            to { opacity: 0; transform: translateX(100%); }
+        }
+
+        .toast-success { border-color: rgba(56, 189, 248, 0.4); }
+        .toast-success .toast-icon { color: var(--status-active); }
+        
+        .toast-error { border-color: rgba(248, 113, 113, 0.4); }
+        .toast-error .toast-icon { color: var(--status-error); }
+        
+        .toast-warning { border-color: rgba(251, 191, 36, 0.4); }
+        .toast-warning .toast-icon { color: var(--status-warning); }
+
+        .toast-message { color: var(--text-primary); font-size: 14px; flex-grow: 1; }
+        .toast-close { 
+            color: var(--text-muted); 
+            cursor: pointer; 
+            padding: 4px;
+            transition: color 0.2s;
+        }
+        .toast-close:hover { color: var(--text-primary); }
+    </style>
+</head>
+<body class="text-slate-100">
+    {% if user %}
+    <nav class="nav shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex">
+                    <div class="flex-shrink-0 flex items-center">
+                        <img src="/img/logo.svg" alt="Logo" class="w-8 h-8 mr-3">
+                        <span class="text-white text-xl font-bold">{{ app_name }}</span>
+                    </div>
+                    <div class="hidden md:ml-8 md:flex md:space-x-2 items-center">
+                        <a href="/dashboard" class="text-slate-300 hover:text-white hover:bg-white/5 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center">
+                            <i class="fas fa-tachometer-alt mr-2 opacity-70"></i>{{ t('menu.dashboard') }}
+                        </a>
+                        <a href="/servers" class="text-slate-300 hover:text-white hover:bg-white/5 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center">
+                            <i class="fas fa-server mr-2 opacity-70"></i>{{ t('menu.servers') }}
+                        </a>
+                        {% if user.role == 'admin' %}
+                        <a href="/settings" class="text-slate-300 hover:text-white hover:bg-white/5 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center">
+                            <i class="fas fa-cog mr-2 opacity-70"></i>{{ t('menu.settings') }}
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="flex items-center">
+                    <div class="relative mr-4">
+                        <button onclick="toggleLanguageDropdown()" class="text-slate-300 hover:text-white flex items-center px-3 py-2 rounded-lg hover:bg-white/5 transition-colors focus:outline-none">
+                            {% for lang in languages %}
+                                {% if lang.code == current_language %}
+                                    <span class="mr-2">{{ getFlag(lang.code) }}</span>
+                                {% endif %}
+                            {% endfor %}
+                            <i class="fas fa-chevron-down ml-1 text-xs opacity-70"></i>
+                        </button>
+                        <div id="languageDropdown" class="language-dropdown absolute right-0 mt-2 w-48 panel z-50 shadow-xl p-1">
+                            {% for lang in languages %}
+                            <form method="POST" action="/language/change" class="block">
+                                <input type="hidden" name="language" value="{{ lang.code }}">
+                                <input type="hidden" name="redirect" value="{{ current_uri }}">
+                                <button type="submit" class="w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-white/10 rounded-lg flex items-center transition-colors
+                                    {% if lang.code == current_language %}bg-white/10 text-white font-medium{% endif %}">
+                                    <span class="mr-3">{{ getFlag(lang.code) }}</span>
+                                    <span>{{ lang.name }}</span>
+                                    {% if lang.code == current_language %}
+                                    <i class="fas fa-check text-cyan-400 ml-auto"></i>
+                                    {% endif %}
+                                </button>
+                            </form>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <div class="hidden md:flex items-center pl-4 border-l border-slate-700 space-x-4">
+                        <div class="flex items-center text-slate-300">
+                            <div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center mr-2">
+                                <i class="fas fa-user text-sm opacity-80"></i>
+                            </div>
+                            <span class="text-sm font-medium">{{ user.name }}</span>
+                        </div>
+                        <a href="/logout" class="text-slate-400 hover:text-white px-3 py-2 rounded-lg hover:bg-red-500/20 hover:text-red-400 transition-colors flex items-center" title="{{ t('menu.logout') }}">
+                            <i class="fas fa-sign-out-alt"></i>
+                        </a>
+                    </div>
+
+                    <div class="md:hidden flex items-center ml-2">
+                        <button onclick="toggleMobileMenu()" type="button" class="text-slate-300 hover:text-white p-2.5 rounded-lg hover:bg-white/10 focus:outline-none transition-colors">
+                            <i class="fas fa-bars text-xl"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="mobileMenu" class="mobile-menu md:hidden border-t border-slate-700 panel mt-1 mx-2 mb-4 shadow-xl">
+            <div class="px-3 pt-3 pb-4 space-y-1.5">
+                <a href="/dashboard" class="text-slate-300 hover:text-white hover:bg-white/10 block px-4 py-3.5 rounded-lg text-base font-medium flex items-center transition-colors">
+                    <i class="fas fa-tachometer-alt mr-4 w-6 text-center opacity-70 text-accent"></i>{{ t('menu.dashboard') }}
+                </a>
+                <a href="/servers" class="text-slate-300 hover:text-white hover:bg-white/10 block px-4 py-3.5 rounded-lg text-base font-medium flex items-center transition-colors">
+                    <i class="fas fa-server mr-4 w-6 text-center opacity-70 text-accent"></i>{{ t('menu.servers') }}
+                </a>
+                {% if user.role == 'admin' %}
+                <a href="/settings" class="text-slate-300 hover:text-white hover:bg-white/10 block px-4 py-3.5 rounded-lg text-base font-medium flex items-center transition-colors">
+                    <i class="fas fa-cog mr-4 w-6 text-center opacity-70 text-accent"></i>{{ t('menu.settings') }}
+                </a>
+                {% endif %}
+                <div class="border-t border-slate-700 my-2 mx-1"></div>
+                <div class="text-slate-300 px-4 py-3 flex items-center bg-white/5 rounded-lg mx-1 mb-2">
+                    <div class="w-9 h-9 rounded-full bg-slate-700 flex items-center justify-center mr-3">
+                        <i class="fas fa-user text-sm opacity-80 text-accent"></i>
+                    </div>
+                    <div class="flex flex-col">
+                        <span class="text-sm font-semibold text-white">{{ user.name }}</span>
+                        <span class="text-[10px] text-slate-500 uppercase tracking-widest">{{ user.role }}</span>
+                    </div>
+                </div>
+                <a href="/logout" class="text-red-400 hover:text-red-300 hover:bg-red-500/20 block px-4 py-3.5 rounded-lg text-base font-medium flex items-center transition-colors">
+                    <i class="fas fa-sign-out-alt mr-4 w-6 text-center"></i>{{ t('menu.logout') }}
+                </a>
+            </div>
+        </div>
+    </nav>
+    {% endif %}
+
+    <main class="flex-grow flex flex-col {% if user %}py-6 px-3 sm:py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full{% endif %}">
+        {% block content %}{% endblock %}
+    </main>
+
+    <div id="toastContainer" class="toast-container"></div>
+
+    <footer class="mt-auto border-t border-slate-700 py-4 nav shrink-0">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <span class="text-sm text-slate-500">{{ app_name }} &copy; {{ "now"|date("Y") }}</span>
+        </div>
+    </footer>
+
+    <script>
+        function toggleMobileMenu() {
+            const menu = document.getElementById('mobileMenu');
+            menu.classList.toggle('active');
+        }
+
+        function toggleLanguageDropdown() {
+            const dropdown = document.getElementById('languageDropdown');
+            dropdown.classList.toggle('active');
+        }
+
+        document.addEventListener('click', function(event) {
+            const languageButton = event.target.closest('button[onclick="toggleLanguageDropdown()"]');
+            const dropdown = document.getElementById('languageDropdown');
+            const isInsideDropdown = dropdown && dropdown.contains(event.target);
+            
+            if (!languageButton && !isInsideDropdown && dropdown) {
+                dropdown.classList.remove('active');
+            }
+        });
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            if (!container) return;
+            
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            
+            const icons = {
+                success: 'fa-check-circle',
+                error: 'fa-exclamation-circle',
+                warning: 'fa-exclamation-triangle'
+            };
+
+            const escapeHtml = (str) => {
+                const div = document.createElement('div');
+                div.textContent = str;
+                return div.innerHTML;
+            };
+
+            toast.innerHTML = `
+                <i class="fas ${icons[type] || icons.success} toast-icon"></i>
+                <span class="toast-message">${escapeHtml(message)}</span>
+                <i class="fas fa-times toast-close" onclick="this.parentElement.remove()"></i>
+            `;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('toast-out');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const successMsg = urlParams.get('success');
+            const errorMsg = urlParams.get('error');
+            
+            if (successMsg) {
+                showToast(decodeURIComponent(successMsg), 'success');
+                const cleanUrl = window.location.pathname;
+                window.history.replaceState({}, '', cleanUrl);
+            }
+            if (errorMsg) {
+                showToast(decodeURIComponent(errorMsg), 'error');
+                const cleanUrl = window.location.pathname;
+                window.history.replaceState({}, '', cleanUrl);
+            }
+        });
+    </script>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>
