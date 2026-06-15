@@ -286,12 +286,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Filter out clients without valid coordinates
     const mappedClients = clients.filter(c => c.latitude !== null && c.longitude !== null);
     
-    // Update map status label
-    const mapStatus = document.getElementById('mapStatus');
-    if (mapStatus) {
-        mapStatus.textContent = `${mappedClients.length} of ${clients.length} clients plotted`;
-    }
-    
+
     // 2. Initialize Map
     const map = L.map('clientsMap', { 
         zoomControl: false,
