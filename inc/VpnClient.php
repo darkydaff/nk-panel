@@ -667,8 +667,19 @@ class VpnClient {
             }
         }
 
-        if (empty($ip) || $ip === $currentEndpointIp) {
+        if (empty($ip)) {
             return;
+        }
+
+        // If the IP is unchanged, only skip lookup if coordinates are already set
+        if ($ip === $currentEndpointIp) {
+            $pdo = DB::conn();
+            $stmt = $pdo->prepare('SELECT latitude, longitude FROM vpn_clients WHERE id = ?');
+            $stmt->execute([$clientId]);
+            $coords = $stmt->fetch();
+            if ($coords && $coords['latitude'] !== null && $coords['longitude'] !== null) {
+                return;
+            }
         }
 
         // Lookup GeoIP
@@ -680,7 +691,9 @@ class VpnClient {
                 SET last_endpoint_ip = ?, 
                     country = ?, 
                     city = ?, 
-                    isp = ? 
+                    isp = ?,
+                    latitude = ?,
+                    longitude = ?
                 WHERE id = ?
             ');
             $stmt->execute([
@@ -688,6 +701,8 @@ class VpnClient {
                 $geo['country'],
                 $geo['city'],
                 $geo['isp'],
+                $geo['lat'] ?? null,
+                $geo['lon'] ?? null,
                 $clientId
             ]);
         }

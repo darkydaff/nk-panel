@@ -66,6 +66,63 @@
         </div>
     </div>
 
+    <!-- Client Locations Map Panel -->
+    <div class="panel overflow-hidden relative">
+        <div class="px-5 py-4 border-b border-slate-700 flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-white flex items-center">
+                <i class="fas fa-globe-americas text-accent mr-2"></i>
+                Client Locations Map
+            </h2>
+            <span class="text-xs text-slate-500 font-mono" id="mapStatus">Loading clients...</span>
+        </div>
+        <div class="relative w-full h-[400px]">
+            <!-- Leaflet Map Container -->
+            <div id="clientsMap" class="w-full h-full bg-slate-950/20"></div>
+            
+            <!-- Dynamic Client Info Overlay Panel (Initially Hidden) -->
+            <div id="mapClientCard" class="absolute top-4 right-4 z-[1000] w-72 bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-xl p-4 shadow-2xl hidden transition-all duration-300 transform translate-y-2 opacity-0">
+                <div class="flex items-start justify-between mb-3">
+                    <div>
+                        <h4 id="cardClientName" class="text-sm font-semibold text-white truncate max-w-[200px]">Client Name</h4>
+                        <span id="cardClientStatus" class="inline-flex items-center text-[10px] px-2 py-0.5 rounded-full font-medium mt-1">Status</span>
+                    </div>
+                    <button onclick="closeMapCard()" class="text-slate-500 hover:text-white transition-colors">
+                        <i class="fas fa-times text-xs"></i>
+                    </button>
+                </div>
+                
+                <div class="space-y-2 text-xs">
+                    <div class="flex justify-between items-center border-b border-slate-800 pb-1.5">
+                        <span class="text-slate-500">IP Address</span>
+                        <code id="cardClientIp" class="text-[10px] bg-slate-950/50 px-1.5 py-0.5 rounded text-slate-300 font-mono">10.0.0.2</code>
+                    </div>
+                    <div class="flex justify-between items-center border-b border-slate-800 pb-1.5">
+                        <span class="text-slate-500">Location</span>
+                        <span id="cardClientLoc" class="text-slate-300 font-medium">City, Country</span>
+                    </div>
+                    <div class="flex justify-between items-center border-b border-slate-800 pb-1.5">
+                        <span class="text-slate-500">ISP</span>
+                        <span id="cardClientIsp" class="text-slate-300 font-medium truncate max-w-[150px] text-right">ISP Name</span>
+                    </div>
+                    <div class="flex justify-between items-center border-b border-slate-800 pb-1.5">
+                        <span class="text-slate-500">Total Traffic</span>
+                        <span id="cardClientTraffic" class="text-slate-300 font-mono">0 MB</span>
+                    </div>
+                    <div class="flex justify-between items-center pb-1">
+                        <span class="text-slate-500">Last Active</span>
+                        <span id="cardClientLastSeen" class="text-slate-300">Never</span>
+                    </div>
+                </div>
+                
+                <div class="mt-4 pt-3 border-t border-slate-800">
+                    <a id="cardClientLink" href="#" class="btn-secondary w-full py-2 text-center text-xs block">
+                        View Client Details <i class="fas fa-arrow-right ml-1"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="panel overflow-hidden">
         <div class="px-5 py-4 border-b border-slate-700 flex items-center justify-between">
             <h2 class="text-lg font-semibold text-white">Recent Servers</h2>
@@ -126,6 +183,222 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<style>
+    /* Customize Leaflet map appearance */
+    .leaflet-container {
+        background: #0f172a !important;
+        font-family: inherit;
+    }
+    /* Style Leaflet controls to match dark theme */
+    .leaflet-bar {
+        border: 1px solid var(--border) !important;
+        box-shadow: none !important;
+        border-radius: 8px !important;
+        overflow: hidden;
+    }
+    .leaflet-bar a {
+        background-color: var(--bg-panel) !important;
+        color: var(--text-primary) !important;
+        border-bottom: 1px solid var(--border) !important;
+        transition: background-color 0.2s;
+    }
+    .leaflet-bar a:hover {
+        background-color: var(--border-light) !important;
+        color: white !important;
+    }
+    .leaflet-bar a:last-child {
+        border-bottom: none !important;
+    }
+    /* Style Attributions */
+    .leaflet-control-attribution {
+        background: rgba(15, 23, 42, 0.8) !important;
+        color: var(--text-muted) !important;
+        font-size: 9px !important;
+    }
+    .leaflet-control-attribution a {
+        color: var(--accent) !important;
+    }
+    
+    /* Glowing circle marker animations */
+    @keyframes marker-pulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.5);
+        }
+        70% {
+            box-shadow: 0 0 0 10px rgba(56, 189, 248, 0);
+        }
+        100% {
+            box-shadow: 0 0 0 0 rgba(56, 189, 248, 0);
+        }
+    }
+    
+    .glowing-marker {
+        animation: none;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+// Global function to close overlay card
+function closeMapCard() {
+    const card = document.getElementById('mapClientCard');
+    if (card) {
+        card.classList.add('translate-y-2', 'opacity-0');
+        setTimeout(() => {
+            card.classList.add('hidden');
+        }, 300);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // 1. Get raw client data from Twig
+    const clients = {{ clients|json_encode|raw }};
+    
+    // Filter out clients without valid coordinates
+    const mappedClients = clients.filter(c => c.latitude !== null && c.longitude !== null);
+    
+    // Update map status label
+    const mapStatus = document.getElementById('mapStatus');
+    if (mapStatus) {
+        mapStatus.textContent = `${mappedClients.length} of ${clients.length} clients plotted`;
+    }
+    
+    // 2. Initialize Map
+    const map = L.map('clientsMap', { 
+        zoomControl: false,
+        attributionControl: true,
+        minZoom: 1.5,
+        maxZoom: 15
+    }).setView([20, 0], 2); // Default zoom / center
+    
+    // CartoDB Dark Matter tiles
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 20
+    }).addTo(map);
+    
+    // Custom zoom control position
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    
+    // Group of markers to fit bounds
+    const markerGroup = L.featureGroup().addTo(map);
+    
+    // Helper function to format bytes inside JS
+    function formatBytes(bytes) {
+        if (!bytes || bytes <= 0) return '0 MB';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(1024));
+        const val = bytes / Math.pow(1024, i);
+        return `${val.toFixed(i === 0 ? 0 : 2)} ${units[i]}`;
+    }
+    
+    // Helper function to check activity status
+    function getClientActivity(lastHandshake) {
+        if (!lastHandshake) return { status: 'offline', text: 'Offline', colorClass: 'badge-error' };
+        
+        // lastHandshake is string Y-m-d H:i:s
+        const lastSeenDate = new Date(lastHandshake.replace(/-/g, '/'));
+        const now = new Date();
+        const diffSeconds = Math.floor((now.getTime() - lastSeenDate.getTime()) / 1000);
+        
+        if (diffSeconds < 300) {
+            return { status: 'online', text: 'Online', colorClass: 'badge-active' };
+        } else if (diffSeconds < 86400) {
+            const mins = Math.floor(diffSeconds / 60);
+            if (mins < 60) return { status: 'idle', text: `${mins}m ago`, colorClass: 'badge-warning' };
+            return { status: 'idle', text: `${Math.floor(mins / 60)}h ago`, colorClass: 'badge-warning' };
+        } else {
+            return { status: 'offline', text: `${Math.floor(diffSeconds / 86400)}d ago`, colorClass: 'badge-error' };
+        }
+    }
+    
+    // 3. Draw markers
+    mappedClients.forEach(client => {
+        const lat = parseFloat(client.latitude);
+        const lon = parseFloat(client.longitude);
+        
+        const activity = getClientActivity(client.last_handshake);
+        
+        // Define color scheme for dot
+        let color = '#f87171'; // Red for offline
+        let fillOpacity = 0.5;
+        if (activity.status === 'online') {
+            color = '#38bdf8'; // Glowing cyan for online
+            fillOpacity = 0.85;
+        } else if (activity.status === 'idle') {
+            color = '#fbbf24'; // Amber for idle
+            fillOpacity = 0.7;
+        }
+        
+        if (activity.status === 'online') {
+            // Draw glowing halo first
+            L.circleMarker([lat, lon], {
+                radius: 13,
+                fillColor: color,
+                color: color,
+                weight: 0,
+                fillOpacity: 0.2,
+                interactive: false
+            }).addTo(markerGroup);
+        }
+
+        // Circle Marker
+        const marker = L.circleMarker([lat, lon], {
+            radius: activity.status === 'online' ? 7 : 5,
+            fillColor: color,
+            color: color,
+            weight: 2,
+            opacity: 0.9,
+            fillOpacity: fillOpacity
+        });
+        
+        // Click event on marker
+        marker.on('click', function(e) {
+            // Zoom smoothly to marker
+            map.setView([lat, lon], Math.max(map.getZoom(), 5), { animate: true });
+            
+            // Populate overlay card details
+            document.getElementById('cardClientName').textContent = client.name;
+            
+            const statusBadge = document.getElementById('cardClientStatus');
+            statusBadge.className = `inline-flex items-center text-[10px] px-2 py-0.5 rounded-full font-medium mt-1 ${activity.colorClass}`;
+            statusBadge.textContent = activity.text;
+            
+            document.getElementById('cardClientIp').textContent = client.client_ip;
+            document.getElementById('cardClientLoc').textContent = `${client.city || 'Unknown'}, ${client.country || 'Unknown'}`;
+            document.getElementById('cardClientIsp').textContent = client.isp || 'N/A';
+            
+            const totalBytes = (parseInt(client.bytes_sent) || 0) + (parseInt(client.bytes_received) || 0);
+            document.getElementById('cardClientTraffic').textContent = formatBytes(totalBytes);
+            document.getElementById('cardClientLastSeen').textContent = client.last_handshake || 'Never';
+            
+            // Set link to client details page
+            document.getElementById('cardClientLink').href = `/clients/${client.id}`;
+            
+            // Show overlay card with transitions
+            const card = document.getElementById('mapClientCard');
+            card.classList.remove('hidden');
+            setTimeout(() => {
+                card.classList.remove('translate-y-2', 'opacity-0');
+            }, 10);
+        });
+        
+        marker.addTo(markerGroup);
+    });
+    
+    // Zoom map to bounds if we have plotted clients
+    if (mappedClients.length > 0) {
+        map.fitBounds(markerGroup.getBounds(), { padding: [40, 40], maxZoom: 6 });
+    }
+});
+</script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {

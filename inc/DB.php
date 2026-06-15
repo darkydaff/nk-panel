@@ -53,6 +53,19 @@ class DB {
           $pdo->exec($sql);
         }
       }
+
+      // Check if latitude column exists in vpn_clients
+      $stmt3 = $pdo->query("SHOW COLUMNS FROM vpn_clients LIKE 'latitude'");
+      $hasCoords = $stmt3->rowCount() > 0;
+      
+      if (!$hasCoords) {
+        // Run Coordinates migration script
+        $sqlPath = __DIR__ . '/../migrations/019_add_client_coordinates.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
     } catch (Throwable $e) {
       error_log("Database self-healing migration failed: " . $e->getMessage());
     }

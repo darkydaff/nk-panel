@@ -20,7 +20,7 @@ class GeoIP {
             return null;
         }
 
-        $url = "http://ip-api.com/json/" . urlencode($ip) . "?fields=status,message,country,city,isp";
+        $url = "http://ip-api.com/json/" . urlencode($ip) . "?fields=status,message,country,city,isp,lat,lon";
         
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
@@ -44,7 +44,9 @@ class GeoIP {
         return [
             'country' => $data['country'] ?? 'Unknown',
             'city' => $data['city'] ?? 'Unknown',
-            'isp' => $data['isp'] ?? 'Unknown'
+            'isp' => $data['isp'] ?? 'Unknown',
+            'lat' => $data['lat'] ?? null,
+            'lon' => $data['lon'] ?? null
         ];
     }
 }
