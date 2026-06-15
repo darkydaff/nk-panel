@@ -320,10 +320,27 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // 3. Draw markers
+    // 3. Draw markers (handling overlap coordinates deterministically with a spiral distribution)
+    const coordOccupied = {};
+    
     mappedClients.forEach(client => {
-        const lat = parseFloat(client.latitude);
-        const lon = parseFloat(client.longitude);
+        const rawLat = parseFloat(client.latitude);
+        const rawLon = parseFloat(client.longitude);
+        const coordKey = `${rawLat.toFixed(4)},${rawLon.toFixed(4)}`;
+        
+        let lat = rawLat;
+        let lon = rawLon;
+        
+        if (coordOccupied[coordKey]) {
+            const count = coordOccupied[coordKey];
+            const angle = count * 0.9; // Spiral spacing angle
+            const radius = 0.012 * Math.sqrt(count); // Distance scaling factor (approx 1-1.5 km per step)
+            lat += radius * Math.sin(angle);
+            lon += radius * Math.cos(angle);
+            coordOccupied[coordKey] = count + 1;
+        } else {
+            coordOccupied[coordKey] = 1;
+        }
         
         const activity = getClientActivity(client.last_handshake);
         
