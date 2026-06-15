@@ -322,11 +322,16 @@
             </header>
 
             <!-- Main Content Workspace -->
+            {% if user %}
             <main class="flex-grow py-6 px-4 sm:px-6 lg:px-8 w-full max-w-7xl mx-auto flex flex-col">
+            {% else %}
+            <main class="flex-grow flex flex-col">
+            {% endif %}
                 {% block content %}{% endblock %}
             </main>
 
             <!-- Main Footer -->
+            {% if user %}
             <footer class="mt-auto border-t border-slate-800 py-4 bg-slate-900/10 text-center shrink-0">
                 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <span class="text-xs text-slate-600">{{ app_name }} &copy; {{ "now"|date("Y") }}</span>
@@ -334,10 +339,6 @@
             </footer>
         </div>
     </div>
-    {% else %}
-    <main class="flex-grow flex flex-col">
-        {% block content %}{% endblock %}
-    </main>
     {% endif %}
 
     <div id="toastContainer" class="toast-container"></div>
