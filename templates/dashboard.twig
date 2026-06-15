@@ -119,6 +119,10 @@
                             <code id="cardClientIp" class="text-[10px] bg-slate-950/50 px-1.5 py-0.5 rounded text-slate-300 font-mono">10.0.0.2</code>
                         </div>
                         <div class="flex justify-between items-center border-b border-slate-800 pb-1.5">
+                            <span class="text-slate-500">Server</span>
+                            <span id="cardClientServer" class="text-slate-300 font-medium truncate max-w-[155px] text-right">Server Name</span>
+                        </div>
+                        <div class="flex justify-between items-center border-b border-slate-800 pb-1.5">
                             <span class="text-slate-500">Location</span>
                             <span id="cardClientLoc" class="text-slate-300 font-medium">City, Country</span>
                         </div>
@@ -436,6 +440,7 @@ document.addEventListener('DOMContentLoaded', function() {
             statusBadge.textContent = activity.text;
             
             document.getElementById('cardClientIp').textContent = client.client_ip;
+            document.getElementById('cardClientServer').textContent = client.server_name || 'N/A';
             document.getElementById('cardClientLoc').textContent = `${client.city || 'Unknown'}, ${client.country || 'Unknown'}`;
             document.getElementById('cardClientIsp').textContent = client.isp || 'N/A';
             
