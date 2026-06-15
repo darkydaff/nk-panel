@@ -23,15 +23,10 @@
                     </span>
                 {% endif %}
                 
-                {% if agent_online %}
-                    <span class="text-xs px-2 py-1 rounded-md flex items-center bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5"></span>Agent Online
-                    </span>
-                {% else %}
-                    <span class="text-xs px-2 py-1 rounded-md flex items-center bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                        <span class="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1.5"></span>Agent Offline
-                    </span>
-                {% endif %}
+                <span id="agentStatusBadge" class="text-xs px-2 py-1 rounded-md flex items-center {% if agent_online %}bg-emerald-500/10 text-emerald-400 border border-emerald-500/30{% else %}bg-amber-500/10 text-amber-400 border border-amber-500/30{% endif %}">
+                    <span class="w-1.5 h-1.5 rounded-full {% if agent_online %}bg-emerald-400{% else %}bg-amber-400{% endif %} mr-1.5" id="agentStatusDot"></span>
+                    <span id="agentStatusText">{% if agent_online %}Agent Online{% else %}Agent Offline{% endif %}</span>
+                </span>
             </div>
         </div>
         <div class="flex gap-2">
@@ -129,7 +124,7 @@
                     </thead>
                     <tbody class="divide-y divide-slate-700" id="clientTableBody">
                         {% for client in clients %}
-                        <tr class="hover:bg-slate-800/30 transition-colors client-row" data-name="{{ client.name }}" data-ip="{{ client.client_ip }}">
+                        <tr class="hover:bg-slate-800/30 transition-colors client-row" data-name="{{ client.name }}" data-ip="{{ client.client_ip }}" data-client-id="{{ client.id }}">
                             <td class="px-4 py-3">
                                 <div class="flex items-center">
                                     <div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center mr-2 text-slate-400">
@@ -143,11 +138,11 @@
                             </td>
                             <td class="px-4 py-3">
                                 <div class="flex gap-1 text-xs">
-                                    <span class="text-cyan-400 font-mono">↑{{ (client.bytes_sent|default(0) / 1024 / 1024)|number_format(1) }}MB</span>
-                                    <span class="text-blue-400 font-mono">↓{{ (client.bytes_received|default(0) / 1024 / 1024)|number_format(1) }}MB</span>
+                                    <span class="text-cyan-400 font-mono upload-bytes">↑{{ (client.bytes_sent|default(0) / 1024 / 1024)|number_format(1) }}MB</span>
+                                    <span class="text-blue-400 font-mono download-bytes">↓{{ (client.bytes_received|default(0) / 1024 / 1024)|number_format(1) }}MB</span>
                                 </div>
-                                {% if client.status == 'active' and (client.speed_up_kbps > 0 or client.speed_down_kbps > 0) %}
-                                    <div class="text-[10px] text-slate-400 mt-1 flex gap-1.5 font-mono">
+                                <div class="text-[10px] text-slate-400 mt-1 flex gap-1.5 font-mono speed-container">
+                                    {% if client.status == 'active' and (client.speed_up_kbps > 0 or client.speed_down_kbps > 0) %}
                                         {% if client.speed_up_kbps >= 1000 %}
                                             <span class="text-emerald-400 font-semibold">↑{{ (client.speed_up_kbps / 1000)|number_format(1) }} Mbps</span>
                                         {% elseif client.speed_up_kbps > 0 %}
@@ -159,10 +154,10 @@
                                         {% elseif client.speed_down_kbps > 0 %}
                                             <span class="text-indigo-400">↓{{ client.speed_down_kbps|number_format(0) }} Kbps</span>
                                         {% endif %}
-                                    </div>
-                                {% endif %}
+                                    {% endif %}
+                                </div>
                             </td>
-                            <td class="px-4 py-3 hide-mobile">
+                            <td class="px-4 py-3 hide-mobile handshake-container">
                                 {% if client.last_handshake %}
                                     <span class="text-xs text-slate-400">{{ client.last_handshake }}</span>
                                 {% else %}
@@ -190,7 +185,7 @@
 
         <div class="md:hidden divide-y divide-slate-700" id="clientCards">
             {% for client in clients %}
-            <div class="p-4 client-card" data-name="{{ client.name }}" data-ip="{{ client.client_ip }}">
+            <div class="p-4 client-card" data-name="{{ client.name }}" data-ip="{{ client.client_ip }}" data-client-id="{{ client.id }}">
                 <div class="flex items-start justify-between mb-3">
                     <div class="flex items-center">
                         <div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center mr-2 text-slate-400">
@@ -205,10 +200,10 @@
                 <div class="grid grid-cols-2 gap-2 mb-3 text-xs">
                     <div class="bg-slate-800/50 p-2 rounded">
                         <span class="text-slate-500 block">Traffic</span>
-                        <span class="text-cyan-400 font-mono">↑{{ (client.bytes_sent|default(0) / 1024 / 1024)|number_format(1) }}MB</span>
-                        <span class="text-blue-400 font-mono">↓{{ (client.bytes_received|default(0) / 1024 / 1024)|number_format(1) }}MB</span>
-                        {% if client.status == 'active' and (client.speed_up_kbps > 0 or client.speed_down_kbps > 0) %}
-                            <div class="text-[10px] text-slate-400 mt-1 flex flex-col font-mono">
+                        <span class="text-cyan-400 font-mono upload-bytes">↑{{ (client.bytes_sent|default(0) / 1024 / 1024)|number_format(1) }}MB</span>
+                        <span class="text-blue-400 font-mono download-bytes">↓{{ (client.bytes_received|default(0) / 1024 / 1024)|number_format(1) }}MB</span>
+                        <div class="text-[10px] text-slate-400 mt-1 flex flex-col font-mono speed-container">
+                            {% if client.status == 'active' and (client.speed_up_kbps > 0 or client.speed_down_kbps > 0) %}
                                 {% if client.speed_up_kbps >= 1000 %}
                                     <span class="text-emerald-400 font-semibold">↑{{ (client.speed_up_kbps / 1000)|number_format(1) }} Mbps</span>
                                 {% elseif client.speed_up_kbps > 0 %}
@@ -220,12 +215,12 @@
                                 {% elseif client.speed_down_kbps > 0 %}
                                     <span class="text-indigo-400">↓{{ client.speed_down_kbps|number_format(0) }} Kbps</span>
                                 {% endif %}
-                            </div>
-                        {% endif %}
+                            {% endif %}
+                        </div>
                     </div>
                     <div class="bg-slate-800/50 p-2 rounded">
                         <span class="text-slate-500 block">Handshake</span>
-                        <span class="text-slate-300">
+                        <span class="text-slate-300 handshake-value">
                             {% if client.last_handshake %}{{ client.last_handshake }}{% else %}Never{% endif %}
                         </span>
                     </div>
@@ -335,6 +330,130 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
     }
+
+    // Start AJAX polling
+    const serverId = {{ server.id }};
+    
+    function formatBytes(bytes) {
+        const mb = bytes / (1024 * 1024);
+        return mb.toFixed(1) + 'MB';
+    }
+
+    function formatSpeed(kbps, arrow, colorClass, labelClass) {
+        if (kbps <= 0) return '';
+        if (kbps >= 1000) {
+            return `<span class="${colorClass} ${labelClass || ''}">${arrow}${(kbps / 1000).toFixed(1)} Mbps</span>`;
+        }
+        return `<span class="${colorClass}">${arrow}${Math.round(kbps)} Kbps</span>`;
+    }
+
+    async function pollClients() {
+        try {
+            const response = await fetch(`/api/servers/${serverId}/clients`);
+            if (!response.ok) return;
+            const data = await response.json();
+            if (!data.success) return;
+
+            // Update Agent Badge
+            const agentStatusBadge = document.getElementById('agentStatusBadge');
+            const agentStatusDot = document.getElementById('agentStatusDot');
+            const agentStatusText = document.getElementById('agentStatusText');
+            if (agentStatusBadge && agentStatusDot && agentStatusText) {
+                if (data.agent_online) {
+                    agentStatusBadge.className = 'text-xs px-2 py-1 rounded-md flex items-center bg-emerald-500/10 text-emerald-400 border border-emerald-500/30';
+                    agentStatusDot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5';
+                    agentStatusText.textContent = 'Agent Online';
+                } else {
+                    agentStatusBadge.className = 'text-xs px-2 py-1 rounded-md flex items-center bg-amber-500/10 text-amber-400 border border-amber-500/30';
+                    agentStatusDot.className = 'w-1.5 h-1.5 rounded-full bg-amber-400 mr-1.5';
+                    agentStatusText.textContent = 'Agent Offline';
+                }
+            }
+
+            const query = searchInput ? searchInput.value.toLowerCase() : '';
+            let visibleCount = 0;
+
+            data.clients.forEach(client => {
+                const isMatch = client.name.toLowerCase().includes(query) || client.client_ip.toLowerCase().includes(query);
+                if (isMatch) visibleCount++;
+
+                // Update Desktop Table Row
+                const row = document.querySelector(`tr.client-row[data-client-id="${client.id}"]`);
+                if (row) {
+                    if (query) {
+                        row.style.display = isMatch ? '' : 'none';
+                    }
+
+                    const uploadEl = row.querySelector('.upload-bytes');
+                    const downloadEl = row.querySelector('.download-bytes');
+                    if (uploadEl) uploadEl.textContent = '↑' + formatBytes(client.bytes_sent || 0);
+                    if (downloadEl) downloadEl.textContent = '↓' + formatBytes(client.bytes_received || 0);
+
+                    const speedContainer = row.querySelector('.speed-container');
+                    if (speedContainer) {
+                        let speedHtml = '';
+                        if (client.status === 'active') {
+                            const speedUpHtml = formatSpeed(client.stats.speed_up_raw || 0, '↑', 'text-emerald-400', 'font-semibold');
+                            const speedDownHtml = formatSpeed(client.stats.speed_down_raw || 0, '↓', 'text-indigo-400', 'font-semibold');
+                            if (speedUpHtml || speedDownHtml) {
+                                speedHtml = speedUpHtml + (speedUpHtml && speedDownHtml ? ' ' : '') + speedDownHtml;
+                            }
+                        }
+                        speedContainer.innerHTML = speedHtml;
+                    }
+
+                    const handshakeContainer = row.querySelector('.handshake-container');
+                    if (handshakeContainer) {
+                        handshakeContainer.innerHTML = client.last_handshake 
+                            ? `<span class="text-xs text-slate-400">${client.last_handshake}</span>`
+                            : '<span class="text-xs text-slate-600">Never</span>';
+                    }
+                }
+
+                // Update Mobile Card
+                const card = document.querySelector(`.client-card[data-client-id="${client.id}"]`);
+                if (card) {
+                    if (query) {
+                        card.style.display = isMatch ? '' : 'none';
+                    }
+
+                    const uploadEl = card.querySelector('.upload-bytes');
+                    const downloadEl = card.querySelector('.download-bytes');
+                    if (uploadEl) uploadEl.textContent = '↑' + formatBytes(client.bytes_sent || 0);
+                    if (downloadEl) downloadEl.textContent = '↓' + formatBytes(client.bytes_received || 0);
+
+                    const speedContainer = card.querySelector('.speed-container');
+                    if (speedContainer) {
+                        let speedHtml = '';
+                        if (client.status === 'active') {
+                            const speedUpHtml = formatSpeed(client.stats.speed_up_raw || 0, '↑', 'text-emerald-400', 'font-semibold');
+                            const speedDownHtml = formatSpeed(client.stats.speed_down_raw || 0, '↓', 'text-indigo-400', 'font-semibold');
+                            if (speedUpHtml || speedDownHtml) {
+                                speedHtml = speedUpHtml + ' ' + speedDownHtml;
+                            }
+                        }
+                        speedContainer.innerHTML = speedHtml;
+                    }
+
+                    const handshakeValue = card.querySelector('.handshake-value');
+                    if (handshakeValue) {
+                        handshakeValue.textContent = client.last_handshake || 'Never';
+                    }
+                }
+            });
+
+            if (clientCount) {
+                clientCount.textContent = query ? visibleCount : data.clients.length;
+            }
+
+        } catch (error) {
+            console.error('Failed to poll clients:', error);
+        }
+    }
+
+    // Run immediately and then poll every 5 seconds
+    pollClients();
+    setInterval(pollClients, 5000);
 });
 
 async function syncAllStats(serverId) {

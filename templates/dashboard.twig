@@ -50,12 +50,12 @@
                 {% set total_speed_up = total_speed_up + server.speed_up_kbps|default(0) %}
                 {% set total_speed_down = total_speed_down + server.speed_down_kbps|default(0) %}
             {% endfor %}
-            <div class="text-3xl font-bold text-white flex items-baseline gap-2">
-                <span class="text-emerald-400 text-lg font-semibold">
+            <div class="text-3xl font-bold text-white flex items-baseline gap-2" id="globalLiveSpeed">
+                <span class="text-emerald-400 text-lg font-semibold upload-speed-value">
                     ↑{% if total_speed_up >= 1000 %}{{ (total_speed_up / 1000)|number_format(1) }} <span class="text-[10px] font-normal text-slate-500">Mbps</span>{% else %}{{ total_speed_up|number_format(0) }} <span class="text-[10px] font-normal text-slate-500">Kbps</span>{% endif %}
                 </span>
                 <span class="text-slate-600 text-sm">/</span>
-                <span class="text-indigo-400 text-lg font-semibold">
+                <span class="text-indigo-400 text-lg font-semibold download-speed-value">
                     ↓{% if total_speed_down >= 1000 %}{{ (total_speed_down / 1000)|number_format(1) }} <span class="text-[10px] font-normal text-slate-500">Mbps</span>{% else %}{{ total_speed_down|number_format(0) }} <span class="text-[10px] font-normal text-slate-500">Kbps</span>{% endif %}
                 </span>
             </div>
@@ -81,7 +81,7 @@
                 </thead>
                 <tbody class="divide-y divide-slate-700">
                     {% for server in servers|slice(0, 5) %}
-                    <tr class="hover:bg-slate-800/30 transition-colors">
+                    <tr class="hover:bg-slate-800/30 transition-colors server-row" data-server-id="{{ server.id }}">
                         <td class="px-5 py-4">
                             <div class="flex items-center">
                                 <div class="w-8 h-8 rounded-lg bg-slate-700 text-accent flex items-center justify-center mr-3">
@@ -93,7 +93,7 @@
                         <td class="px-5 py-4">
                             <code class="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded">{{ server.host }}</code>
                         </td>
-                        <td class="px-5 py-4 font-mono text-xs">
+                        <td class="px-5 py-4 font-mono text-xs speed-cell">
                             {% if server.speed_up_kbps > 0 or server.speed_down_kbps > 0 %}
                                 <span class="text-emerald-400 font-semibold">↑{% if server.speed_up_kbps >= 1000 %}{{ (server.speed_up_kbps / 1000)|number_format(1) }} Mbps{% else %}{{ server.speed_up_kbps|number_format(0) }} Kbps{% endif %}</span>
                                 <span class="text-slate-600 mx-1">|</span>
@@ -122,4 +122,82 @@
         {% endif %}
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    function formatSpeed(kbps, arrow, colorClass, labelClass) {
+        if (kbps >= 1000) {
+            return `<span class="${colorClass} ${labelClass || ''}">${arrow}${(kbps / 1000).toFixed(1)} <span class="text-[10px] font-normal text-slate-500">Mbps</span></span>`;
+        }
+        return `<span class="${colorClass}">${arrow}${Math.round(kbps)} <span class="text-[10px] font-normal text-slate-500">Kbps</span></span>`;
+    }
+
+    function formatTableCellSpeed(upKbps, downKbps) {
+        if (upKbps <= 0 && downKbps <= 0) {
+            return '<span class="text-slate-500">Idle</span>';
+        }
+        
+        let html = '';
+        if (upKbps > 0) {
+            const speedUpStr = upKbps >= 1000 ? (upKbps / 1000).toFixed(1) + ' Mbps' : Math.round(upKbps) + ' Kbps';
+            html += `<span class="text-emerald-400 font-semibold">↑${speedUpStr}</span>`;
+        } else {
+            html += '<span class="text-slate-500">↑0 Kbps</span>';
+        }
+        
+        html += '<span class="text-slate-600 mx-1">|</span>';
+        
+        if (downKbps > 0) {
+            const speedDownStr = downKbps >= 1000 ? (downKbps / 1000).toFixed(1) + ' Mbps' : Math.round(downKbps) + ' Kbps';
+            html += `<span class="text-indigo-400 font-semibold">↓${speedDownStr}</span>`;
+        } else {
+            html += '<span class="text-slate-500">↓0 Kbps</span>';
+        }
+        
+        return html;
+    }
+
+    async function pollServers() {
+        try {
+            const response = await fetch('/api/servers');
+            if (!response.ok) return;
+            const data = await response.json();
+            if (!data.servers) return;
+
+            let totalSpeedUp = 0;
+            let totalSpeedDown = 0;
+
+            data.servers.forEach(server => {
+                const up = parseFloat(server.speed_up_kbps) || 0;
+                const down = parseFloat(server.speed_down_kbps) || 0;
+                totalSpeedUp += up;
+                totalSpeedDown += down;
+
+                // Update server row in recent table
+                const row = document.querySelector(`.server-row[data-server-id="${server.id}"]`);
+                if (row) {
+                    const speedCell = row.querySelector('.speed-cell');
+                    if (speedCell) {
+                        speedCell.innerHTML = formatTableCellSpeed(up, down);
+                    }
+                }
+            });
+
+            // Update global network speed card
+            const globalLiveSpeed = document.getElementById('globalLiveSpeed');
+            if (globalLiveSpeed) {
+                const upHtml = formatSpeed(totalSpeedUp, '↑', 'text-emerald-400', 'font-semibold');
+                const downHtml = formatSpeed(totalSpeedDown, '↓', 'text-indigo-400', 'font-semibold');
+                globalLiveSpeed.innerHTML = `${upHtml} <span class="text-slate-600 text-sm">/</span> ${downHtml}`;
+            }
+
+        } catch (error) {
+            console.error('Failed to poll dashboard server metrics:', error);
+        }
+    }
+
+    // Run polling every 8 seconds
+    setInterval(pollServers, 8000);
+});
+</script>
 {% endblock %}

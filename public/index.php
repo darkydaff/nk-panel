@@ -1107,8 +1107,12 @@ Router::delete('/api/tokens/{id}', function ($params) {
 Router::get('/api/servers', function () {
     header('Content-Type: application/json');
     
-    $user = JWT::requireAuth();
-    if (!$user) return;
+    $user = authenticateRequest();
+    if (!$user) {
+        http_response_code(401);
+        echo json_encode(['error' => 'Unauthorized']);
+        return;
+    }
     
     $servers = VpnServer::listByUser($user['id']);
     echo json_encode(['servers' => $servers]);
@@ -1667,8 +1671,19 @@ Router::get('/api/servers/{id}/clients', function ($params) {
             return;
         }
         
-        // Sync all stats first
-        VpnClient::syncAllStatsForServer($serverId);
+        $agentOnline = false;
+        if (!empty($serverData['last_check_at'])) {
+            $agentOnline = (time() - strtotime($serverData['last_check_at'])) < 120;
+        }
+        
+        // Only run SSH-pull sync if the push agent is offline
+        if (!$agentOnline) {
+            try {
+                VpnClient::syncAllStatsForServer($serverId);
+            } catch (Throwable $e) {
+                // Ignore sync errors to prevent API crashes
+            }
+        }
         
         $clients = VpnClient::listByServer($serverId);
         $clientsData = [];
@@ -1690,7 +1705,11 @@ Router::get('/api/servers/{id}/clients', function ($params) {
             ];
         }
         
-        echo json_encode(['success' => true, 'clients' => $clientsData]);
+        echo json_encode([
+            'success' => true, 
+            'agent_online' => $agentOnline,
+            'clients' => $clientsData
+        ]);
     } catch (Exception $e) {
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);

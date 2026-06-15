@@ -21,7 +21,7 @@
     {% if servers|length > 0 %}
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {% for server in servers %}
-        <div class="panel p-5 hover:border-slate-500 transition-colors">
+        <div class="panel p-5 hover:border-slate-500 transition-colors server-card" data-server-id="{{ server.id }}">
             <div class="flex items-start justify-between mb-4">
                 <div class="flex items-center">
                     <div class="w-10 h-10 rounded-lg bg-slate-700 text-accent flex items-center justify-center mr-3">
@@ -32,22 +32,12 @@
                         <code class="text-xs text-slate-400">{{ server.host }}</code>
                     </div>
                 </div>
-                {% if server.status == 'active' %}
-                    <span class="badge-active text-xs px-2 py-1 rounded-md flex items-center">
-                        <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 mr-1.5"></span>
-                        Active
+                <span class="status-badge text-xs px-2 py-1 rounded-md flex items-center {% if server.status == 'active' %}badge-active{% elseif server.status == 'deploying' %}badge-warning{% else %}badge-error{% endif %}">
+                    <span class="status-dot w-1.5 h-1.5 rounded-full {% if server.status == 'active' %}bg-cyan-400{% elseif server.status == 'deploying' %}bg-yellow-400{% else %}bg-red-400{% endif %} mr-1.5"></span>
+                    <span class="status-text">
+                        {% if server.status == 'active' %}Active{% elseif server.status == 'deploying' %}Deploying{% else %}Offline{% endif %}
                     </span>
-                {% elseif server.status == 'deploying' %}
-                    <span class="badge-warning text-xs px-2 py-1 rounded-md flex items-center">
-                        <span class="w-1.5 h-1.5 rounded-full bg-yellow-400 mr-1.5"></span>
-                        Deploying
-                    </span>
-                {% else %}
-                    <span class="badge-error text-xs px-2 py-1 rounded-md flex items-center">
-                        <span class="w-1.5 h-1.5 rounded-full bg-red-400 mr-1.5"></span>
-                        Offline
-                    </span>
-                {% endif %}
+                </span>
             </div>
             
             <div class="grid grid-cols-2 gap-2 mb-2 text-xs">
@@ -57,13 +47,13 @@
                 </div>
                 <div class="bg-slate-800/50 p-2 rounded">
                     <span class="text-slate-500 block mb-0.5">Clients</span>
-                    <span class="text-slate-300">{{ server.client_count|default(0) }}</span>
+                    <span class="text-slate-300 client-count">{{ server.client_count|default(0) }}</span>
                 </div>
             </div>
             
             <div class="bg-slate-800/50 p-2 rounded mb-4 text-xs flex justify-between items-center">
                 <span class="text-slate-500">Live Traffic Speed</span>
-                <div class="font-mono text-slate-300">
+                <div class="font-mono text-slate-300 speed-value">
                     {% if server.speed_up_kbps > 0 or server.speed_down_kbps > 0 %}
                         <span class="text-emerald-400 font-semibold">
                             ↑{% if server.speed_up_kbps >= 1000 %}{{ (server.speed_up_kbps / 1000)|number_format(1) }} Mbps{% else %}{{ server.speed_up_kbps|number_format(0) }} Kbps{% endif %}
@@ -104,4 +94,93 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    function formatSpeed(kbps, arrow, colorClass, labelClass) {
+        if (kbps <= 0) return '';
+        const speedStr = kbps >= 1000 ? (kbps / 1000).toFixed(1) + ' Mbps' : Math.round(kbps) + ' Kbps';
+        return `<span class="${colorClass} ${labelClass || ''}">${arrow}${speedStr}</span>`;
+    }
+
+    function formatServerCardSpeed(upKbps, downKbps) {
+        if (upKbps <= 0 && downKbps <= 0) {
+            return '<span class="text-slate-500">Idle (0 Kbps)</span>';
+        }
+        
+        let html = '';
+        if (upKbps > 0) {
+            html += formatSpeed(upKbps, '↑', 'text-emerald-400', 'font-semibold');
+        } else {
+            html += '<span class="text-slate-500">↑0 Kbps</span>';
+        }
+        
+        html += '<span class="text-slate-600 mx-1">|</span>';
+        
+        if (downKbps > 0) {
+            html += formatSpeed(downKbps, '↓', 'text-indigo-400', 'font-semibold');
+        } else {
+            html += '<span class="text-slate-500">↓0 Kbps</span>';
+        }
+        
+        return html;
+    }
+
+    async function pollServers() {
+        try {
+            const response = await fetch('/api/servers');
+            if (!response.ok) return;
+            const data = await response.json();
+            if (!data.servers) return;
+
+            data.servers.forEach(server => {
+                const card = document.querySelector(`.server-card[data-server-id="${server.id}"]`);
+                if (card) {
+                    // Update Status Badge
+                    const statusBadge = card.querySelector('.status-badge');
+                    const statusDot = card.querySelector('.status-dot');
+                    const statusText = card.querySelector('.status-text');
+                    
+                    if (statusBadge && statusDot && statusText) {
+                        const status = server.status || 'offline';
+                        if (status === 'active') {
+                            statusBadge.className = 'status-badge text-xs px-2 py-1 rounded-md flex items-center badge-active';
+                            statusDot.className = 'status-dot w-1.5 h-1.5 rounded-full bg-cyan-400 mr-1.5';
+                            statusText.textContent = 'Active';
+                        } else if (status === 'deploying') {
+                            statusBadge.className = 'status-badge text-xs px-2 py-1 rounded-md flex items-center badge-warning';
+                            statusDot.className = 'status-dot w-1.5 h-1.5 rounded-full bg-yellow-400 mr-1.5';
+                            statusText.textContent = 'Deploying';
+                        } else {
+                            statusBadge.className = 'status-badge text-xs px-2 py-1 rounded-md flex items-center badge-error';
+                            statusDot.className = 'status-dot w-1.5 h-1.5 rounded-full bg-red-400 mr-1.5';
+                            statusText.textContent = 'Offline';
+                        }
+                    }
+
+                    // Update Client Count
+                    const clientCountEl = card.querySelector('.client-count');
+                    if (clientCountEl) {
+                        clientCountEl.textContent = server.client_count || 0;
+                    }
+
+                    // Update Live Traffic Speed
+                    const speedValEl = card.querySelector('.speed-value');
+                    if (speedValEl) {
+                        const up = parseFloat(server.speed_up_kbps) || 0;
+                        const down = parseFloat(server.speed_down_kbps) || 0;
+                        speedValEl.innerHTML = formatServerCardSpeed(up, down);
+                    }
+                }
+            });
+
+        } catch (error) {
+            console.error('Failed to poll servers index page metrics:', error);
+        }
+    }
+
+    // Run polling every 8 seconds
+    setInterval(pollServers, 8000);
+});
+</script>
 {% endblock %}
