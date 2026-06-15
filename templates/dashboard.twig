@@ -376,9 +376,23 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('cardClientLoc').textContent = `${client.city || 'Unknown'}, ${client.country || 'Unknown'}`;
             document.getElementById('cardClientIsp').textContent = client.isp || 'N/A';
             
+            // Relative time formatting for the card
+            function formatRelativeTime(lastHandshake) {
+                if (!lastHandshake) return 'Never';
+                const utcString = lastHandshake.trim().replace(' ', 'T') + 'Z';
+                const lastSeenDate = new Date(utcString);
+                const now = new Date();
+                const diffSeconds = Math.floor((now.getTime() - lastSeenDate.getTime()) / 1000);
+                
+                if (diffSeconds < 60) return 'Active now';
+                if (diffSeconds < 3600) return Math.floor(diffSeconds / 60) + 'm ago';
+                if (diffSeconds < 86400) return Math.floor(diffSeconds / 3600) + 'h ago';
+                return Math.floor(diffSeconds / 86400) + 'd ago';
+            }
+
             const totalBytes = (parseInt(client.bytes_sent) || 0) + (parseInt(client.bytes_received) || 0);
             document.getElementById('cardClientTraffic').textContent = formatBytes(totalBytes);
-            document.getElementById('cardClientLastSeen').textContent = client.last_handshake || 'Never';
+            document.getElementById('cardClientLastSeen').textContent = formatRelativeTime(client.last_handshake);
             
             // Set link to client details page
             document.getElementById('cardClientLink').href = `/clients/${client.id}`;
