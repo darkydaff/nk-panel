@@ -73,7 +73,41 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <!-- Client Telemetry Speed Chart -->
+    <div class="panel p-5 border-slate-800 bg-slate-900 shadow-xl rounded-xl mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div>
+                <h3 class="text-base font-semibold text-white flex items-center">
+                    <i class="fas fa-chart-line text-emerald-400 mr-2"></i>Traffic Speed History
+                </h3>
+                <p class="text-xs text-slate-500 mt-1">Real-time upload and download speeds over time</p>
+            </div>
+            
+            <div class="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[11px] self-start sm:self-auto select-none" id="chartHoursGroup">
+                <button type="button" class="chart-hours-btn px-3 py-1 rounded-md font-medium transition-all bg-slate-800 text-white" data-hours="24">24h</button>
+                <button type="button" class="chart-hours-btn px-3 py-1 rounded-md font-medium transition-all text-slate-400 hover:text-slate-200" data-hours="12">12h</button>
+                <button type="button" class="chart-hours-btn px-3 py-1 rounded-md font-medium transition-all text-slate-400 hover:text-slate-200" data-hours="6">6h</button>
+            </div>
+        </div>
+        
+        <div class="relative h-[220px] w-full" id="chartContainer">
+            <canvas id="speedChart"></canvas>
+            <div id="chartLoading" class="absolute inset-0 bg-slate-900/80 flex items-center justify-center rounded-lg">
+                <div class="flex flex-col items-center gap-2">
+                    <i class="fas fa-spinner fa-spin text-emerald-400 text-xl"></i>
+                    <span class="text-xs text-slate-500 font-medium">Loading telemetry...</span>
+                </div>
+            </div>
+            <div id="chartEmpty" class="absolute inset-0 bg-slate-900 flex items-center justify-center rounded-lg hidden">
+                <div class="flex flex-col items-center gap-1.5 text-slate-500">
+                    <i class="fas fa-chart-line text-xl opacity-40"></i>
+                    <span class="text-xs">No traffic data recorded in this range</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pb-8">
         <div class="panel p-5 border-slate-800/60 bg-slate-900/60 backdrop-blur">
             <h3 class="text-base font-semibold mb-4 text-white flex items-center">
                 <i class="fas fa-edit text-accent mr-2"></i>Client Settings
@@ -218,5 +252,218 @@ async function refreshClientStats() {
         btn.disabled = false;
     }
 }
+
+let speedChart = null;
+let currentHours = 24;
+
+function getThemeColors() {
+    const isDark = document.documentElement.classList.contains('dark') || true; // Maintain dark aesthetic
+    return {
+        grid: 'rgba(255, 255, 255, 0.04)',
+        text: 'rgba(255, 255, 255, 0.4)',
+        tooltipBg: '#0f172a',
+        tooltipText: '#e2e8f0',
+        tooltipBorder: '#334155'
+    };
+}
+
+async function loadSpeedChart(hours = 24) {
+    const chartLoading = document.getElementById('chartLoading');
+    const chartEmpty = document.getElementById('chartEmpty');
+    const canvas = document.getElementById('speedChart');
+    if (!canvas) return;
+    
+    if (chartLoading) chartLoading.classList.remove('hidden');
+    if (chartEmpty) chartEmpty.classList.add('hidden');
+    
+    const clientId = {{ client.id }};
+    
+    try {
+        const response = await fetch(`/api/clients/${clientId}/metrics?hours=${hours}`);
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const data = await response.json();
+        
+        if (!data.success || !data.metrics || data.metrics.length === 0) {
+            if (chartEmpty) chartEmpty.classList.remove('hidden');
+            if (chartLoading) chartLoading.classList.add('hidden');
+            if (speedChart) {
+                speedChart.destroy();
+                speedChart = null;
+            }
+            return;
+        }
+        
+        if (chartLoading) chartLoading.classList.add('hidden');
+        
+        const labels = [];
+        const uploadData = [];
+        const downloadData = [];
+        
+        data.metrics.forEach(m => {
+            const time = new Date(m.collected_at);
+            const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            labels.push(timeStr);
+            // Convert Kbps to Mbps
+            uploadData.push(parseFloat(m.speed_up_kbps || 0) / 1000);
+            downloadData.push(parseFloat(m.speed_down_kbps || 0) / 1000);
+        });
+        
+        const ctx = canvas.getContext('2d');
+        const colors = getThemeColors();
+        
+        if (speedChart) {
+            speedChart.data.labels = labels;
+            speedChart.data.datasets[0].data = downloadData;
+            speedChart.data.datasets[1].data = uploadData;
+            speedChart.update();
+        } else {
+            // Setup gradients
+            const uploadGradient = ctx.createLinearGradient(0, 0, 0, 200);
+            uploadGradient.addColorStop(0, 'rgba(16, 185, 129, 0.15)');
+            uploadGradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+            
+            const downloadGradient = ctx.createLinearGradient(0, 0, 0, 200);
+            downloadGradient.addColorStop(0, 'rgba(99, 102, 241, 0.15)');
+            downloadGradient.addColorStop(1, 'rgba(99, 102, 241, 0.0)');
+            
+            speedChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Download (Rx)',
+                            data: downloadData,
+                            borderColor: '#6366f1',
+                            borderWidth: 2,
+                            backgroundColor: downloadGradient,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 0,
+                            pointHoverRadius: 4,
+                            pointHitRadius: 10
+                        },
+                        {
+                            label: 'Upload (Tx)',
+                            data: uploadData,
+                            borderColor: '#10b981',
+                            borderWidth: 2,
+                            backgroundColor: uploadGradient,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 0,
+                            pointHoverRadius: 4,
+                            pointHitRadius: 10
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                color: colors.text,
+                                font: { family: 'Inter', size: 10, weight: '500' },
+                                boxWidth: 10,
+                                boxHeight: 10,
+                                padding: 10
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: colors.tooltipBg,
+                            borderColor: colors.tooltipBorder,
+                            borderWidth: 1,
+                            titleColor: '#ffffff',
+                            bodyColor: '#e2e8f0',
+                            titleFont: { family: 'Inter', size: 11, weight: '600' },
+                            bodyFont: { family: 'Inter', size: 10 },
+                            padding: 8,
+                            cornerRadius: 6,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) label += ': ';
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y.toFixed(2) + ' Mbps';
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                color: colors.text,
+                                font: { family: 'Inter', size: 9 },
+                                maxTicksLimit: 8
+                            }
+                        },
+                        y: {
+                            grid: { color: colors.grid },
+                            ticks: {
+                                color: colors.text,
+                                font: { family: 'Inter', size: 9 },
+                                callback: function(value) {
+                                    return value.toFixed(1) + ' Mbps';
+                                }
+                            },
+                            suggestedMin: 0
+                        }
+                    }
+                }
+            });
+        }
+    } catch (error) {
+        console.error('Failed to load speed telemetry:', error);
+        if (chartLoading) chartLoading.classList.add('hidden');
+        if (chartEmpty) {
+            chartEmpty.classList.remove('hidden');
+            const emptyText = chartEmpty.querySelector('span');
+            if (emptyText) emptyText.textContent = 'Failed to load telemetry data';
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Load speed telemetry chart
+    loadSpeedChart(24);
+    
+    // Bind hours buttons
+    const chartHoursBtns = document.querySelectorAll('.chart-hours-btn');
+    chartHoursBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            chartHoursBtns.forEach(b => {
+                b.classList.remove('bg-slate-800', 'text-white');
+                b.classList.add('text-slate-400', 'hover:text-slate-200');
+            });
+            this.classList.remove('text-slate-400', 'hover:text-slate-200');
+            this.classList.add('bg-slate-800', 'text-white');
+            
+            currentHours = parseInt(this.dataset.hours);
+            loadSpeedChart(currentHours);
+        });
+    });
+    
+    // Sync chart theme dynamically
+    window.addEventListener('themeChanged', () => {
+        const newColors = getThemeColors();
+        if (speedChart) {
+            speedChart.options.scales.y.grid.color = newColors.grid;
+            speedChart.options.scales.y.ticks.color = newColors.text;
+            speedChart.options.scales.x.ticks.color = newColors.text;
+            speedChart.options.plugins.legend.labels.color = newColors.text;
+            speedChart.options.plugins.tooltip.backgroundColor = newColors.tooltipBg;
+            speedChart.options.plugins.tooltip.borderColor = newColors.tooltipBorder;
+            speedChart.update();
+        }
+    });
+});
 </script>
 {% endblock %}

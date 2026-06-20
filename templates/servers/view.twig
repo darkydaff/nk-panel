@@ -99,21 +99,39 @@
     </div>
 
     <div class="panel overflow-hidden border-slate-800/60 bg-slate-900/60 backdrop-blur">
-        <div class="px-5 py-4 border-b border-slate-700 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-            <h3 class="text-base font-semibold text-white flex items-center">
-                <i class="fas fa-users text-cyan-400 mr-2"></i>Clients
-                <span class="ml-2 bg-slate-700 text-slate-300 px-2 py-0.5 rounded text-xs" id="clientCount">{{ clients|length }}</span>
-            </h3>
-            <div class="flex gap-2 items-center">
-                <div class="relative">
+        <div class="px-5 py-4 border-b border-slate-750 flex flex-col xl:flex-row gap-4 xl:items-center xl:justify-between bg-slate-900/85">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between xl:justify-start gap-4">
+                <h3 class="text-base font-semibold text-white flex items-center">
+                    <i class="fas fa-users text-cyan-400 mr-2"></i>Clients
+                    <span class="ml-2 bg-slate-800 border border-slate-700 text-slate-300 px-2.5 py-0.5 rounded text-xs font-mono" id="clientCount">{{ clients|length }}</span>
+                </h3>
+                
+                <!-- Status Filter Pills -->
+                <div class="flex items-center bg-slate-950/80 p-0.5 rounded-lg border border-slate-800/80 text-[11px] self-start sm:self-auto select-none" id="statusFilterGroup">
+                    <button type="button" class="status-filter-btn px-3 py-1 rounded-md font-medium transition-all bg-slate-800 text-white" data-status="all">All</button>
+                    <button type="button" class="status-filter-btn px-3 py-1 rounded-md font-medium transition-all text-slate-400 hover:text-slate-200" data-status="online">Online</button>
+                    <button type="button" class="status-filter-btn px-3 py-1 rounded-md font-medium transition-all text-slate-400 hover:text-slate-200" data-status="offline">Offline</button>
+                    <button type="button" class="status-filter-btn px-3 py-1 rounded-md font-medium transition-all text-slate-400 hover:text-slate-200" data-status="never">Never</button>
+                </div>
+            </div>
+            
+            <div class="flex flex-wrap sm:flex-nowrap gap-2 items-center justify-end">
+                <div class="relative w-full sm:w-auto">
                     <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
-                    <input type="text" id="clientSearch" placeholder="Search..." class="input-field pl-9 pr-8 py-2 text-xs w-40 focus:w-52 transition-all">
-                    <button type="button" id="clearSearch" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white hidden">
+                    <input type="text" id="clientSearch" placeholder="Search..." class="input-field pl-9 pr-8 py-2 text-xs w-full sm:w-40 focus:sm:w-56 transition-all bg-slate-950 border-slate-850 text-white rounded-lg focus:outline-none focus:border-blue-500 placeholder-slate-500">
+                    <button type="button" id="clearSearch" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white hidden">
                         <i class="fas fa-times text-xs"></i>
                     </button>
                 </div>
-                <button onclick="syncAllStats({{ server.id }})" id="syncBtn" class="btn-secondary px-4 py-2 text-xs">
-                    <i class="fas fa-sync-alt mr-2"></i>Sync
+                
+                {% if clients|length > 0 %}
+                <a href="/servers/{{ server.id }}/configs/download" class="btn-secondary px-3.5 py-2 text-xs w-full sm:w-auto text-center flex items-center justify-center gap-1.5 whitespace-nowrap bg-slate-800/40 hover:bg-slate-800 border-slate-700/80 hover:border-slate-600">
+                    <i class="fas fa-file-archive text-accent"></i>Download ZIP
+                </a>
+                {% endif %}
+                
+                <button onclick="syncAllStats({{ server.id }})" id="syncBtn" class="btn-secondary px-3.5 py-2 text-xs w-full sm:w-auto text-center flex items-center justify-center gap-1.5 whitespace-nowrap bg-slate-800/40 hover:bg-slate-800 border-slate-700/80 hover:border-slate-600">
+                    <i class="fas fa-sync-alt"></i>Sync
                 </button>
             </div>
         </div>
@@ -132,7 +150,11 @@
                     </thead>
                     <tbody class="divide-y divide-slate-700" id="clientTableBody">
                         {% for client in clients %}
-                        <tr class="hover:bg-slate-800/30 transition-colors client-row" data-name="{{ client.name }}" data-ip="{{ client.client_ip }}" data-client-id="{{ client.id }}">
+                        <tr class="hover:bg-slate-800/30 transition-colors client-row" 
+                            data-name="{{ client.name }}" 
+                            data-ip="{{ client.client_ip }}" 
+                            data-client-id="{{ client.id }}"
+                            data-last-handshake="{% if client.last_handshake %}{{ client.last_handshake|date('U') }}{% else %}never{% endif %}">
                             <td class="px-4 py-3">
                                 <div class="flex items-center">
                                     <div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center mr-2 text-slate-400">
@@ -142,7 +164,7 @@
                                 </div>
                             </td>
                             <td class="px-4 py-3 hide-mobile">
-                                <code class="text-xs text-slate-400">{{ client.client_ip }}</code>
+                                <code class="text-xs text-slate-400 font-mono">{{ client.client_ip }}</code>
                             </td>
                             <td class="px-4 py-3">
                                 <div class="flex gap-1 text-xs">
@@ -193,7 +215,11 @@
 
         <div class="md:hidden divide-y divide-slate-700" id="clientCards">
             {% for client in clients %}
-            <div class="p-4 client-card" data-name="{{ client.name }}" data-ip="{{ client.client_ip }}" data-client-id="{{ client.id }}">
+            <div class="p-4 client-card border-b border-slate-800 last:border-0" 
+                 data-name="{{ client.name }}" 
+                 data-ip="{{ client.client_ip }}" 
+                 data-client-id="{{ client.id }}"
+                 data-last-handshake="{% if client.last_handshake %}{{ client.last_handshake|date('U') }}{% else %}never{% endif %}">
                 <div class="flex items-start justify-between mb-3">
                     <div class="flex items-center">
                         <div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center mr-2 text-slate-400">
@@ -201,7 +227,7 @@
                         </div>
                         <div>
                             <span class="text-sm font-medium text-white">{{ client.name }}</span>
-                            <code class="block text-xs text-slate-500 mt-0.5">{{ client.client_ip }}</code>
+                            <code class="block text-xs text-slate-500 mt-0.5 font-mono">{{ client.client_ip }}</code>
                         </div>
                     </div>
                 </div>
@@ -280,64 +306,104 @@ document.addEventListener('DOMContentLoaded', function() {
     const clientCards = document.getElementById('clientCards');
     const clientCount = document.getElementById('clientCount');
     
-    if (searchInput) {
-        searchInput.addEventListener('input', function() {
-            const query = this.value.toLowerCase();
-            let visibleCount = 0;
-            
+    let currentStatusFilter = 'all';
+
+    function applyFilters() {
+        const query = searchInput ? searchInput.value.toLowerCase() : '';
+        let visibleCount = 0;
+        
+        if (clearBtn) {
             clearBtn.classList.toggle('hidden', !query);
+        }
+        
+        const isMobile = clientCards && window.getComputedStyle(clientCards).display !== 'none';
+        const currentTime = Math.floor(Date.now() / 1000);
+        
+        const filterItem = (el) => {
+            const name = el.dataset.name?.toLowerCase() || '';
+            const ip = el.dataset.ip?.toLowerCase() || '';
+            const handshakeVal = el.dataset.lastHandshake;
             
-            const isMobile = clientCards && window.getComputedStyle(clientCards).display !== 'none';
+            // Check text query
+            const textMatch = name.includes(query) || ip.includes(query);
             
-            if (isMobile && clientCards) {
-                const cards = clientCards.querySelectorAll('div.client-card');
-                cards.forEach(card => {
-                    const name = card.dataset.name?.toLowerCase() || '';
-                    const ip = card.dataset.ip?.toLowerCase() || '';
-                    const match = name.includes(query) || ip.includes(query);
-                    card.style.display = match ? '' : 'none';
-                    if (match) visibleCount++;
-                });
-            } else if (tbody) {
-                const rows = tbody.querySelectorAll('tr.client-row');
-                rows.forEach(row => {
-                    const name = row.dataset.name?.toLowerCase() || '';
-                    const ip = row.dataset.ip?.toLowerCase() || '';
-                    const match = name.includes(query) || ip.includes(query);
-                    row.style.display = match ? '' : 'none';
-                    if (match) visibleCount++;
-                });
-            }
-            
-            if (clientCount) clientCount.textContent = visibleCount;
-            
-            const noResults = document.getElementById('noSearchResults');
-            if (visibleCount === 0 && query) {
-                if (!noResults) {
-                    const container = clientCards && window.getComputedStyle(clientCards).display !== 'none' 
-                        ? clientCards 
-                        : (tbody ? tbody.parentElement : null);
-                    if (container) {
-                        const el = document.createElement('div');
-                        el.id = 'noSearchResults';
-                        el.className = 'p-8 text-center text-slate-500';
-                        el.textContent = 'No clients found';
-                        container.appendChild(el);
+            // Check status filter
+            let statusMatch = true;
+            if (currentStatusFilter !== 'all') {
+                if (!handshakeVal || handshakeVal === 'never') {
+                    statusMatch = (currentStatusFilter === 'never');
+                } else {
+                    const handshakeTime = parseInt(handshakeVal);
+                    const isOnline = (currentTime - handshakeTime) < 300;
+                    if (currentStatusFilter === 'online') {
+                        statusMatch = isOnline;
+                    } else if (currentStatusFilter === 'offline') {
+                        statusMatch = !isOnline;
                     }
                 }
-            } else if (noResults) {
-                noResults.remove();
             }
-        });
+            
+            const match = textMatch && statusMatch;
+            el.style.display = match ? '' : 'none';
+            if (match) visibleCount++;
+        };
+        
+        if (isMobile && clientCards) {
+            const cards = clientCards.querySelectorAll('div.client-card');
+            cards.forEach(filterItem);
+        } else if (tbody) {
+            const rows = tbody.querySelectorAll('tr.client-row');
+            rows.forEach(filterItem);
+        }
+        
+        if (clientCount) {
+            clientCount.textContent = visibleCount;
+        }
+        
+        const noResults = document.getElementById('noSearchResults');
+        if (visibleCount === 0 && (query || currentStatusFilter !== 'all')) {
+            if (!noResults) {
+                const container = isMobile ? clientCards : (tbody ? tbody.parentElement : null);
+                if (container) {
+                    const el = document.createElement('div');
+                    el.id = 'noSearchResults';
+                    el.className = 'p-8 text-center text-slate-500 font-medium';
+                    el.textContent = 'No matching clients found';
+                    container.appendChild(el);
+                }
+            }
+        } else if (noResults) {
+            noResults.remove();
+        }
+    }
+
+    if (searchInput) {
+        searchInput.addEventListener('input', applyFilters);
         
         if (clearBtn) {
             clearBtn.addEventListener('click', function() {
                 searchInput.value = '';
-                searchInput.dispatchEvent(new Event('input'));
+                applyFilters();
                 searchInput.focus();
             });
         }
     }
+
+    // Status Filter buttons binding
+    const statusFilterBtns = document.querySelectorAll('.status-filter-btn');
+    statusFilterBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            statusFilterBtns.forEach(b => {
+                b.classList.remove('bg-slate-800', 'text-white');
+                b.classList.add('text-slate-400', 'hover:text-slate-200');
+            });
+            this.classList.remove('text-slate-400', 'hover:text-slate-200');
+            this.classList.add('bg-slate-800', 'text-white');
+            
+            currentStatusFilter = this.dataset.status;
+            applyFilters();
+        });
+    });
 
     // Start AJAX polling
     const serverId = {{ server.id }};
@@ -384,19 +450,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
-            const query = searchInput ? searchInput.value.toLowerCase() : '';
-            let visibleCount = 0;
-
             data.clients.forEach(client => {
-                const isMatch = client.name.toLowerCase().includes(query) || client.client_ip.toLowerCase().includes(query);
-                if (isMatch) visibleCount++;
+                const rawHandshake = client.last_handshake_raw !== null ? client.last_handshake_raw : 'never';
 
                 // Update Desktop Table Row
                 const row = document.querySelector(`tr.client-row[data-client-id="${client.id}"]`);
                 if (row) {
-                    if (query) {
-                        row.style.display = isMatch ? '' : 'none';
-                    }
+                    row.dataset.lastHandshake = rawHandshake;
 
                     const uploadEl = row.querySelector('.upload-bytes');
                     const downloadEl = row.querySelector('.download-bytes');
@@ -427,9 +487,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Update Mobile Card
                 const card = document.querySelector(`.client-card[data-client-id="${client.id}"]`);
                 if (card) {
-                    if (query) {
-                        card.style.display = isMatch ? '' : 'none';
-                    }
+                    card.dataset.lastHandshake = rawHandshake;
 
                     const uploadEl = card.querySelector('.upload-bytes');
                     const downloadEl = card.querySelector('.download-bytes');
@@ -456,9 +514,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
 
-            if (clientCount) {
-                clientCount.textContent = query ? visibleCount : data.clients.length;
-            }
+            // Re-apply filters to sync the visible display and counts on poll update
+            applyFilters();
 
         } catch (error) {
             console.error('Failed to poll clients:', error);
