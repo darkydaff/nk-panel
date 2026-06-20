@@ -46,7 +46,7 @@
     </div>
 
     <div id="content-profile">
-        <div class="panel overflow-hidden">
+        <div class="panel overflow-hidden border-slate-800/60 bg-slate-900/60 backdrop-blur">
             <div class="px-5 py-4 border-b border-slate-700 bg-slate-800/30">
                 <h2 class="text-base font-semibold text-white flex items-center">
                     <i class="fas fa-lock mr-2 text-accent"></i>{{ t('settings.change_password') }}
@@ -81,7 +81,7 @@
 
     {% if user.role == 'admin' %}
     <div id="content-users" class="hidden">
-        <div class="panel overflow-hidden mb-6">
+        <div class="panel overflow-hidden mb-6 border-slate-800/60 bg-slate-900/60 backdrop-blur">
             <div class="px-5 py-4 border-b border-slate-700 bg-slate-800/30">
                 <h2 class="text-base font-semibold text-white flex items-center">
                     <i class="fas fa-user-plus mr-2 text-accent"></i>{{ t('users.add_user') }}
@@ -119,7 +119,7 @@
             </div>
         </div>
 
-        <div class="panel overflow-hidden">
+        <div class="panel overflow-hidden border-slate-800/60 bg-slate-900/60 backdrop-blur">
             <div class="px-5 py-4 border-b border-slate-700 bg-slate-800/30">
                 <h2 class="text-base font-semibold text-white flex items-center">
                     <i class="fas fa-users mr-2 text-accent"></i>{{ t('users.all_users') }}

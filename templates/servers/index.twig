@@ -27,7 +27,7 @@
     {% if servers|length > 0 %}
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {% for server in servers %}
-        <div class="panel p-5 hover:border-slate-500 transition-colors server-card" data-server-id="{{ server.id }}">
+        <div class="panel p-5 border-slate-800/60 bg-slate-900/60 backdrop-blur hover:-translate-y-1 hover:border-slate-700/80 transition-all duration-300 server-card" data-server-id="{{ server.id }}">
             <div class="flex items-start justify-between mb-4">
                 <div class="flex items-center">
                     <div class="w-10 h-10 rounded-lg bg-slate-700 text-accent flex items-center justify-center mr-3">
@@ -88,7 +88,7 @@
         {% endfor %}
     </div>
     {% else %}
-    <div class="panel p-12 text-center">
+    <div class="panel p-12 text-center border-slate-800/60 bg-slate-900/60 backdrop-blur">
         <div class="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-4">
             <i class="fas fa-server text-slate-600 text-2xl"></i>
         </div>
