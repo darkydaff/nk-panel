@@ -3,31 +3,31 @@
 {% block title %}Login - {{ app_name }}{% endblock %}
 
 {% block content %}
-<div class="flex-grow flex items-center justify-center p-4">
-    <div class="max-w-sm w-full">
-        <div class="panel p-8">
-            <div class="text-center mb-6">
-                <img src="/img/logo.svg" alt="Logo" class="w-16 h-16 mx-auto mb-4">
-                <h2 class="text-2xl font-bold text-white">Welcome Back</h2>
+<div class="flex-grow flex items-center justify-center p-4 py-16">
+    <div class="max-w-md w-full">
+        <div class="panel p-8 md:p-10 bg-slate-900 border-slate-800 shadow-2xl rounded-2xl">
+            <div class="text-center mb-8">
+                <img src="/img/logo.svg" alt="Logo" class="w-16 h-16 mx-auto mb-4 filter drop-shadow-[0_0_10px_rgba(91,141,239,0.15)]">
+                <h2 class="text-2xl font-bold text-white tracking-tight">Welcome Back</h2>
                 <p class="mt-2 text-sm text-slate-400">Sign in to manage your VPN servers</p>
             </div>
             
             {% if error %}
-            <div class="mb-4 bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded-lg flex items-center text-sm">
+            <div class="mb-5 bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded-lg flex items-center text-sm">
                 <i class="fas fa-exclamation-circle mr-3 text-red-400"></i>
                 <span>{{ error }}</span>
             </div>
             {% endif %}
 
-            <form class="space-y-4" method="POST" action="/login">
+            <form class="space-y-5" method="POST" action="/login">
                 <div>
-                    <label for="email" class="block text-sm font-medium text-slate-300 mb-2">Email</label>
+                    <label for="email" class="block text-sm font-medium text-slate-300 mb-2">Email Address</label>
                     <div class="relative">
                         <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
                             <i class="fas fa-envelope"></i>
                         </div>
                         <input id="email" name="email" type="email" required
-                               class="input-field w-full pl-11 pr-4 py-2.5"
+                               class="input-field w-full pl-11 pr-4 py-2.5 bg-slate-950 border-slate-800 text-white rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-500"
                                placeholder="admin@example.com">
                     </div>
                 </div>
@@ -39,13 +39,13 @@
                             <i class="fas fa-lock"></i>
                         </div>
                         <input id="password" name="password" type="password" required
-                               class="input-field w-full pl-11 pr-4 py-2.5"
+                               class="input-field w-full pl-11 pr-4 py-2.5 bg-slate-950 border-slate-800 text-white rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-500"
                                placeholder="••••••••">
                     </div>
                 </div>
 
                 <div class="pt-2">
-                    <button type="submit" class="btn-primary w-full py-2.5 text-sm font-semibold">
+                    <button type="submit" class="btn-primary w-full py-3 text-sm font-semibold shadow-lg hover:shadow-accent/10 transition-all duration-300">
                         <span>Sign in</span>
                         <i class="fas fa-arrow-right ml-2 opacity-70"></i>
                     </button>

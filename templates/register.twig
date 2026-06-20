@@ -3,25 +3,25 @@
 {% block title %}Register - {{ app_name }}{% endblock %}
 
 {% block content %}
-<div class="flex-grow flex items-center justify-center p-4">
-    <div class="max-w-sm w-full">
-        <div class="panel p-8">
-            <div class="text-center mb-6">
-                <div class="w-14 h-14 rounded-xl bg-slate-700 text-accent flex items-center justify-center mx-auto mb-4">
+<div class="flex-grow flex items-center justify-center p-4 py-16">
+    <div class="max-w-md w-full">
+        <div class="panel p-8 md:p-10 bg-slate-900 border-slate-800 shadow-2xl rounded-2xl">
+            <div class="text-center mb-8">
+                <div class="w-14 h-14 rounded-xl bg-slate-800 border border-slate-700 text-accent flex items-center justify-center mx-auto mb-4">
                     <i class="fas fa-user-plus text-2xl"></i>
                 </div>
-                <h2 class="text-2xl font-bold text-white">Create Account</h2>
+                <h2 class="text-2xl font-bold text-white tracking-tight">Create Account</h2>
                 <p class="mt-2 text-sm text-slate-400">Setup your {{ app_name }} account</p>
             </div>
             
             {% if error %}
-            <div class="mb-4 bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded-lg flex items-center text-sm">
+            <div class="mb-5 bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded-lg flex items-center text-sm">
                 <i class="fas fa-exclamation-circle mr-3 text-red-400"></i>
                 <span>{{ error }}</span>
             </div>
             {% endif %}
 
-            <form class="space-y-4" method="POST" action="/register">
+            <form class="space-y-5" method="POST" action="/register">
                 <div>
                     <label for="name" class="block text-sm font-medium text-slate-300 mb-2">Full Name</label>
                     <div class="relative">
@@ -29,19 +29,19 @@
                             <i class="fas fa-id-card"></i>
                         </div>
                         <input id="name" name="name" type="text" required
-                               class="input-field w-full pl-11 pr-4 py-2.5"
+                               class="input-field w-full pl-11 pr-4 py-2.5 bg-slate-950 border-slate-800 text-white rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-500"
                                placeholder="John Doe">
                     </div>
                 </div>
 
                 <div>
-                    <label for="email" class="block text-sm font-medium text-slate-300 mb-2">Email</label>
+                    <label for="email" class="block text-sm font-medium text-slate-300 mb-2">Email Address</label>
                     <div class="relative">
                         <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
                             <i class="fas fa-envelope"></i>
                         </div>
                         <input id="email" name="email" type="email" required
-                               class="input-field w-full pl-11 pr-4 py-2.5"
+                               class="input-field w-full pl-11 pr-4 py-2.5 bg-slate-950 border-slate-800 text-white rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-500"
                                placeholder="john@example.com">
                     </div>
                 </div>
@@ -53,21 +53,21 @@
                             <i class="fas fa-lock"></i>
                         </div>
                         <input id="password" name="password" type="password" required
-                               class="input-field w-full pl-11 pr-4 py-2.5"
+                               class="input-field w-full pl-11 pr-4 py-2.5 bg-slate-950 border-slate-800 text-white rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-500"
                                placeholder="••••••••">
                     </div>
-                    <p class="mt-1 text-xs text-slate-500">Minimum 6 characters</p>
+                    <p class="mt-2 text-xs text-slate-500">Minimum 6 characters</p>
                 </div>
 
                 <div class="pt-2">
-                    <button type="submit" class="btn-primary w-full py-2.5 text-sm font-semibold">
+                    <button type="submit" class="btn-primary w-full py-3 text-sm font-semibold shadow-lg hover:shadow-accent/10 transition-all duration-300">
                         <span>Register</span>
                         <i class="fas fa-user-plus ml-2 opacity-70"></i>
                     </button>
                 </div>
 
                 <div class="text-center mt-4">
-                    <a href="/login" class="text-sm text-accent hover:text-blue-300 transition-colors">
+                    <a href="/login" class="text-sm text-accent hover:text-blue-450 transition-colors">
                         Already have an account? Sign in
                     </a>
                 </div>
