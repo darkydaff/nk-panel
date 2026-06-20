@@ -868,69 +868,6 @@ Router::post('/servers/{id}/deploy-monitoring', function ($params) {
     }
 });
 
-// Download all client configs as a ZIP file
-Router::get('/servers/{id}/configs/download', function ($params) {
-    requireAuth();
-    $serverId = (int)$params['id'];
-    
-    try {
-        $server = new VpnServer($serverId);
-        $serverData = $server->getData();
-        
-        // Check ownership
-        $user = Auth::user();
-        if ($serverData['user_id'] != $user['id'] && !Auth::isAdmin()) {
-            http_response_code(403);
-            echo 'Forbidden';
-            return;
-        }
-        
-        $clients = VpnClient::listByServer($serverId);
-        if (empty($clients)) {
-            throw new Exception('No clients found for this server');
-        }
-        
-        if (!class_exists('ZipArchive')) {
-            throw new Exception('PHP ZipArchive extension is not enabled on this server');
-        }
-        
-        $zip = new ZipArchive();
-        $zipName = tempnam(sys_get_temp_dir(), 'vpn_configs_');
-        
-        if ($zip->open($zipName, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-            throw new Exception('Could not create ZIP archive');
-        }
-        
-        $added = 0;
-        foreach ($clients as $client) {
-            if (!empty($client['config'])) {
-                $filename = preg_replace('/[^a-zA-Z0-9_-]/', '_', $client['name']) . '.conf';
-                $zip->addFromString($filename, $client['config']);
-                $added++;
-            }
-        }
-        
-        $zip->close();
-        
-        if ($added === 0) {
-            @unlink($zipName);
-            throw new Exception('No valid configurations found to download');
-        }
-        
-        header('Content-Type: application/zip');
-        header('Content-Disposition: attachment; filename="configs_' . preg_replace('/[^a-zA-Z0-9_-]/', '_', $serverData['name']) . '.zip"');
-        header('Content-Length: ' . filesize($zipName));
-        header('Pragma: no-cache');
-        header('Expires: 0');
-        
-        readfile($zipName);
-        @unlink($zipName);
-        exit;
-    } catch (Exception $e) {
-        http_response_code(500);
-        echo 'Error generating zip: ' . htmlspecialchars($e->getMessage());
-    }
-});
 
 // API: Report metrics from remote server (used by push agent)
 Router::post('/api/servers/report-metrics', function () {

@@ -124,11 +124,7 @@
                     </button>
                 </div>
                 
-                {% if clients|length > 0 %}
-                <a href="/servers/{{ server.id }}/configs/download" class="btn-secondary px-3.5 py-2 text-xs w-full sm:w-auto text-center flex items-center justify-center gap-1.5 whitespace-nowrap bg-slate-800/40 hover:bg-slate-800 border-slate-700/80 hover:border-slate-600">
-                    <i class="fas fa-file-archive text-accent"></i>Download ZIP
-                </a>
-                {% endif %}
+
                 
                 <button onclick="syncAllStats({{ server.id }})" id="syncBtn" class="btn-secondary px-3.5 py-2 text-xs w-full sm:w-auto text-center flex items-center justify-center gap-1.5 whitespace-nowrap bg-slate-800/40 hover:bg-slate-800 border-slate-700/80 hover:border-slate-600">
                     <i class="fas fa-sync-alt"></i>Sync
