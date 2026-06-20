@@ -330,16 +330,15 @@ document.addEventListener('DOMContentLoaded', function() {
             // Check status filter
             let statusMatch = true;
             if (currentStatusFilter !== 'all') {
-                if (!handshakeVal || handshakeVal === 'never') {
-                    statusMatch = (currentStatusFilter === 'never');
-                } else {
-                    const handshakeTime = parseInt(handshakeVal);
-                    const isOnline = (currentTime - handshakeTime) < 300;
-                    if (currentStatusFilter === 'online') {
-                        statusMatch = isOnline;
-                    } else if (currentStatusFilter === 'offline') {
-                        statusMatch = !isOnline;
-                    }
+                const handshakeTime = parseInt(handshakeVal);
+                const isNever = !handshakeVal || handshakeVal === 'never' || isNaN(handshakeTime) || handshakeTime <= 0;
+                
+                if (currentStatusFilter === 'never') {
+                    statusMatch = isNever;
+                } else if (currentStatusFilter === 'online') {
+                    statusMatch = !isNever && (currentTime - handshakeTime) < 300;
+                } else if (currentStatusFilter === 'offline') {
+                    statusMatch = !isNever && (currentTime - handshakeTime) >= 300;
                 }
             }
             
