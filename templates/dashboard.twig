@@ -55,13 +55,17 @@
                 </div>
             </div>
             <div class="text-3xl font-bold text-white font-heading">{{ clients|length }}</div>
-            {% set active_clients_count = 0 %}
+            {% set online_clients_count = 0 %}
+            {% set current_time = "now"|date("U") %}
             {% for c in clients %}
-                {% if c.status == 'active' %}
-                    {% set active_clients_count = active_clients_count + 1 %}
+                {% if c.last_handshake is not empty %}
+                    {% set handshake_time = c.last_handshake|date("U") %}
+                    {% if (current_time - handshake_time) < 300 %}
+                        {% set online_clients_count = online_clients_count + 1 %}
+                    {% endif %}
                 {% endif %}
             {% endfor %}
-            <p class="text-xs text-slate-500 mt-1.5 font-mono">{{ active_clients_count }} Active / {{ clients|length - active_clients_count }} Suspended</p>
+            <p class="text-xs text-slate-500 mt-1.5 font-mono">{{ online_clients_count }} Online / {{ clients|length - online_clients_count }} Offline</p>
         </div>
 
         <!-- Live Network Speed Card -->
