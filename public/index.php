@@ -1844,6 +1844,9 @@ Router::get('/api/servers/{id}/clients', function ($params) {
             $client = new VpnClient($clientData['id']);
             $stats = $client->getFormattedStats();
             
+            $lh = $clientData['last_handshake'];
+            $isNever = !$lh || $lh === '0000-00-00 00:00:00' || $lh === '1970-01-01 00:00:00' || $lh === '0';
+            
             $clientsData[] = [
                 'id' => $clientData['id'],
                 'name' => $clientData['name'],
@@ -1853,8 +1856,8 @@ Router::get('/api/servers/{id}/clients', function ($params) {
                 'stats' => $stats,
                 'bytes_sent' => $clientData['bytes_sent'],
                 'bytes_received' => $clientData['bytes_received'],
-                'last_handshake' => $clientData['last_handshake'],
-                'last_handshake_raw' => $clientData['last_handshake'] ? strtotime($clientData['last_handshake']) : null,
+                'last_handshake' => $isNever ? null : $lh,
+                'last_handshake_raw' => $isNever ? null : strtotime($lh),
             ];
         }
         

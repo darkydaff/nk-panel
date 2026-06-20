@@ -141,20 +141,33 @@
                 <table class="min-w-full">
                     <thead>
                         <tr class="bg-slate-800/50">
-                            <th class="px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Name</th>
-                            <th class="px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold hide-mobile">IP</th>
-                            <th class="px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Traffic</th>
-                            <th class="px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold hide-mobile">Handshake</th>
+                            <th class="sortable px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold cursor-pointer select-none" data-sort="name">
+                                Name <i class="fas fa-sort ml-1 opacity-45 text-[9px]" id="sortIcon-name"></i>
+                            </th>
+                            <th class="sortable px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold cursor-pointer select-none hide-mobile" data-sort="ip">
+                                IP <i class="fas fa-sort ml-1 opacity-45 text-[9px]" id="sortIcon-ip"></i>
+                            </th>
+                            <th class="sortable px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold cursor-pointer select-none" data-sort="traffic">
+                                Traffic <i class="fas fa-sort ml-1 opacity-45 text-[9px]" id="sortIcon-traffic"></i>
+                            </th>
+                            <th class="sortable px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold cursor-pointer select-none hide-mobile" data-sort="handshake">
+                                Handshake <i class="fas fa-sort ml-1 opacity-45 text-[9px]" id="sortIcon-handshake"></i>
+                            </th>
                             <th class="px-4 py-3 text-right text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-700" id="clientTableBody">
                         {% for client in clients %}
+                        {% set is_never = true %}
+                        {% if client.last_handshake is not empty and client.last_handshake != '0000-00-00 00:00:00' and client.last_handshake != '1970-01-01 00:00:00' and client.last_handshake != '0' %}
+                            {% set is_never = false %}
+                        {% endif %}
                         <tr class="hover:bg-slate-800/30 transition-colors client-row" 
                             data-name="{{ client.name }}" 
                             data-ip="{{ client.client_ip }}" 
                             data-client-id="{{ client.id }}"
-                            data-last-handshake="{% if client.last_handshake %}{{ client.last_handshake|date('U') }}{% else %}never{% endif %}">
+                            data-bytes="{{ client.bytes_sent + client.bytes_received }}"
+                            data-last-handshake="{% if not is_never %}{{ client.last_handshake|date('U') }}{% else %}never{% endif %}">
                             <td class="px-4 py-3">
                                 <div class="flex items-center">
                                     <div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center mr-2 text-slate-400">
@@ -188,7 +201,7 @@
                                 </div>
                             </td>
                             <td class="px-4 py-3 hide-mobile handshake-container">
-                                {% if client.last_handshake %}
+                                {% if not is_never %}
                                     <span class="text-xs text-slate-400">{{ client.last_handshake }}</span>
                                 {% else %}
                                     <span class="text-xs text-slate-600">Never</span>
@@ -215,11 +228,16 @@
 
         <div class="md:hidden divide-y divide-slate-700" id="clientCards">
             {% for client in clients %}
+            {% set is_never = true %}
+            {% if client.last_handshake is not empty and client.last_handshake != '0000-00-00 00:00:00' and client.last_handshake != '1970-01-01 00:00:00' and client.last_handshake != '0' %}
+                {% set is_never = false %}
+            {% endif %}
             <div class="p-4 client-card border-b border-slate-800 last:border-0" 
                  data-name="{{ client.name }}" 
                  data-ip="{{ client.client_ip }}" 
                  data-client-id="{{ client.id }}"
-                 data-last-handshake="{% if client.last_handshake %}{{ client.last_handshake|date('U') }}{% else %}never{% endif %}">
+                 data-bytes="{{ client.bytes_sent + client.bytes_received }}"
+                 data-last-handshake="{% if not is_never %}{{ client.last_handshake|date('U') }}{% else %}never{% endif %}">
                 <div class="flex items-start justify-between mb-3">
                     <div class="flex items-center">
                         <div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center mr-2 text-slate-400">
@@ -255,7 +273,7 @@
                     <div class="bg-slate-800/50 p-2 rounded">
                         <span class="text-slate-500 block">Handshake</span>
                         <span class="text-slate-300 handshake-value">
-                            {% if client.last_handshake %}{{ client.last_handshake }}{% else %}Never{% endif %}
+                            {% if not is_never %}{{ client.last_handshake }}{% else %}Never{% endif %}
                         </span>
                     </div>
                 </div>
@@ -307,6 +325,65 @@ document.addEventListener('DOMContentLoaded', function() {
     const clientCount = document.getElementById('clientCount');
     
     let currentStatusFilter = 'all';
+    let currentSortColumn = 'name'; // default
+    let currentSortDirection = 'asc'; // 'asc' or 'desc'
+
+    function sortClients() {
+        const isMobile = clientCards && window.getComputedStyle(clientCards).display !== 'none';
+        
+        if (isMobile && clientCards) {
+            const cards = Array.from(clientCards.querySelectorAll('div.client-card'));
+            cards.sort(compareElements);
+            cards.forEach(card => clientCards.appendChild(card));
+        } else if (tbody) {
+            const rows = Array.from(tbody.querySelectorAll('tr.client-row'));
+            rows.sort(compareElements);
+            rows.forEach(row => tbody.appendChild(row));
+        }
+        updateSortIcons();
+    }
+
+    function compareElements(a, b) {
+        let valA, valB;
+        if (currentSortColumn === 'name') {
+            valA = a.dataset.name.toLowerCase();
+            valB = b.dataset.name.toLowerCase();
+            return currentSortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        } else if (currentSortColumn === 'ip') {
+            valA = a.dataset.ip;
+            valB = b.dataset.ip;
+            const ipToNum = ip => ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
+            const numA = ipToNum(valA);
+            const numB = ipToNum(valB);
+            return currentSortDirection === 'asc' ? numA - numB : numB - numA;
+        } else if (currentSortColumn === 'traffic') {
+            valA = parseInt(a.dataset.bytes) || 0;
+            valB = parseInt(b.dataset.bytes) || 0;
+            return currentSortDirection === 'asc' ? valA - valB : valB - valA;
+        } else if (currentSortColumn === 'handshake') {
+            const hsA = a.dataset.lastHandshake;
+            const hsB = b.dataset.lastHandshake;
+            valA = hsA === 'never' ? 0 : parseInt(hsA) || 0;
+            valB = hsB === 'never' ? 0 : parseInt(hsB) || 0;
+            return currentSortDirection === 'asc' ? valA - valB : valB - valA;
+        }
+        return 0;
+    }
+
+    function updateSortIcons() {
+        const sortHeaders = document.querySelectorAll('th.sortable');
+        sortHeaders.forEach(th => {
+            const col = th.dataset.sort;
+            const icon = th.querySelector('i');
+            if (icon) {
+                if (col === currentSortColumn) {
+                    icon.className = `fas fa-sort-${currentSortDirection === 'asc' ? 'up' : 'down'} ml-1 text-accent opacity-100 text-[10px]`;
+                } else {
+                    icon.className = 'fas fa-sort ml-1 opacity-45 text-[9px]';
+                }
+            }
+        });
+    }
 
     function applyFilters() {
         const query = searchInput ? searchInput.value.toLowerCase() : '';
@@ -404,6 +481,21 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+    // Column sorting headers binding
+    const sortHeaders = document.querySelectorAll('th.sortable');
+    sortHeaders.forEach(th => {
+        th.addEventListener('click', function() {
+            const col = this.dataset.sort;
+            if (currentSortColumn === col) {
+                currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSortColumn = col;
+                currentSortDirection = 'asc';
+            }
+            sortClients();
+        });
+    });
+
     // Start AJAX polling
     const serverId = {{ server.id }};
     
@@ -451,11 +543,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
             data.clients.forEach(client => {
                 const rawHandshake = client.last_handshake_raw !== null ? client.last_handshake_raw : 'never';
+                const totalBytes = (client.bytes_sent || 0) + (client.bytes_received || 0);
 
                 // Update Desktop Table Row
                 const row = document.querySelector(`tr.client-row[data-client-id="${client.id}"]`);
                 if (row) {
                     row.dataset.lastHandshake = rawHandshake;
+                    row.dataset.bytes = totalBytes;
 
                     const uploadEl = row.querySelector('.upload-bytes');
                     const downloadEl = row.querySelector('.download-bytes');
@@ -487,6 +581,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const card = document.querySelector(`.client-card[data-client-id="${client.id}"]`);
                 if (card) {
                     card.dataset.lastHandshake = rawHandshake;
+                    card.dataset.bytes = totalBytes;
 
                     const uploadEl = card.querySelector('.upload-bytes');
                     const downloadEl = card.querySelector('.download-bytes');
@@ -513,6 +608,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
 
+            // Re-apply sorting
+            sortClients();
+
             // Re-apply filters to sync the visible display and counts on poll update
             applyFilters();
 
@@ -523,6 +621,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Run immediately and then poll every 5 seconds
     pollClients();
+    sortClients();
     setInterval(pollClients, 5000);
 });
 

@@ -64,7 +64,11 @@
                 <i class="fas fa-clock text-accent text-sm"></i>
             </div>
             <div class="text-sm font-medium text-white pt-1">
-                {% if client.last_handshake %}
+                {% set is_never = true %}
+                {% if client.last_handshake is not empty and client.last_handshake != '0000-00-00 00:00:00' and client.last_handshake != '1970-01-01 00:00:00' and client.last_handshake != '0' %}
+                    {% set is_never = false %}
+                {% endif %}
+                {% if not is_never %}
                     {{ client.last_handshake }}
                 {% else %}
                     <span class="text-slate-500 italic">Never</span>
