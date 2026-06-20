@@ -1,8 +1,9 @@
-# Design Specification: Client Sorting and Connection Status Filters
+# Design Specification: Client Sorting, Connection Status, and City Columns
 
 This specification details the design for implementing:
 1. Robust status classification and filtering for "Never Connected" clients on both the dashboard and server details pages.
 2. Interactive client table sorting on the server details page.
+3. Exposing and rendering the "City" connection location column in the server details client table.
 
 ---
 
@@ -81,7 +82,48 @@ We will adjust the twig loop counting client statuses so it parses blank/zero da
 
 ---
 
-## 2. Client Table Advanced Sorting
+## 2. Expose and Display City Location
+
+### Goal
+Include the connection "City" column in the server details client list table, dynamically updating during AJAX background polling.
+
+### API Changes (`public/index.php`)
+Include the client's `city` column in the JSON response of `/api/servers/{id}/clients`:
+```php
+$clientsData[] = [
+    // ...
+    'city' => $clientData['city'],
+];
+```
+
+### UI Changes (`templates/servers/view.twig`)
+1. **Table Headers**:
+   Add a "City" sortable header between IP and Traffic:
+   ```html
+   <th class="sortable px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold cursor-pointer select-none hide-mobile" data-sort="city">
+       City <i class="fas fa-sort ml-1 opacity-45 text-[9px]" id="sortIcon-city"></i>
+   </th>
+   ```
+2. **Table Cells**:
+   Render the cell in `tr.client-row` using `client.city` value:
+   ```html
+   <td class="px-4 py-3 hide-mobile city-container text-xs text-slate-400">
+       {{ client.city|default('—') }}
+   </td>
+   ```
+3. **Data Attributes**:
+   Attach `data-city="{{ client.city|default('') }}"` to both desktop table rows and mobile card elements.
+4. **Mobile Card Subtitle**:
+   Append city name next to the client IP:
+   ```html
+   <code class="block text-xs text-slate-500 mt-0.5 font-mono">
+       {{ client.client_ip }}{% if client.city %} ({{ client.city }}){% endif %}
+   </code>
+   ```
+
+---
+
+## 3. Client Table Advanced Sorting
 
 ### Goal
 Provide interactive, client-side sorting of the client list in `templates/servers/view.twig` by clicking on table column headers.
@@ -92,16 +134,19 @@ We will make the table headers clickable by wrapping them with interactive curso
 <thead>
     <tr class="bg-slate-800/50">
         <th class="sortable px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold cursor-pointer select-none" data-sort="name">
-            Name <i class="fas fa-sort ml-1 opacity-40 text-[9px]"></i>
+            Name <i class="fas fa-sort ml-1 opacity-45 text-[9px]" id="sortIcon-name"></i>
         </th>
         <th class="sortable px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold cursor-pointer select-none hide-mobile" data-sort="ip">
-            IP <i class="fas fa-sort ml-1 opacity-40 text-[9px]"></i>
+            IP <i class="fas fa-sort ml-1 opacity-45 text-[9px]" id="sortIcon-ip"></i>
+        </th>
+        <th class="sortable px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold cursor-pointer select-none hide-mobile" data-sort="city">
+            City <i class="fas fa-sort ml-1 opacity-45 text-[9px]" id="sortIcon-city"></i>
         </th>
         <th class="sortable px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold cursor-pointer select-none" data-sort="traffic">
-            Traffic <i class="fas fa-sort ml-1 opacity-40 text-[9px]"></i>
+            Traffic <i class="fas fa-sort ml-1 opacity-45 text-[9px]" id="sortIcon-traffic"></i>
         </th>
         <th class="sortable px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold cursor-pointer select-none hide-mobile" data-sort="handshake">
-            Handshake <i class="fas fa-sort ml-1 opacity-40 text-[9px]"></i>
+            Handshake <i class="fas fa-sort ml-1 opacity-45 text-[9px]" id="sortIcon-handshake"></i>
         </th>
         <th class="px-4 py-3 text-right text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Actions</th>
     </tr>
@@ -112,11 +157,9 @@ We will make the table headers clickable by wrapping them with interactive curso
 Each client row `tr.client-row` and card `div.client-card` will specify:
 * `data-name`: string (e.g. `John_MacBook`)
 * `data-ip`: string (e.g. `10.8.0.2`)
+* `data-city`: string (e.g. `New York`)
 * `data-bytes`: number (aggregate of `client.bytes_sent + client.bytes_received` in bytes)
 * `data-last-handshake`: number (timestamp or `"never"`)
-
-We will add the `data-bytes` attribute dynamically to both table rows and cards:
-`data-bytes="{{ client.bytes_sent + client.bytes_received }}"`
 
 ### JavaScript Sorting Algorithm
 We will maintain a global sort state:
@@ -127,7 +170,7 @@ let currentSortDirection = 'asc'; // 'asc' or 'desc'
 Clicking a header toggles the direction (or switches the column), updates the icons, and re-orders the DOM nodes under `#clientTableBody` (and `#clientCards`).
 
 * **Sorting Logic**:
-  * **Name / IP**: Simple alphabetical string comparison.
+  * **Name / IP / City**: Simple alphabetical string comparison.
   * **Traffic**: Numeric comparison of `data-bytes`.
   * **Handshake**: Numeric comparison of `data-last-handshake` timestamp. `"never"` will be treated as `0` so it is grouped cleanly.
 
@@ -138,9 +181,7 @@ We will integrate the sorting logic into the `pollClients()` lifecycle so that l
 ## Verification Plan
 
 ### Manual Verification
-1. Open the dashboard and verify that the "Never Connected" count matches the actual number of clients who have never established a connection.
-2. Open `/servers/ID` and verify the "Never" filter pill correctly shows only the never-connected clients.
-3. In `/servers/ID` and mobile layout, test clicking the table headers (Name, IP, Traffic, Handshake):
-   * Confirm the table rows instantly re-order.
-   * Confirm the sort indicator icons switch between `fa-sort-up`, `fa-sort-down`, and default `fa-sort`.
-   * Confirm sorting is maintained when the table auto-refreshes every 5 seconds.
+1. Verify the "City" column header displays next to "IP".
+2. Confirm the city name is rendered correctly for clients with populated GeoIP data, and is updated dynamically during polling.
+3. Test sorting the table by City name and verify it orders the list alphabetically (A-Z and Z-A).
+4. Verify the mobile card shows the city name inside parenthesis next to the IP address.

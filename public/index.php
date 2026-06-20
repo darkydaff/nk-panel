@@ -1795,6 +1795,7 @@ Router::get('/api/servers/{id}/clients', function ($params) {
                 'bytes_received' => $clientData['bytes_received'],
                 'last_handshake' => $isNever ? null : $lh,
                 'last_handshake_raw' => $isNever ? null : strtotime($lh),
+                'city' => $clientData['city'],
             ];
         }
         

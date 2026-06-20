@@ -143,6 +143,9 @@
                             <th class="sortable px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold cursor-pointer select-none hide-mobile" data-sort="ip">
                                 IP <i class="fas fa-sort ml-1 opacity-45 text-[9px]" id="sortIcon-ip"></i>
                             </th>
+                            <th class="sortable px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold cursor-pointer select-none hide-mobile" data-sort="city">
+                                City <i class="fas fa-sort ml-1 opacity-45 text-[9px]" id="sortIcon-city"></i>
+                            </th>
                             <th class="sortable px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold cursor-pointer select-none" data-sort="traffic">
                                 Traffic <i class="fas fa-sort ml-1 opacity-45 text-[9px]" id="sortIcon-traffic"></i>
                             </th>
@@ -161,6 +164,7 @@
                         <tr class="hover:bg-slate-800/30 transition-colors client-row" 
                             data-name="{{ client.name }}" 
                             data-ip="{{ client.client_ip }}" 
+                            data-city="{{ client.city|default('') }}"
                             data-client-id="{{ client.id }}"
                             data-bytes="{{ client.bytes_sent + client.bytes_received }}"
                             data-last-handshake="{% if not is_never %}{{ client.last_handshake|date('U') }}{% else %}never{% endif %}">
@@ -174,6 +178,9 @@
                             </td>
                             <td class="px-4 py-3 hide-mobile">
                                 <code class="text-xs text-slate-400 font-mono">{{ client.client_ip }}</code>
+                            </td>
+                            <td class="px-4 py-3 hide-mobile city-container text-xs text-slate-400">
+                                {{ client.city|default('—') }}
                             </td>
                             <td class="px-4 py-3">
                                 <div class="flex gap-1 text-xs">
@@ -231,6 +238,7 @@
             <div class="p-4 client-card border-b border-slate-800 last:border-0" 
                  data-name="{{ client.name }}" 
                  data-ip="{{ client.client_ip }}" 
+                 data-city="{{ client.city|default('') }}"
                  data-client-id="{{ client.id }}"
                  data-bytes="{{ client.bytes_sent + client.bytes_received }}"
                  data-last-handshake="{% if not is_never %}{{ client.last_handshake|date('U') }}{% else %}never{% endif %}">
@@ -241,7 +249,7 @@
                         </div>
                         <div>
                             <span class="text-sm font-medium text-white">{{ client.name }}</span>
-                            <code class="block text-xs text-slate-500 mt-0.5 font-mono">{{ client.client_ip }}</code>
+                            <code class="block text-xs text-slate-500 mt-0.5 font-mono card-ip-value">{{ client.client_ip }}{% if client.city %} ({{ client.city }}){% endif %}</code>
                         </div>
                     </div>
                 </div>
@@ -352,6 +360,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const numA = ipToNum(valA);
             const numB = ipToNum(valB);
             return currentSortDirection === 'asc' ? numA - numB : numB - numA;
+        } else if (currentSortColumn === 'city') {
+            valA = (a.dataset.city || '').toLowerCase();
+            valB = (b.dataset.city || '').toLowerCase();
+            return currentSortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
         } else if (currentSortColumn === 'traffic') {
             valA = parseInt(a.dataset.bytes) || 0;
             valB = parseInt(b.dataset.bytes) || 0;
@@ -546,11 +558,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (row) {
                     row.dataset.lastHandshake = rawHandshake;
                     row.dataset.bytes = totalBytes;
+                    row.dataset.city = client.city || '';
 
                     const uploadEl = row.querySelector('.upload-bytes');
                     const downloadEl = row.querySelector('.download-bytes');
                     if (uploadEl) uploadEl.textContent = '↑' + formatBytes(client.bytes_sent || 0);
                     if (downloadEl) downloadEl.textContent = '↓' + formatBytes(client.bytes_received || 0);
+
+                    const cityContainer = row.querySelector('.city-container');
+                    if (cityContainer) {
+                        cityContainer.textContent = client.city || '—';
+                    }
 
                     const speedContainer = row.querySelector('.speed-container');
                     if (speedContainer) {
@@ -578,11 +596,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (card) {
                     card.dataset.lastHandshake = rawHandshake;
                     card.dataset.bytes = totalBytes;
+                    card.dataset.city = client.city || '';
 
                     const uploadEl = card.querySelector('.upload-bytes');
                     const downloadEl = card.querySelector('.download-bytes');
                     if (uploadEl) uploadEl.textContent = '↑' + formatBytes(client.bytes_sent || 0);
                     if (downloadEl) downloadEl.textContent = '↓' + formatBytes(client.bytes_received || 0);
+
+                    const cardIpVal = card.querySelector('.card-ip-value');
+                    if (cardIpVal) {
+                        cardIpVal.textContent = client.client_ip + (client.city ? ` (${client.city})` : '');
+                    }
 
                     const speedContainer = card.querySelector('.speed-container');
                     if (speedContainer) {
