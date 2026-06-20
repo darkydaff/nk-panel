@@ -26,27 +26,51 @@
         </div>
     </div>
 
+    <!-- Metrics Cards Grid -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div class="panel p-5">
+        <!-- Servers Card -->
+        <div class="panel p-5 border-slate-800/60 bg-slate-900/60 backdrop-blur hover:-translate-y-1 transition-all duration-300">
             <div class="flex items-center justify-between mb-3">
-                <span class="text-sm font-medium text-slate-400 uppercase tracking-wide text-xs">Total Servers</span>
-                <i class="fas fa-server text-accent"></i>
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Servers</span>
+                <div class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-accent">
+                    <i class="fas fa-server"></i>
+                </div>
             </div>
-            <div class="text-3xl font-bold text-white">{{ servers|length }}</div>
+            <div class="text-3xl font-bold text-white font-heading">{{ servers|length }}</div>
+            {% set active_servers_count = 0 %}
+            {% for s in servers %}
+                {% if s.status == 'active' %}
+                    {% set active_servers_count = active_servers_count + 1 %}
+                {% endif %}
+            {% endfor %}
+            <p class="text-xs text-slate-500 mt-1.5 font-mono">{{ active_servers_count }} Active / {{ servers|length - active_servers_count }} Offline</p>
         </div>
         
-        <div class="panel p-5">
+        <!-- Clients Card -->
+        <div class="panel p-5 border-slate-800/60 bg-slate-900/60 backdrop-blur hover:-translate-y-1 transition-all duration-300">
             <div class="flex items-center justify-between mb-3">
-                <span class="text-sm font-medium text-slate-400 uppercase tracking-wide text-xs">Total Clients</span>
-                <i class="fas fa-users text-cyan-400"></i>
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Clients</span>
+                <div class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-cyan-400">
+                    <i class="fas fa-users"></i>
+                </div>
             </div>
-            <div class="text-3xl font-bold text-white">{{ clients|length }}</div>
+            <div class="text-3xl font-bold text-white font-heading">{{ clients|length }}</div>
+            {% set active_clients_count = 0 %}
+            {% for c in clients %}
+                {% if c.status == 'active' %}
+                    {% set active_clients_count = active_clients_count + 1 %}
+                {% endif %}
+            {% endfor %}
+            <p class="text-xs text-slate-500 mt-1.5 font-mono">{{ active_clients_count }} Active / {{ clients|length - active_clients_count }} Suspended</p>
         </div>
 
-        <div class="panel p-5">
+        <!-- Live Network Speed Card -->
+        <div class="panel p-5 border-slate-800/60 bg-slate-900/60 backdrop-blur hover:-translate-y-1 transition-all duration-300">
             <div class="flex items-center justify-between mb-3">
-                <span class="text-sm font-medium text-slate-400 uppercase tracking-wide text-xs">Live Network Speed</span>
-                <i class="fas fa-chart-line text-emerald-400"></i>
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Live Network Speed</span>
+                <div class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-emerald-400">
+                    <i class="fas fa-chart-line animate-pulse"></i>
+                </div>
             </div>
             {% set total_speed_up = 0 %}
             {% set total_speed_down = 0 %}
@@ -54,7 +78,7 @@
                 {% set total_speed_up = total_speed_up + server.speed_up_kbps|default(0) %}
                 {% set total_speed_down = total_speed_down + server.speed_down_kbps|default(0) %}
             {% endfor %}
-            <div class="text-3xl font-bold text-white flex items-baseline gap-2" id="globalLiveSpeed">
+            <div class="text-3xl font-bold text-white flex items-baseline gap-2 font-mono" id="globalLiveSpeed">
                 <span class="text-emerald-400 text-lg font-semibold upload-speed-value">
                     ↑{% if total_speed_up >= 1000 %}{{ (total_speed_up / 1000)|number_format(1) }} <span class="text-[10px] font-normal text-slate-500">Mbps</span>{% else %}{{ total_speed_up|number_format(0) }} <span class="text-[10px] font-normal text-slate-500">Kbps</span>{% endif %}
                 </span>
@@ -63,6 +87,43 @@
                     ↓{% if total_speed_down >= 1000 %}{{ (total_speed_down / 1000)|number_format(1) }} <span class="text-[10px] font-normal text-slate-500">Mbps</span>{% else %}{{ total_speed_down|number_format(0) }} <span class="text-[10px] font-normal text-slate-500">Kbps</span>{% endif %}
                 </span>
             </div>
+            <p class="text-xs text-slate-500 mt-1.5">Aggregate upload / download</p>
+        </div>
+    </div>
+
+    <!-- Network Traffic & Bandwidth Chart Panel -->
+    <div class="panel border-slate-800/60 bg-slate-900/60 backdrop-blur p-5 space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div class="flex items-center gap-2.5">
+                <div class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+                <h2 class="text-base font-semibold text-white">Network Traffic & Bandwidth</h2>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-2">
+                <!-- Server Selector -->
+                <select id="chartServerSelect" class="bg-slate-800 border border-slate-700/80 text-slate-300 text-xs px-2.5 py-1.5 rounded-lg focus:outline-none focus:border-accent">
+                    <option value="">All Servers</option>
+                    {% for server in servers %}
+                        {% if server.status == 'active' %}
+                            <option value="{{ server.id }}">{{ server.name }}</option>
+                        {% endif %}
+                    {% endfor %}
+                </select>
+                
+                <!-- Time/Mode Selector Buttons -->
+                <div class="inline-flex rounded-lg bg-slate-800 p-0.5 border border-slate-700/50">
+                    <button id="btnChartModeLive" onclick="setChartMode('live')" class="px-3 py-1 text-[11px] font-medium rounded-md transition-all bg-accent text-white shadow">
+                        Live Speed
+                    </button>
+                    <button id="btnChartModeHistory" onclick="setChartMode('history')" class="px-3 py-1 text-[11px] font-medium rounded-md transition-all text-slate-400 hover:text-white">
+                        Last 24h
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="relative w-full h-[260px] bg-slate-950/20 rounded-lg p-2">
+            <canvas id="networkTrafficChart" class="w-full h-full"></canvas>
         </div>
     </div>
 
@@ -250,21 +311,10 @@
         color: var(--accent) !important;
     }
     
-    /* Glowing circle marker animations */
-    @keyframes marker-pulse {
-        0% {
-            box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.5);
-        }
-        70% {
-            box-shadow: 0 0 0 10px rgba(56, 189, 248, 0);
-        }
-        100% {
-            box-shadow: 0 0 0 0 rgba(56, 189, 248, 0);
-        }
-    }
-    
-    .glowing-marker {
-        animation: none;
+    /* Custom map markers */
+    .custom-map-marker {
+        background: transparent !important;
+        border: none !important;
     }
 </style>
 {% endblock %}
@@ -283,13 +333,239 @@ function closeMapCard() {
     }
 }
 
+// Chart.js State variables
+let trafficChart = null;
+let chartMode = 'live'; // 'live' or 'history'
+let selectedServerId = '';
+
+const MAX_LIVE_POINTS = 15;
+const liveLabels = Array(MAX_LIVE_POINTS).fill('');
+const liveUploadData = Array(MAX_LIVE_POINTS).fill(0);
+const liveDownloadData = Array(MAX_LIVE_POINTS).fill(0);
+
+function initChart() {
+    const canvas = document.getElementById('networkTrafficChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    
+    // Setup gradients
+    const uploadGradient = ctx.createLinearGradient(0, 0, 0, 240);
+    uploadGradient.addColorStop(0, 'rgba(16, 185, 129, 0.15)');
+    uploadGradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+    
+    const downloadGradient = ctx.createLinearGradient(0, 0, 0, 240);
+    downloadGradient.addColorStop(0, 'rgba(99, 102, 241, 0.15)');
+    downloadGradient.addColorStop(1, 'rgba(99, 102, 241, 0.0)');
+    
+    const gridColor = 'rgba(255, 255, 255, 0.04)';
+    const textColor = 'rgba(255, 255, 255, 0.4)';
+    
+    trafficChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: liveLabels,
+            datasets: [
+                {
+                    label: 'Download (Rx)',
+                    data: liveDownloadData,
+                    borderColor: '#6366f1',
+                    borderWidth: 2,
+                    backgroundColor: downloadGradient,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    pointHitRadius: 10
+                },
+                {
+                    label: 'Upload (Tx)',
+                    data: liveUploadData,
+                    borderColor: '#10b981',
+                    borderWidth: 2,
+                    backgroundColor: uploadGradient,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    pointHitRadius: 10
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        color: textColor,
+                        font: { family: 'Inter', size: 11, weight: '500' },
+                        boxWidth: 12,
+                        boxHeight: 12,
+                        padding: 15
+                    }
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    backgroundColor: '#0f172a',
+                    borderColor: '#334155',
+                    borderWidth: 1,
+                    titleColor: '#ffffff',
+                    bodyColor: '#e2e8f0',
+                    titleFont: { family: 'Inter', size: 12, weight: '600' },
+                    bodyFont: { family: 'Inter', size: 11 },
+                    padding: 10,
+                    cornerRadius: 8,
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.parsed.y !== null) {
+                                label += context.parsed.y.toFixed(2) + ' Mbps';
+                            }
+                            return label;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: {
+                        color: textColor,
+                        font: { family: 'Inter', size: 10 }
+                    }
+                },
+                y: {
+                    grid: { color: gridColor },
+                    ticks: {
+                        color: textColor,
+                        font: { family: 'Inter', size: 10 },
+                        callback: function(value) {
+                            return value + ' Mbps';
+                        }
+                    },
+                    suggestedMin: 0,
+                    suggestedMax: 10
+                }
+            }
+        }
+    });
+}
+
+function updateLiveChart(upMbps, downMbps) {
+    if (chartMode !== 'live') return;
+    
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    
+    liveLabels.push(timeStr);
+    liveUploadData.push(upMbps);
+    liveDownloadData.push(downMbps);
+    
+    if (liveLabels.length > MAX_LIVE_POINTS) {
+        liveLabels.shift();
+        liveUploadData.shift();
+        liveDownloadData.shift();
+    }
+    
+    if (trafficChart) {
+        trafficChart.data.labels = liveLabels;
+        trafficChart.data.datasets[0].data = liveDownloadData;
+        trafficChart.data.datasets[1].data = liveUploadData;
+        trafficChart.update('none');
+    }
+}
+
+async function loadHistoricalData() {
+    if (chartMode !== 'history') return;
+    
+    try {
+        const url = `/api/dashboard/metrics?server_id=${selectedServerId}&hours=24`;
+        const response = await fetch(url);
+        if (!response.ok) return;
+        const res = await response.json();
+        if (!res.success || !res.metrics) return;
+        
+        const labels = [];
+        const uploadData = [];
+        const downloadData = [];
+        
+        res.metrics.forEach(row => {
+            const date = new Date(row.time_bucket.replace(' ', 'T') + 'Z');
+            const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            labels.push(timeStr);
+            
+            // Convert Kbps to Mbps
+            uploadData.push(row.speed_up / 1000);
+            downloadData.push(row.speed_down / 1000);
+        });
+        
+        if (trafficChart) {
+            trafficChart.data.labels = labels;
+            trafficChart.data.datasets[0].data = downloadData;
+            trafficChart.data.datasets[1].data = uploadData;
+            trafficChart.update();
+        }
+    } catch (err) {
+        console.error('Failed to load historical traffic metrics:', err);
+    }
+}
+
+window.setChartMode = function(mode) {
+    chartMode = mode;
+    
+    const btnLive = document.getElementById('btnChartModeLive');
+    const btnHistory = document.getElementById('btnChartModeHistory');
+    
+    if (mode === 'live') {
+        btnLive.className = 'px-3 py-1 text-[11px] font-medium rounded-md transition-all bg-accent text-white shadow';
+        btnHistory.className = 'px-3 py-1 text-[11px] font-medium rounded-md transition-all text-slate-400 hover:text-white';
+        
+        if (trafficChart) {
+            trafficChart.data.labels = liveLabels;
+            trafficChart.data.datasets[0].data = liveDownloadData;
+            trafficChart.data.datasets[1].data = liveUploadData;
+            trafficChart.update();
+        }
+    } else {
+        btnHistory.className = 'px-3 py-1 text-[11px] font-medium rounded-md transition-all bg-accent text-white shadow';
+        btnLive.className = 'px-3 py-1 text-[11px] font-medium rounded-md transition-all text-slate-400 hover:text-white';
+        
+        loadHistoricalData();
+    }
+};
+
 document.addEventListener('DOMContentLoaded', function() {
+    initChart();
+
+    const serverSelect = document.getElementById('chartServerSelect');
+    if (serverSelect) {
+        serverSelect.addEventListener('change', function(e) {
+            selectedServerId = e.target.value;
+            
+            if (chartMode === 'live') {
+                liveLabels.fill('');
+                liveUploadData.fill(0);
+                liveDownloadData.fill(0);
+                if (trafficChart) {
+                    trafficChart.update();
+                }
+            } else {
+                loadHistoricalData();
+            }
+        });
+    }
+
     // 1. Get raw client data from Twig
     const clients = {{ clients|json_encode|raw }};
     
     // Filter out clients without valid coordinates
     const mappedClients = clients.filter(c => c.latitude !== null && c.longitude !== null);
-    
 
     // 2. Initialize Map
     const map = L.map('clientsMap', { 
@@ -297,22 +573,18 @@ document.addEventListener('DOMContentLoaded', function() {
         attributionControl: true,
         minZoom: 1.5,
         maxZoom: 15
-    }).setView([20, 0], 2); // Default zoom / center
+    }).setView([20, 0], 2);
     
-    // CartoDB Dark Matter tiles
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
         subdomains: 'abcd',
         maxZoom: 20
     }).addTo(map);
     
-    // Custom zoom control position
     L.control.zoom({ position: 'bottomright' }).addTo(map);
     
-    // Group of markers to fit bounds
     const markerGroup = L.featureGroup().addTo(map);
     
-    // Helper function to format bytes inside JS
     function formatBytes(bytes) {
         if (!bytes || bytes <= 0) return '0 MB';
         const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -321,11 +593,9 @@ document.addEventListener('DOMContentLoaded', function() {
         return `${val.toFixed(i === 0 ? 0 : 2)} ${units[i]}`;
     }
     
-    // Helper function to check activity status
     function getClientActivity(lastHandshake) {
         if (!lastHandshake) return { status: 'offline', text: 'Offline', colorClass: 'badge-error' };
         
-        // Convert Y-m-d H:i:s UTC string to standard ISO 8601 UTC string (YYYY-MM-DDTHH:MM:SSZ)
         const utcString = lastHandshake.trim().replace(' ', 'T') + 'Z';
         const lastSeenDate = new Date(utcString);
         const now = new Date();
@@ -342,7 +612,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Helper function to format relative time
     function formatRelativeTime(lastHandshake) {
         if (!lastHandshake) return 'Never';
         const utcString = lastHandshake.trim().replace(' ', 'T') + 'Z';
@@ -356,7 +625,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return Math.floor(diffSeconds / 86400) + 'd ago';
     }
 
-    // 3. Group clients by location rounded to 2 decimal places (approx 1.1km)
+    // 3. Group clients by location
     const locationGroups = {};
     mappedClients.forEach(client => {
         const lat = parseFloat(client.latitude);
@@ -375,7 +644,6 @@ document.addEventListener('DOMContentLoaded', function() {
         locationGroups[key].clients.push(client);
     });
     
-    // Update map status label
     const mapStatus = document.getElementById('mapStatus');
     if (mapStatus) {
         const citiesCount = Object.keys(locationGroups).length;
@@ -384,12 +652,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 4. Draw markers for each group
     Object.values(locationGroups).forEach(group => {
-        // Determine status of group:
-        // - 'online' if any client in group is online
-        // - 'idle' if no client is online but at least one is idle
-        // - 'offline' if all are offline
         let groupStatus = 'offline';
-        let groupColor = '#f87171'; // Red for offline
         
         group.clients.forEach(c => {
             const act = getClientActivity(c.last_handshake);
@@ -400,38 +663,34 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
+        let pulseColorClass = 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]';
+        let pingColorClass = 'bg-red-400';
+        
         if (groupStatus === 'online') {
-            groupColor = '#38bdf8'; // Glowing cyan for active
+            pulseColorClass = 'bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.8)]';
+            pingColorClass = 'bg-sky-400';
         } else if (groupStatus === 'idle') {
-            groupColor = '#fbbf24'; // Amber for idle
+            pulseColorClass = 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]';
+            pingColorClass = 'bg-amber-400';
         }
         
-        // Size based on client count
-        // 1 client = radius 6. Each extra client adds 2.5 radius, up to max 16.
-        const radius = 6 + Math.min(10, (group.clients.length - 1) * 2.5);
+        const pulseSize = 10 + Math.min(10, (group.clients.length - 1) * 2);
+        const pingSize = pulseSize + 8;
         
-        if (groupStatus === 'online') {
-            // Glowing halo
-            L.circleMarker([group.lat, group.lon], {
-                radius: radius + 6,
-                fillColor: groupColor,
-                color: groupColor,
-                weight: 0,
-                fillOpacity: 0.18,
-                interactive: false
-            }).addTo(markerGroup);
-        }
-        
-        const marker = L.circleMarker([group.lat, group.lon], {
-            radius: radius,
-            fillColor: groupColor,
-            color: groupColor,
-            weight: 2,
-            opacity: 0.9,
-            fillOpacity: 0.8
+        const customIcon = L.divIcon({
+            className: 'custom-map-marker',
+            html: `
+                <div class="relative flex items-center justify-center" style="width: ${pingSize}px; height: ${pingSize}px;">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full ${pingColorClass} opacity-60"></span>
+                    <span class="relative inline-flex rounded-full ${pulseColorClass}" style="width: ${pulseSize}px; height: ${pulseSize}px;"></span>
+                </div>
+            `,
+            iconSize: [pingSize, pingSize],
+            iconAnchor: [pingSize / 2, pingSize / 2]
         });
         
-        // Helper to show client details view inside overlay card
+        const marker = L.marker([group.lat, group.lon], { icon: customIcon });
+        
         function showClientDetails(client, activity) {
             document.getElementById('cardClientName').textContent = client.name;
             
@@ -450,30 +709,24 @@ document.addEventListener('DOMContentLoaded', function() {
             
             document.getElementById('cardClientLink').href = `/clients/${client.id}`;
             
-            // Hide list view, show detail view
             document.getElementById('cardListView').classList.add('hidden');
             document.getElementById('cardDetailView').classList.remove('hidden');
         }
         
-        // Click event on marker
         marker.on('click', function(e) {
-            // Zoom smoothly to marker
             map.setView([group.lat, group.lon], Math.max(map.getZoom(), 5), { animate: true });
             
-            // Set up back button action
             document.getElementById('cardBackButton').onclick = function() {
                 document.getElementById('cardDetailView').classList.add('hidden');
                 document.getElementById('cardListView').classList.remove('hidden');
             };
             
-            // If there's only 1 client, show details directly
             if (group.clients.length === 1) {
                 const client = group.clients[0];
                 const activity = getClientActivity(client.last_handshake);
                 showClientDetails(client, activity);
                 document.getElementById('cardBackButton').classList.add('hidden');
             } else {
-                // Show list of clients in city
                 document.getElementById('cardLocationTitle').textContent = `${group.city}, ${group.country}`;
                 document.getElementById('cardClientCount').textContent = `${group.clients.length} clients`;
                 
@@ -515,7 +768,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('cardDetailView').classList.add('hidden');
             }
             
-            // Show overlay card with transitions
             const card = document.getElementById('mapClientCard');
             card.classList.remove('hidden');
             setTimeout(() => {
@@ -526,7 +778,6 @@ document.addEventListener('DOMContentLoaded', function() {
         marker.addTo(markerGroup);
     });
     
-    // Zoom map to bounds if we have plotted clients
     if (mappedClients.length > 0) {
         map.fitBounds(markerGroup.getBounds(), { padding: [40, 40], maxZoom: 6 });
     }
@@ -576,12 +827,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
             let totalSpeedUp = 0;
             let totalSpeedDown = 0;
+            let currentScopeSpeedUp = 0;
+            let currentScopeSpeedDown = 0;
 
             data.servers.forEach(server => {
                 const up = parseFloat(server.speed_up_kbps) || 0;
                 const down = parseFloat(server.speed_down_kbps) || 0;
                 totalSpeedUp += up;
                 totalSpeedDown += down;
+
+                if (selectedServerId && parseInt(selectedServerId) === parseInt(server.id)) {
+                    currentScopeSpeedUp = up;
+                    currentScopeSpeedDown = down;
+                }
 
                 // Update server row in recent table
                 const row = document.querySelector(`.server-row[data-server-id="${server.id}"]`);
@@ -592,6 +850,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             });
+
+            // Update live chart
+            const finalUp = selectedServerId ? currentScopeSpeedUp : totalSpeedUp;
+            const finalDown = selectedServerId ? currentScopeSpeedDown : totalSpeedDown;
+            updateLiveChart(finalUp / 1000, finalDown / 1000);
 
             // Update global network speed card
             const globalLiveSpeed = document.getElementById('globalLiveSpeed');
@@ -608,6 +871,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Run polling every 8 seconds
     setInterval(pollServers, 8000);
+    
+    // Trigger initial polling slightly delayed to let chart load
+    setTimeout(pollServers, 1000);
 });
 </script>
 {% endblock %}

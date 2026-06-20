@@ -1130,6 +1130,82 @@ Router::get('/api/servers', function () {
     echo json_encode(['servers' => $servers]);
 });
 
+// API: Get dashboard aggregated bandwidth metrics
+Router::get('/api/dashboard/metrics', function () {
+    header('Content-Type: application/json');
+    
+    $user = authenticateRequest();
+    if (!$user) {
+        http_response_code(401);
+        echo json_encode(['error' => 'Unauthorized']);
+        return;
+    }
+    
+    $hours = isset($_GET['hours']) ? max(1, min(168, (float)$_GET['hours'])) : 24;
+    $serverId = isset($_GET['server_id']) && $_GET['server_id'] !== '' ? (int)$_GET['server_id'] : null;
+    
+    $pdo = DB::conn();
+    
+    try {
+        if ($serverId) {
+            // Verify server ownership
+            $stmt = $pdo->prepare('SELECT user_id FROM vpn_servers WHERE id = ?');
+            $stmt->execute([$serverId]);
+            $ownerId = $stmt->fetchColumn();
+            if ($ownerId != $user['id'] && !Auth::isAdmin()) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Forbidden']);
+                return;
+            }
+            
+            $query = "
+                SELECT 
+                    DATE_FORMAT(cm.collected_at, '%Y-%m-%d %H:%i:00') as time_bucket,
+                    SUM(cm.speed_up_kbps) as speed_up,
+                    SUM(cm.speed_down_kbps) as speed_down
+                FROM client_metrics cm
+                JOIN vpn_clients c ON cm.client_id = c.id
+                WHERE c.server_id = ? AND cm.collected_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+                GROUP BY time_bucket
+                ORDER BY time_bucket ASC
+            ";
+            $stmt = $pdo->prepare($query);
+            $stmt->execute([$serverId, $hours]);
+        } else {
+            // Global aggregate for user
+            $query = "
+                SELECT 
+                    DATE_FORMAT(cm.collected_at, '%Y-%m-%d %H:%i:00') as time_bucket,
+                    SUM(cm.speed_up_kbps) as speed_up,
+                    SUM(cm.speed_down_kbps) as speed_down
+                FROM client_metrics cm
+                JOIN vpn_clients c ON cm.client_id = c.id
+                WHERE c.user_id = ? AND cm.collected_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+                GROUP BY time_bucket
+                ORDER BY time_bucket ASC
+            ";
+            $stmt = $pdo->prepare($query);
+            $stmt->execute([$user['id'], $hours]);
+        }
+        
+        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Format results as numeric values in the JSON output
+        foreach ($results as &$row) {
+            $row['speed_up'] = (float)$row['speed_up'];
+            $row['speed_down'] = (float)$row['speed_down'];
+        }
+        
+        echo json_encode([
+            'success' => true,
+            'metrics' => $results
+        ]);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+});
+
 // API: Create server
 Router::post('/api/servers/create', function () {
     header('Content-Type: application/json');
