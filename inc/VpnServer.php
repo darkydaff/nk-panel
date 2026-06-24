@@ -537,17 +537,18 @@ public static function getMimicryPresets(): array
             throw new Exception('Key generation failed inside container — private/public/psk key is empty. Check that amneziawg-tools compiled correctly.');
         }
 
-        // Generate AWG 2.0 random non-overlapping header ranges for H1-H4
-        $headerRanges = $this->generateNonOverlappingHeaderRanges();
-        $hRanges = [
-            'H1' => $headerRanges['H1'],
-            'H2' => $headerRanges['H2'],
-            'H3' => $headerRanges['H3'],
-            'H4' => $headerRanges['H4']
-        ];
+        // Decode selected mimicry type
+        $params = $this->data['awg_params'] ?? [];
+        if (is_string($params)) {
+            $params = json_decode($params, true) ?: [];
+        }
+        $mimicryType = $params['mimicry_type'] ?? 'quic';
 
-        // Generate AWG parameters
-        $mimicry = $this->getDynamicQuicPayloads();
+        // Load mimicry payloads if needed
+        $mimicry = [];
+        if ($mimicryType === 'quic') {
+            $mimicry = $this->getDynamicQuicPayloads();
+        }
         if (empty($mimicry)) {
             $mimicry = $this->getMimicryPreset();
         }
@@ -557,19 +558,48 @@ public static function getMimicryPresets(): array
         $jmin = 64;
         $jmax = random_int(max($jmin + 1, 70), 80);
 
-        $awgParams = array_merge([
-            'Jc' => random_int(3, 5),
-            'Jmin' => $jmin,
-            'Jmax' => $jmax,
-            'S1' => rand(0, 64),
-            'S2' => rand(0, 64),
-            'S3' => rand(0, 64),
-            'S4' => rand(0, 32),
-            'H1' => $hRanges['H1'],
-            'H2' => $hRanges['H2'],
-            'H3' => $hRanges['H3'],
-            'H4' => $hRanges['H4']
-        ], $mimicry);
+        if ($mimicryType === 'none') {
+            // Standard AWG V1: Single integers for H1-H4, no S3/S4, no I1-I5 payload mimicry.
+            $headers = [];
+            $used = [];
+            foreach (['H1', 'H2', 'H3', 'H4'] as $key) {
+                do {
+                    $val = random_int(100000000, 2000000000);
+                } while (in_array($val, $used));
+                $used[] = $val;
+                $headers[$key] = $val;
+            }
+
+            $awgParams = [
+                'mimicry_type' => 'none',
+                'Jc' => random_int(3, 5),
+                'Jmin' => $jmin,
+                'Jmax' => $jmax,
+                'S1' => rand(0, 64),
+                'S2' => rand(0, 64),
+                'H1' => $headers['H1'],
+                'H2' => $headers['H2'],
+                'H3' => $headers['H3'],
+                'H4' => $headers['H4']
+            ];
+        } else {
+            // AWG 2.0: Header ranges for H1-H4, S3/S4, and payload mimicry
+            $headerRanges = $this->generateNonOverlappingHeaderRanges();
+            $awgParams = array_merge([
+                'mimicry_type' => $mimicryType,
+                'Jc' => random_int(3, 5),
+                'Jmin' => $jmin,
+                'Jmax' => $jmax,
+                'S1' => rand(0, 64),
+                'S2' => rand(0, 64),
+                'S3' => rand(0, 64),
+                'S4' => rand(0, 32),
+                'H1' => $headerRanges['H1'],
+                'H2' => $headerRanges['H2'],
+                'H3' => $headerRanges['H3'],
+                'H4' => $headerRanges['H4']
+            ], $mimicry);
+        }
 
         // Create wg0.conf
         $wgConfig = "[Interface]\n";
