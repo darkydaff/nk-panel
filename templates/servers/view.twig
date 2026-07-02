@@ -463,6 +463,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('createClientForm');
     if (form) {
         form.addEventListener('submit', function() {
+            // Safeguard: Copy search input value to hidden input if in linked mode
+            if (currentClientMode === 'linked') {
+                const searchInput = document.getElementById('clientCodeSearch');
+                const extInput = document.getElementById('extClientCodeInput');
+                if (searchInput && extInput && !extInput.value) {
+                    extInput.value = searchInput.value.trim();
+                }
+            }
+
             document.getElementById('createClientBtn').disabled = true;
             document.getElementById('createClientText').textContent = 'Creating...';
             document.getElementById('createClientSpinner').classList.remove('hidden');
