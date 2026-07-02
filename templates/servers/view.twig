@@ -113,8 +113,7 @@
                                placeholder="Type to search..."
                                autocomplete="off"
                                class="input-field w-full px-4 py-2.5 text-sm pr-8"
-                               oninput="onCodeSearchInput(this.value)"
-                               onblur="setTimeout(hideCodeDropdown, 200)">
+                               oninput="onCodeSearchInput(this.value)">
                         <i class="fas fa-search absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 text-xs pointer-events-none" id="codeSearchIcon"></i>
                     </div>
                     <div id="codeDropdown"
@@ -459,6 +458,17 @@ document.addEventListener('DOMContentLoaded', function() {
             e.target.dataset.userEdited = 'true';
         });
     }
+
+    // Close autocomplete dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+        const searchInput = document.getElementById('clientCodeSearch');
+        const dropdown = document.getElementById('codeDropdown');
+        if (searchInput && dropdown) {
+            if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+                hideCodeDropdown();
+            }
+        }
+    });
 
     const form = document.getElementById('createClientForm');
     if (form) {
