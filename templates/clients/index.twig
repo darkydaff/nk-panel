@@ -29,22 +29,27 @@
         </div>
 
         {# Search form #}
-        <form method="GET" action="/clients" class="flex gap-2 w-full sm:w-auto">
+        <form method="GET" action="/clients" class="flex gap-2 w-full sm:w-auto" id="searchForm">
             <div class="relative flex-1 sm:w-64">
-                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs pointer-events-none"></i>
+                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs pointer-events-none" id="searchIcon"></i>
                 <input
                     type="text"
                     name="search"
+                    id="clientSearchInput"
                     value="{{ search }}"
                     placeholder="Search by code..."
-                    class="input-field pl-9 pr-4 py-2.5 text-sm w-full rounded-lg"
+                    class="input-field pl-9 pr-8 py-2.5 text-sm w-full rounded-lg"
                     autocomplete="off"
+                    oninput="onSearchInput(this.value)"
                 >
+                <div id="searchDropdown"
+                     class="hidden absolute z-50 mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg shadow-xl overflow-hidden max-h-48 overflow-y-auto text-sm">
+                </div>
             </div>
             <button type="submit" class="btn-primary px-4 py-2.5 text-sm whitespace-nowrap">
                 <i class="fas fa-search mr-2"></i>Search
             </button>
-            {% if search %}
+            {% if search or code_filter %}
             <a href="/clients" class="btn-secondary px-4 py-2.5 text-sm whitespace-nowrap">
                 <i class="fas fa-times mr-1"></i>Clear
             </a>
@@ -139,22 +144,56 @@
 
     {# ─── Pagination ─── #}
     {% if total_pages > 1 %}
-    <div class="flex items-center justify-center gap-2 mt-6">
+    <div class="flex items-center justify-center gap-1.5 mt-8 flex-wrap">
+        {# Prev Button #}
         {% if current_page > 1 %}
         <a href="/clients?search={{ search|url_encode }}&page={{ current_page - 1 }}"
-           class="btn-secondary px-4 py-2 text-sm">
-            <i class="fas fa-chevron-left mr-1"></i>Prev
+           class="px-3 py-1.5 rounded-lg bg-slate-800/60 hover:bg-slate-700 text-xs text-slate-300 hover:text-white border border-slate-700/60 transition-all mr-1">
+            <i class="fas fa-chevron-left"></i>
         </a>
         {% endif %}
 
-        <span class="text-sm text-slate-500 px-3">
-            Page <span class="text-slate-300 font-medium">{{ current_page }}</span> of {{ total_pages }}
-        </span>
+        {# Pages #}
+        {% set start_page = max(1, current_page - 2) %}
+        {% set end_page = min(total_pages, current_page + 2) %}
 
+        {# Adjust if at the boundaries to keep a consistent size (e.g. 5 pages) #}
+        {% if end_page - start_page < 4 %}
+            {% if start_page == 1 %}
+                {% set end_page = min(total_pages, start_page + 4) %}
+            {% else %}
+                {% set start_page = max(1, end_page - 4) %}
+            {% endif %}
+        {% endif %}
+
+        {% if start_page > 1 %}
+        <a href="/clients?search={{ search|url_encode }}&page=1"
+           class="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-800/40 hover:bg-slate-700 text-xs text-slate-400 hover:text-white border border-slate-750/60 transition-all font-mono">1</a>
+        {% if start_page > 2 %}
+        <span class="text-slate-650 px-0.5 text-xs font-mono select-none">...</span>
+        {% endif %}
+        {% endif %}
+
+        {% for p in start_page..end_page %}
+        <a href="/clients?search={{ search|url_encode }}&page={{ p }}"
+           class="w-8 h-8 flex items-center justify-center rounded-lg text-xs border transition-all font-mono {% if p == current_page %}bg-indigo-600 text-white border-indigo-500 font-bold{% else %}bg-slate-800/40 hover:bg-slate-700 text-slate-400 hover:text-white border-slate-750/60{% endif %}">
+            {{ p }}
+        </a>
+        {% endfor %}
+
+        {% if end_page < total_pages %}
+        {% if end_page < total_pages - 1 %}
+        <span class="text-slate-655 px-0.5 text-xs font-mono select-none">...</span>
+        {% endif %}
+        <a href="/clients?search={{ search|url_encode }}&page={{ total_pages }}"
+           class="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-800/40 hover:bg-slate-700 text-xs text-slate-400 hover:text-white border border-slate-750/60 transition-all font-mono">{{ total_pages }}</a>
+        {% endif %}
+
+        {# Next Button #}
         {% if current_page < total_pages %}
         <a href="/clients?search={{ search|url_encode }}&page={{ current_page + 1 }}"
-           class="btn-secondary px-4 py-2 text-sm">
-            Next<i class="fas fa-chevron-right ml-1"></i>
+           class="px-3 py-1.5 rounded-lg bg-slate-800/60 hover:bg-slate-700 text-xs text-slate-300 hover:text-white border border-slate-700/60 transition-all ml-1">
+            <i class="fas fa-chevron-right"></i>
         </a>
         {% endif %}
     </div>
@@ -284,5 +323,79 @@ function submitCreateForClient(e) {
     form.action = '/servers/' + serverId + '/clients/create';
     form.submit();
 }
+
+// ── Search autocomplete ──────────────────────────────────────────────────────
+let searchTimer = null;
+
+function onSearchInput(value) {
+    clearTimeout(searchTimer);
+    if (value.length < 1) {
+        hideSearchDropdown();
+        return;
+    }
+    searchTimer = setTimeout(() => fetchSearchCodes(value), 220);
+}
+
+function fetchSearchCodes(q) {
+    const icon = document.getElementById('searchIcon');
+    const originalClass = icon.className;
+    icon.className = 'fas fa-spinner fa-spin absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs pointer-events-none';
+
+    fetch('/api/ext-clients/search?q=' + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(data => {
+            icon.className = originalClass;
+            renderSearchDropdown(data.codes || []);
+        })
+        .catch(() => {
+            icon.className = originalClass;
+            hideSearchDropdown();
+        });
+}
+
+function renderSearchDropdown(codes) {
+    const dd = document.getElementById('searchDropdown');
+    dd.innerHTML = '';
+    if (!codes.length) {
+        dd.innerHTML = '<div class="px-4 py-3 text-slate-500 text-xs">No matches</div>';
+        dd.classList.remove('hidden');
+        return;
+    }
+    codes.forEach(code => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'w-full text-left px-4 py-2.5 hover:bg-slate-800 text-slate-200 hover:text-white transition-colors font-mono text-xs flex items-center gap-2';
+        item.innerHTML = '<i class="fas fa-user text-slate-600"></i>' + escapeHtml(code);
+        item.addEventListener('mousedown', () => selectSearchCode(code));
+        dd.appendChild(item);
+    });
+    dd.classList.remove('hidden');
+}
+
+function selectSearchCode(code) {
+    document.getElementById('clientSearchInput').value = code;
+    hideSearchDropdown();
+    document.getElementById('searchForm').submit();
+}
+
+function hideSearchDropdown() {
+    const dd = document.getElementById('searchDropdown');
+    if (dd) dd.classList.add('hidden');
+}
+
+function escapeHtml(str) {
+    return str.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Close autocomplete dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    const searchInput = document.getElementById('clientSearchInput');
+    const dropdown = document.getElementById('searchDropdown');
+    if (searchInput && dropdown) {
+        if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+            hideSearchDropdown();
+        }
+    }
+});
 </script>
 {% endblock %}
