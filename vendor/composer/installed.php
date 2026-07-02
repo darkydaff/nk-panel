@@ -3,7 +3,7 @@
         'name' => 'amnezia/web-panel',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
-        'reference' => '8e4bac931142723ac4233b6a57d6a42e524cd770',
+        'reference' => 'eb91d713529a6e4922f9b6c05bc703212b19b984',
         'type' => 'project',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -13,7 +13,7 @@
         'amnezia/web-panel' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
-            'reference' => '8e4bac931142723ac4233b6a57d6a42e524cd770',
+            'reference' => 'eb91d713529a6e4922f9b6c05bc703212b19b984',
             'type' => 'project',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
