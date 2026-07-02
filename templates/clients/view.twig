@@ -26,6 +26,14 @@
                 <span class="text-xs text-slate-500">
                     <i class="fas fa-calendar-alt mr-1"></i>{{ client.created_at|date('Y-m-d H:i') }}
                 </span>
+                {% if client.ext_client_code %}
+                <a href="/clients?code={{ client.ext_client_code|url_encode }}"
+                   class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300 border border-indigo-500/30 text-xs transition-all">
+                    <i class="fas fa-link text-[10px]"></i>
+                    <span>Client: <strong class="font-mono">{{ client.ext_client_code }}</strong></span>
+                    <i class="fas fa-arrow-right text-[9px] opacity-60"></i>
+                </a>
+                {% endif %}
             </div>
         </div>
         <a href="/servers/{{ client.server_id }}" class="btn-secondary px-4 py-2 text-sm">

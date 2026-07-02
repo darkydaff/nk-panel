@@ -69,6 +69,19 @@ class DB {
           $pdo->exec($sql);
         }
       }
+
+      // Check if ext_client_code column exists in vpn_clients
+      $stmt4 = $pdo->query("SHOW COLUMNS FROM vpn_clients LIKE 'ext_client_code'");
+      $hasExtClientCode = $stmt4->rowCount() > 0;
+
+      if (!$hasExtClientCode) {
+        // Run external client link migration
+        $sqlPath = __DIR__ . '/../migrations/020_add_client_entity_link.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
     } catch (Throwable $e) {
       error_log("Database self-healing migration failed: " . $e->getMessage());
     }

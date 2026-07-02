@@ -24,6 +24,7 @@ require_once __DIR__ . '/../inc/JWT.php';
 require_once __DIR__ . '/../inc/PanelImporter.php';
 require_once __DIR__ . '/../inc/ServerMonitoring.php';
 require_once __DIR__ . '/../inc/GeoIP.php';
+require_once __DIR__ . '/../inc/ExtDB.php';
 
 // Load environment configuration
 Config::load(__DIR__ . '/../.env');
@@ -566,10 +567,125 @@ Router::post('/servers/{id}/clients/create', function ($params) {
             $client = new VpnClient($clientId);
             $client->setTrafficLimit($trafficLimitBytes);
         }
+
+        // Link to external client code if provided and valid
+        $extClientCode = trim($_POST['ext_client_code'] ?? '');
+        if ($extClientCode !== '') {
+            try {
+                // Validate the code exists in the external DB
+                if (ExtDB::clientCodeExists($extClientCode)) {
+                    $pdo = DB::conn();
+                    $stmt = $pdo->prepare('UPDATE vpn_clients SET ext_client_code = ? WHERE id = ?');
+                    $stmt->execute([$extClientCode, $clientId]);
+                }
+            } catch (Throwable $e) {
+                // If external DB is down, silently skip — config is still created
+                error_log('ExtDB link failed for client ' . $clientId . ': ' . $e->getMessage());
+            }
+        }
         
         redirect('/clients/' . $clientId);
     } catch (Exception $e) {
         redirect('/servers/' . $serverId . '?error=' . urlencode($e->getMessage()));
+    }
+});
+
+// Clients list (from external Postgres DB)
+Router::get('/clients', function () {
+    requireAuth();
+
+    $search     = trim($_GET['search'] ?? $_GET['code'] ?? '');
+    $codeFilter = trim($_GET['code'] ?? '');
+    $page       = max(1, (int)($_GET['page'] ?? 1));
+    $perPage    = 30;
+    $offset     = ($page - 1) * $perPage;
+
+    $clients      = [];
+    $totalCount   = 0;
+    $totalPages   = 1;
+    $extDbError   = null;
+
+    // Fetch codes from external Postgres
+    try {
+        $totalCount = ExtDB::countClients($search);
+        $totalPages = max(1, (int)ceil($totalCount / $perPage));
+        $rawCodes   = ExtDB::searchClients($search, $perPage, $offset);
+
+        // For each code, count and list linked vpn_clients in MySQL
+        $pdo = DB::conn();
+        foreach ($rawCodes as $row) {
+            $code = $row['Code'];
+            $stmt = $pdo->prepare(
+                'SELECT c.id, c.name, c.status, s.name AS server_name
+                 FROM vpn_clients c
+                 JOIN vpn_servers s ON s.id = c.server_id
+                 WHERE c.ext_client_code = ?
+                 ORDER BY c.created_at DESC'
+            );
+            $stmt->execute([$code]);
+            $configs = $stmt->fetchAll();
+
+            $clients[] = [
+                'Code'         => $code,
+                'configs'      => $configs,
+                'config_count' => count($configs),
+            ];
+        }
+    } catch (Throwable $e) {
+        $extDbError = $e->getMessage();
+    }
+
+    // If filtering by a single code, also load all configs for that code
+    $codeConfigs = null;
+    if ($codeFilter !== '') {
+        try {
+            $pdo = DB::conn();
+            $stmt = $pdo->prepare(
+                'SELECT c.id, c.name, c.status, s.name AS server_name
+                 FROM vpn_clients c
+                 JOIN vpn_servers s ON s.id = c.server_id
+                 WHERE c.ext_client_code = ?
+                 ORDER BY c.created_at DESC'
+            );
+            $stmt->execute([$codeFilter]);
+            $codeConfigs = $stmt->fetchAll();
+        } catch (Throwable $e) {
+            // ignore
+        }
+    }
+
+    // All servers (for the modal's server picker)
+    $user = Auth::user();
+    $allServers = Auth::isAdmin() ? VpnServer::listAll() : VpnServer::listByUser($user['id']);
+
+    View::render('clients/index.twig', [
+        'clients'      => $clients,
+        'total_count'  => $totalCount,
+        'total_pages'  => $totalPages,
+        'current_page' => $page,
+        'search'       => $search,
+        'code_filter'  => $codeFilter,
+        'code_configs' => $codeConfigs,
+        'all_servers'  => $allServers,
+        'ext_db_error' => $extDbError,
+    ]);
+});
+
+// API: Autocomplete client codes from external Postgres
+Router::get('/api/ext-clients/search', function () {
+    requireAuth();
+    header('Content-Type: application/json');
+
+    $q     = trim($_GET['q'] ?? '');
+    $limit = min(20, max(1, (int)($_GET['limit'] ?? 15)));
+
+    try {
+        $rows  = ExtDB::searchClients($q, $limit, 0);
+        $codes = array_column($rows, 'Code');
+        echo json_encode(['codes' => $codes]);
+    } catch (Throwable $e) {
+        http_response_code(503);
+        echo json_encode(['error' => 'External DB unavailable', 'codes' => []]);
     }
 });
 

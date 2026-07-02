@@ -83,14 +83,59 @@
         
         <div class="panel p-5 border-slate-800/60 bg-slate-900/60 backdrop-blur">
             <h3 class="text-base font-semibold mb-4 text-white flex items-center">
-                <i class="fas fa-user-plus text-accent mr-2"></i>New Client
+                <i class="fas fa-user-plus text-accent mr-2"></i>New Config
             </h3>
+
+            {# ── Mode toggle ── #}
+            <div class="flex bg-slate-950/80 p-0.5 rounded-lg border border-slate-800/80 text-xs mb-4 select-none" id="clientModeToggle">
+                <button type="button" onclick="setClientMode('linked')"
+                        id="modeLinkedBtn"
+                        class="flex-1 py-1.5 px-3 rounded-md font-medium transition-all bg-slate-800 text-white">
+                    <i class="fas fa-link mr-1 opacity-70"></i>DB Client
+                </button>
+                <button type="button" onclick="setClientMode('anon')"
+                        id="modeAnonBtn"
+                        class="flex-1 py-1.5 px-3 rounded-md font-medium transition-all text-slate-400 hover:text-slate-200">
+                    <i class="fas fa-user-secret mr-1 opacity-70"></i>Anonymous
+                </button>
+            </div>
+
             <form method="POST" action="/servers/{{ server.id }}/clients/create" id="createClientForm">
-                <div class="mb-3">
-                    <input name="name" required class="input-field w-full px-4 py-2.5 text-sm" placeholder="Client name" id="clientName">
+                {# Hidden: will be filled when a DB client is selected #}
+                <input type="hidden" name="ext_client_code" id="extClientCodeInput" value="">
+
+                {# ── Linked mode: code autocomplete ── #}
+                <div id="linkedModeFields" class="mb-3">
+                    <label class="block text-xs text-slate-500 mb-1.5 uppercase tracking-wide">Client Code</label>
+                    <div class="relative">
+                        <input type="text"
+                               id="clientCodeSearch"
+                               placeholder="Type to search..."
+                               autocomplete="off"
+                               class="input-field w-full px-4 py-2.5 text-sm pr-8"
+                               oninput="onCodeSearchInput(this.value)"
+                               onblur="setTimeout(hideCodeDropdown, 200)">
+                        <i class="fas fa-search absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 text-xs pointer-events-none" id="codeSearchIcon"></i>
+                    </div>
+                    <div id="codeDropdown"
+                         class="hidden absolute z-50 mt-1 w-56 bg-slate-900 border border-slate-700 rounded-lg shadow-xl overflow-hidden max-h-48 overflow-y-auto text-sm">
+                    </div>
+                    <p id="codeSelectedInfo" class="text-xs text-indigo-400 mt-1.5 hidden">
+                        <i class="fas fa-check-circle mr-1"></i><span id="codeSelectedText"></span>
+                    </p>
                 </div>
+
+                {# ── Config name (shared by both modes) ── #}
+                <div class="mb-3">
+                    <label class="block text-xs text-slate-500 mb-1.5 uppercase tracking-wide">Config Name</label>
+                    <input name="name" required
+                           class="input-field w-full px-4 py-2.5 text-sm"
+                           placeholder="Client name"
+                           id="clientName">
+                </div>
+
                 <button type="submit" class="btn-primary w-full py-2.5 text-sm" id="createClientBtn">
-                    <i class="fas fa-plus mr-2"></i><span id="createClientText">Create Client</span>
+                    <i class="fas fa-plus mr-2"></i><span id="createClientText">Create Config</span>
                     <i class="fas fa-spinner fa-spin hidden ml-2" id="createClientSpinner"></i>
                 </button>
             </form>
@@ -304,16 +349,118 @@
 </div>
 
 <script>
+// ── Client mode toggle (DB Client vs Anonymous) ──────────────────────────────
+let currentClientMode = 'linked';
+
+function setClientMode(mode) {
+    currentClientMode = mode;
+    const linkedFields  = document.getElementById('linkedModeFields');
+    const linkedBtn     = document.getElementById('modeLinkedBtn');
+    const anonBtn       = document.getElementById('modeAnonBtn');
+    const extInput      = document.getElementById('extClientCodeInput');
+
+    if (mode === 'linked') {
+        linkedFields.classList.remove('hidden');
+        linkedBtn.classList.add('bg-slate-800', 'text-white');
+        linkedBtn.classList.remove('text-slate-400');
+        anonBtn.classList.remove('bg-slate-800', 'text-white');
+        anonBtn.classList.add('text-slate-400');
+    } else {
+        linkedFields.classList.add('hidden');
+        extInput.value = '';
+        anonBtn.classList.add('bg-slate-800', 'text-white');
+        anonBtn.classList.remove('text-slate-400');
+        linkedBtn.classList.remove('bg-slate-800', 'text-white');
+        linkedBtn.classList.add('text-slate-400');
+    }
+}
+
+// ── Client code autocomplete ─────────────────────────────────────────────────
+let codeSearchTimer = null;
+
+function onCodeSearchInput(value) {
+    clearTimeout(codeSearchTimer);
+    document.getElementById('extClientCodeInput').value = '';
+    document.getElementById('codeSelectedInfo').classList.add('hidden');
+
+    if (value.length < 1) {
+        hideCodeDropdown();
+        return;
+    }
+
+    codeSearchTimer = setTimeout(() => fetchCodes(value), 220);
+}
+
+function fetchCodes(q) {
+    const icon = document.getElementById('codeSearchIcon');
+    icon.className = 'fas fa-spinner fa-spin absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs pointer-events-none';
+
+    fetch('/api/ext-clients/search?q=' + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(data => {
+            icon.className = 'fas fa-search absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 text-xs pointer-events-none';
+            renderCodeDropdown(data.codes || []);
+        })
+        .catch(() => {
+            icon.className = 'fas fa-search absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 text-xs pointer-events-none';
+            hideCodeDropdown();
+        });
+}
+
+function renderCodeDropdown(codes) {
+    const dd = document.getElementById('codeDropdown');
+    dd.innerHTML = '';
+    if (!codes.length) {
+        dd.innerHTML = '<div class="px-4 py-3 text-slate-500 text-xs">No matches</div>';
+        dd.classList.remove('hidden');
+        return;
+    }
+    codes.forEach(code => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'w-full text-left px-4 py-2.5 hover:bg-slate-800 text-slate-200 hover:text-white transition-colors font-mono text-xs flex items-center gap-2';
+        item.innerHTML = '<i class="fas fa-user text-slate-600"></i>' + escapeHtml(code);
+        item.addEventListener('mousedown', () => selectCode(code));
+        dd.appendChild(item);
+    });
+    dd.classList.remove('hidden');
+}
+
+function selectCode(code) {
+    document.getElementById('clientCodeSearch').value = code;
+    document.getElementById('extClientCodeInput').value = code;
+
+    // Auto-fill config name with the code if it's empty or was auto-filled before
+    const nameField = document.getElementById('clientName');
+    if (!nameField.dataset.userEdited) {
+        nameField.value = code;
+    }
+
+    document.getElementById('codeSelectedText').textContent = code + ' selected';
+    document.getElementById('codeSelectedInfo').classList.remove('hidden');
+    hideCodeDropdown();
+}
+
+function hideCodeDropdown() {
+    const dd = document.getElementById('codeDropdown');
+    if (dd) dd.classList.add('hidden');
+}
+
+function escapeHtml(str) {
+    return str.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-    const form = document.getElementById('createClientForm');
-    const clientNameInput = document.getElementById('clientName');
-    
-    if (clientNameInput) {
-        clientNameInput.addEventListener('input', function(e) {
+    // Track manual edits to config name
+    const nameField = document.getElementById('clientName');
+    if (nameField) {
+        nameField.addEventListener('input', function(e) {
             e.target.value = e.target.value.replace(/ /g, '_');
+            e.target.dataset.userEdited = 'true';
         });
     }
-    
+
+    const form = document.getElementById('createClientForm');
     if (form) {
         form.addEventListener('submit', function() {
             document.getElementById('createClientBtn').disabled = true;
