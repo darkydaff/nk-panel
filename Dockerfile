@@ -26,7 +26,13 @@ WORKDIR /var/www/html
 COPY . /var/www/html
 
 # Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader --no-security-blocking
+ENV COMPOSER_ALLOW_SUPERUSER=1
+RUN git config --global --add safe.directory /var/www/html \
+    && if [ -d vendor ]; then \
+         echo "vendor/ already present, skipping composer install"; \
+       else \
+         composer install --no-dev --optimize-autoloader --no-interaction; \
+       fi
 
 # Configure Apache
 COPY apache.conf /etc/apache2/sites-available/000-default.conf
