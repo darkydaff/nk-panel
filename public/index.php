@@ -594,7 +594,7 @@ Router::post('/servers/{id}/clients/create', function ($params) {
 Router::get('/clients', function () {
     requireAuth();
 
-    $search     = trim($_GET['search'] ?? $_GET['code'] ?? '');
+    $search     = trim($_GET['search'] ?? '');
     $codeFilter = trim($_GET['code'] ?? '');
     $page       = max(1, (int)($_GET['page'] ?? 1));
     $perPage    = 30;
@@ -607,9 +607,21 @@ Router::get('/clients', function () {
 
     // Fetch codes from external Postgres
     try {
-        $totalCount = ExtDB::countClients($search);
+        if ($codeFilter !== '') {
+            // Exact match for the code filter
+            if (ExtDB::clientCodeExists($codeFilter)) {
+                $totalCount = 1;
+                $rawCodes   = [['Code' => $codeFilter]];
+            } else {
+                $totalCount = 0;
+                $rawCodes   = [];
+            }
+        } else {
+            // Standard search (LIKE match)
+            $totalCount = ExtDB::countClients($search);
+            $rawCodes   = ExtDB::searchClients($search, $perPage, $offset);
+        }
         $totalPages = max(1, (int)ceil($totalCount / $perPage));
-        $rawCodes   = ExtDB::searchClients($search, $perPage, $offset);
 
         // For each code, count and list linked vpn_clients in MySQL
         $pdo = DB::conn();
