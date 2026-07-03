@@ -36,20 +36,20 @@
                 {% endif %}
                 
                 {% if ext_client and ext_client.expiry_date %}
-                    {% if ext_client.days_left > 0 %}
+                    {% if ext_client.days_left > 10 %}
                         <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-medium">
                             <i class="fas fa-calendar-check text-[10px]"></i>
                             <span>Subscription expires: <strong>{{ ext_client.expiry_date }}</strong> ({{ ext_client.days_left }} days left)</span>
                         </span>
-                    {% elseif ext_client.days_left == 0 %}
+                    {% elseif ext_client.days_left > 0 %}
                         <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-medium animate-pulse">
                             <i class="fas fa-calendar-minus text-[10px]"></i>
-                            <span>Subscription expires today!</span>
+                            <span>Subscription expires soon: <strong>{{ ext_client.expiry_date }}</strong> ({{ ext_client.days_left }} days left)</span>
                         </span>
                     {% else %}
                         <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/20 text-xs font-medium">
                             <i class="fas fa-calendar-times text-[10px]"></i>
-                            <span>Subscription expired: <strong>{{ ext_client.expiry_date }}</strong> ({{ ext_client.days_left|abs }} days ago)</span>
+                            <span>{% if ext_client.days_left == 0 %}Subscription expired today!{% else %}Subscription expired: <strong>{{ ext_client.expiry_date }}</strong> ({{ ext_client.days_left|abs }} days ago){% endif %}</span>
                         </span>
                     {% endif %}
                 {% endif %}
