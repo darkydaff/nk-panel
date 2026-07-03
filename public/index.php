@@ -689,7 +689,7 @@ Router::get('/clients', function () {
                 if ($startDate && $sub !== null && $sub > 0) {
                     $daysToAdd = (int)$sub * 30;
                     $expiryTimestamp = strtotime($startDate . " + $daysToAdd days");
-                    $expiryDate = date('Y-m-d', $expiryTimestamp);
+                    $expiryDate = date('d.m.Y', $expiryTimestamp);
                     $daysLeft = (int)round(($expiryTimestamp - strtotime(date('Y-m-d'))) / 86400);
                 }
             }
@@ -854,7 +854,7 @@ Router::get('/clients/{id}', function ($params) {
                     if ($startDate && $sub !== null && $sub > 0) {
                         $daysToAdd = (int)$sub * 30;
                         $expiryTimestamp = strtotime($startDate . " + $daysToAdd days");
-                        $expiryDate = date('Y-m-d', $expiryTimestamp);
+                        $expiryDate = date('d.m.Y', $expiryTimestamp);
                         $daysLeft = (int)round(($expiryTimestamp - strtotime(date('Y-m-d'))) / 86400);
                     }
                 }
