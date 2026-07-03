@@ -114,6 +114,8 @@
                 <option value="code" {% if sort == 'code' or sort == '' %}selected{% endif %}>Client Code (A-Z)</option>
                 <option value="expiry_asc" {% if sort == 'expiry_asc' %}selected{% endif %}>Expiration (Soonest first)</option>
                 <option value="expiry_desc" {% if sort == 'expiry_desc' %}selected{% endif %}>Expiration (Latest first)</option>
+                <option value="traffic_desc" {% if sort == 'traffic_desc' %}selected{% endif %}>Traffic (Highest first)</option>
+                <option value="traffic_asc" {% if sort == 'traffic_asc' %}selected{% endif %}>Traffic (Lowest first)</option>
             </select>
         </div>
     </div>

@@ -709,6 +709,10 @@ Router::get('/clients', function () {
                 $orderBy = "CASE WHEN ec.func = 'WORK' AND ec.start_date IS NOT NULL AND ec.sub IS NOT NULL AND ec.sub > 0 THEN DATE_ADD(ec.start_date, INTERVAL (ec.sub * 30) DAY) ELSE '9999-12-31' END ASC, ec.code ASC";
             } elseif ($sort === 'expiry_desc') {
                 $orderBy = "CASE WHEN ec.func = 'WORK' AND ec.start_date IS NOT NULL AND ec.sub IS NOT NULL AND ec.sub > 0 THEN DATE_ADD(ec.start_date, INTERVAL (ec.sub * 30) DAY) ELSE '1970-01-01' END DESC, ec.code ASC";
+            } elseif ($sort === 'traffic_desc') {
+                $orderBy = "(ec.bytes_sent + ec.bytes_received) DESC, ec.code ASC";
+            } elseif ($sort === 'traffic_asc') {
+                $orderBy = "(ec.bytes_sent + ec.bytes_received) ASC, ec.code ASC";
             }
 
             // Get total count
