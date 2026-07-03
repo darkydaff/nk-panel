@@ -955,11 +955,16 @@ Router::get('/clients/{id}', function ($params) {
             }
         }
         
+        $pdo = DB::conn();
+        $stmtAllExt = $pdo->query('SELECT code, name FROM ext_clients ORDER BY code ASC');
+        $allExtClients = $stmtAllExt->fetchAll(PDO::FETCH_ASSOC);
+
         View::render('clients/view.twig', [
             'client' => $clientData,
             'stats' => $stats,
             'server' => $serverData,
-            'ext_client' => $extClient
+            'ext_client' => $extClient,
+            'all_ext_clients' => $allExtClients
         ]);
     } catch (Exception $e) {
         http_response_code(404);
@@ -988,6 +993,24 @@ Router::post('/clients/{id}/update', function ($params) {
         if (isset($_POST['name']) && trim($_POST['name']) !== '') {
             $stmt = $pdo->prepare('UPDATE vpn_clients SET name = ? WHERE id = ?');
             $stmt->execute([trim($_POST['name']), $clientId]);
+        }
+
+        if (isset($_POST['ext_client_code'])) {
+            $extClientCode = trim($_POST['ext_client_code']);
+            if ($extClientCode === '') {
+                $stmt = $pdo->prepare('UPDATE vpn_clients SET ext_client_code = NULL WHERE id = ?');
+                $stmt->execute([$clientId]);
+            } else {
+                $stmtLoc = $pdo->prepare('SELECT 1 FROM ext_clients WHERE code = ? LIMIT 1');
+                $stmtLoc->execute([$extClientCode]);
+                if ($stmtLoc->fetchColumn() !== false) {
+                    $stmt = $pdo->prepare('UPDATE vpn_clients SET ext_client_code = ? WHERE id = ?');
+                    $stmt->execute([$extClientCode, $clientId]);
+                    
+                    // Force statistics sync to calculate aggregate immediately
+                    $client->syncStats();
+                }
+            }
         }
         
         if (!empty($_POST['add_days'])) {

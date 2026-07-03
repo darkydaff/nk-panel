@@ -178,12 +178,27 @@
                 <i class="fas fa-edit text-accent mr-2"></i>Client Settings
             </h3>
             
-            <form method="POST" action="/clients/{{ client.id }}/update" class="mb-4">
-                <label class="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Client Name</label>
-                <div class="flex gap-2">
-                    <input name="name" value="{{ client.name }}" class="input-field flex-grow px-4 py-2.5 text-sm" required>
-                    <button type="submit" class="btn-primary px-4 py-2.5 text-sm">
-                        <i class="fas fa-save mr-2"></i>Save
+            <form method="POST" action="/clients/{{ client.id }}/update" class="mb-4 space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Client Name</label>
+                    <input name="name" value="{{ client.name }}" class="input-field w-full px-4 py-2.5 text-sm" required>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Link to External DB Client</label>
+                    <select name="ext_client_code" class="input-field w-full px-3 py-2.5 text-sm bg-slate-900 border border-slate-750 rounded-lg text-slate-300 focus:outline-none focus:border-indigo-500 cursor-pointer">
+                        <option value="">None (Unlinked)</option>
+                        {% for ext in all_ext_clients %}
+                            <option value="{{ ext.code }}" {% if client.ext_client_code == ext.code %}selected{% endif %}>
+                                {{ ext.code }} - {{ ext.name|default('No Name') }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="flex justify-end">
+                    <button type="submit" class="btn-primary px-5 py-2.5 text-sm">
+                        <i class="fas fa-save mr-2"></i>Save Settings
                     </button>
                 </div>
             </form>
