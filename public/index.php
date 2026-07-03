@@ -636,22 +636,27 @@ Router::get('/clients', function () {
                     SELECT COUNT(DISTINCT ec.code) 
                     FROM ext_clients ec
                     LEFT JOIN vpn_clients vc ON vc.ext_client_code = ec.code
-                    WHERE ec.code LIKE :q OR ec.name LIKE :q OR ec.router LIKE :q OR vc.name LIKE :q OR vc.client_ip LIKE :q
+                    WHERE ec.code LIKE ? OR ec.name LIKE ? OR ec.router LIKE ? OR vc.name LIKE ? OR vc.client_ip LIKE ?
                 ');
-                $stmtCount->execute(['q' => '%' . $search . '%']);
+                $likeParam = '%' . $search . '%';
+                $stmtCount->execute([$likeParam, $likeParam, $likeParam, $likeParam, $likeParam]);
                 $totalCount = (int)$stmtCount->fetchColumn();
 
                 $stmt = $pdo->prepare('
                     SELECT DISTINCT ec.code AS "Code", ec.name, ec.start_date, ec.sub, ec.func, ec.router
                     FROM ext_clients ec
                     LEFT JOIN vpn_clients vc ON vc.ext_client_code = ec.code
-                    WHERE ec.code LIKE :q OR ec.name LIKE :q OR ec.router LIKE :q OR vc.name LIKE :q OR vc.client_ip LIKE :q
+                    WHERE ec.code LIKE ? OR ec.name LIKE ? OR ec.router LIKE ? OR vc.name LIKE ? OR vc.client_ip LIKE ?
                     ORDER BY ec.code 
-                    LIMIT :limit OFFSET :offset
+                    LIMIT ? OFFSET ?
                 ');
-                $stmt->bindValue('q', '%' . $search . '%', PDO::PARAM_STR);
-                $stmt->bindValue('limit', $perPage, PDO::PARAM_INT);
-                $stmt->bindValue('offset', $offset, PDO::PARAM_INT);
+                $stmt->bindValue(1, $likeParam, PDO::PARAM_STR);
+                $stmt->bindValue(2, $likeParam, PDO::PARAM_STR);
+                $stmt->bindValue(3, $likeParam, PDO::PARAM_STR);
+                $stmt->bindValue(4, $likeParam, PDO::PARAM_STR);
+                $stmt->bindValue(5, $likeParam, PDO::PARAM_STR);
+                $stmt->bindValue(6, $perPage, PDO::PARAM_INT);
+                $stmt->bindValue(7, $offset, PDO::PARAM_INT);
                 $stmt->execute();
                 $rawCodes = $stmt->fetchAll();
             } else {
