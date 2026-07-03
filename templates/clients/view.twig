@@ -185,14 +185,15 @@
                 </div>
 
                 <div>
-                    <label class="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Link to External DB Client Code</label>
-                    <input type="text" name="ext_client_code" list="extClientsList" value="{{ client.ext_client_code }}" placeholder="e.g. #0077" class="input-field w-full px-4 py-2.5 text-sm font-mono uppercase">
-                    <datalist id="extClientsList">
+                    <label class="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Link to External DB Client</label>
+                    <select name="ext_client_code" class="input-field w-full px-3 py-2.5 text-sm bg-slate-900 border border-slate-750 rounded-lg text-slate-300 focus:outline-none focus:border-indigo-500 cursor-pointer">
+                        <option value="">None (Unlinked)</option>
                         {% for ext in all_ext_clients %}
-                            <option value="{{ ext.code }}">{{ ext.code }} - {{ ext.name|default('No Name') }}</option>
+                            <option value="{{ ext.code }}" {% if client.ext_client_code == ext.code %}selected{% endif %}>
+                                {{ ext.code }} - {{ ext.name|default('No Name') }}
+                            </option>
                         {% endfor %}
-                    </datalist>
-                    <p class="text-[10px] text-slate-500 mt-1">Enter the client code from the external database (e.g. #0077) or leave blank to unlink.</p>
+                    </select>
                 </div>
 
                 <div class="flex justify-end">
