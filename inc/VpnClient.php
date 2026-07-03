@@ -621,6 +621,27 @@ class VpnClient {
             self::updateGeoIpForClient($this->clientId, $stats['endpoint'] ?? null, $this->data['last_endpoint_ip'] ?? null);
             
             $pdo = DB::conn();
+            
+            $oldSent = (int)($this->data['bytes_sent'] ?? 0);
+            $oldReceived = (int)($this->data['bytes_received'] ?? 0);
+            $newSent = (int)$stats['bytes_sent'];
+            $newReceived = (int)$stats['bytes_received'];
+
+            $deltaSent = $newSent - $oldSent;
+            $deltaReceived = $newReceived - $oldReceived;
+
+            if ($deltaSent < 0) $deltaSent = $newSent;
+            if ($deltaReceived < 0) $deltaReceived = $newReceived;
+
+            if (!empty($this->data['ext_client_code']) && ($deltaSent > 0 || $deltaReceived > 0)) {
+                $stmtExtInc = $pdo->prepare('
+                    UPDATE ext_clients 
+                    SET bytes_sent = bytes_sent + ?, bytes_received = bytes_received + ?
+                    WHERE code = ?
+                ');
+                $stmtExtInc->execute([$deltaSent, $deltaReceived, $this->data['ext_client_code']]);
+            }
+
             $stmt = $pdo->prepare('
                 UPDATE vpn_clients 
                 SET bytes_sent = ?, bytes_received = ?, last_handshake = ?, last_sync_at = NOW()

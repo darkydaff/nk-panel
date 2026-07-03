@@ -195,6 +195,16 @@
                 {% endif %}
             </div>
 
+            {# Aggregate Traffic #}
+            <div class="mb-4 flex items-center justify-between text-xs text-slate-400 bg-slate-950/40 border border-slate-800/80 px-3 py-2 rounded-lg font-mono">
+                <span class="text-slate-500 text-[10px] uppercase font-sans font-semibold tracking-wider">Total Traffic</span>
+                <div class="flex items-center gap-2">
+                    <span class="text-cyan-400" title="Uploaded">↑{{ client.BytesSent|default(0)|format_bytes }}</span>
+                    <span class="text-slate-700">|</span>
+                    <span class="text-indigo-400" title="Downloaded">↓{{ client.BytesReceived|default(0)|format_bytes }}</span>
+                </div>
+            </div>
+
             {# Config chips #}
             {% if client.configs is not empty %}
             <div class="flex flex-wrap gap-1.5 mb-4">

@@ -150,6 +150,23 @@ class DB {
           $pdo->exec($sql);
         }
       }
+
+      // Check if bytes_sent column exists in ext_clients
+      try {
+        $stmtExtCols3 = $pdo->query("SHOW COLUMNS FROM ext_clients LIKE 'bytes_sent'");
+        $hasTrafficCols = $stmtExtCols3->rowCount() > 0;
+      } catch (Throwable $e) {
+        $hasTrafficCols = false;
+      }
+
+      if (!$hasTrafficCols) {
+        // Run migration to add bytes_sent and bytes_received fields
+        $sqlPath = __DIR__ . '/../migrations/025_add_traffic_to_ext_clients.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
     } catch (Throwable $e) {
       error_log("Database self-healing migration failed: " . $e->getMessage());
     }

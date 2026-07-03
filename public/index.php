@@ -660,12 +660,12 @@ Router::get('/clients', function () {
 
         if ($codeFilter !== '') {
             // Exact match for the code filter
-            $stmt = $pdo->prepare('SELECT code, name, start_date, sub, func, router FROM ext_clients WHERE code = ? LIMIT 1');
+            $stmt = $pdo->prepare('SELECT code, name, start_date, sub, func, router, bytes_sent, bytes_received FROM ext_clients WHERE code = ? LIMIT 1');
             $stmt->execute([$codeFilter]);
             $rowExt = $stmt->fetch();
             if ($rowExt) {
                 $totalCount = 1;
-                $rawCodes   = [['Code' => $codeFilter, 'name' => $rowExt['name'], 'start_date' => $rowExt['start_date'], 'sub' => $rowExt['sub'], 'func' => $rowExt['func'], 'router' => $rowExt['router']]];
+                $rawCodes   = [['Code' => $codeFilter, 'name' => $rowExt['name'], 'start_date' => $rowExt['start_date'], 'sub' => $rowExt['sub'], 'func' => $rowExt['func'], 'router' => $rowExt['router'], 'bytes_sent' => $rowExt['bytes_sent'], 'bytes_received' => $rowExt['bytes_received']]];
             } else {
                 $totalCount = 0;
                 $rawCodes   = [];
@@ -717,7 +717,7 @@ Router::get('/clients', function () {
 
             // Fetch list
             $selectSql = "
-                SELECT DISTINCT ec.code AS \"Code\", ec.name, ec.start_date, ec.sub, ec.func, ec.router
+                SELECT DISTINCT ec.code AS \"Code\", ec.name, ec.start_date, ec.sub, ec.func, ec.router, ec.bytes_sent, ec.bytes_received
                 FROM ext_clients ec
                 LEFT JOIN vpn_clients vc ON vc.ext_client_code = ec.code
                 {$whereSql}
@@ -771,6 +771,8 @@ Router::get('/clients', function () {
                 'Router'       => $row['router'] ?? null,
                 'ExpiryDate'   => $expiryDate,
                 'DaysLeft'     => $daysLeft,
+                'BytesSent'    => (int)($row['bytes_sent'] ?? 0),
+                'BytesReceived'=> (int)($row['bytes_received'] ?? 0),
                 'configs'      => $configs,
                 'config_count' => count($configs),
             ];
@@ -945,6 +947,8 @@ Router::get('/clients/{id}', function ($params) {
                     'sub'         => $rowExt['sub'],
                     'func'        => $rowExt['func'],
                     'router'      => $rowExt['router'],
+                    'bytes_sent'  => (int)($rowExt['bytes_sent'] ?? 0),
+                    'bytes_received' => (int)($rowExt['bytes_received'] ?? 0),
                     'expiry_date' => $expiryDate,
                     'days_left'   => $daysLeft,
                 ];
@@ -1266,8 +1270,8 @@ Router::post('/api/servers/report-metrics', function () {
                 $publicKey = $c['public_key'] ?? '';
                 if (empty($publicKey)) continue;
                 
-                // Find client by public_key and server_id
-                $stmt = $pdo->prepare('SELECT id, bytes_sent, bytes_received, last_endpoint_ip FROM vpn_clients WHERE server_id = ? AND public_key = ?');
+                // Find client by public_key and server_id (include ext_client_code)
+                $stmt = $pdo->prepare('SELECT id, bytes_sent, bytes_received, last_endpoint_ip, ext_client_code FROM vpn_clients WHERE server_id = ? AND public_key = ?');
                 $stmt->execute([$serverId, $publicKey]);
                 $client = $stmt->fetch(PDO::FETCH_ASSOC);
                 
@@ -1334,6 +1338,16 @@ Router::post('/api/servers/report-metrics', function () {
                     // Accumulate client traffic in main table to prevent resets
                     $newTotalSent = (int)$client['bytes_sent'] + $deltaSent;
                     $newTotalReceived = (int)$client['bytes_received'] + $deltaReceived;
+
+                    // Increment persistent traffic aggregate in ext_clients
+                    if (!empty($client['ext_client_code']) && ($deltaSent > 0 || $deltaReceived > 0)) {
+                        $stmtExtInc = $pdo->prepare('
+                            UPDATE ext_clients 
+                            SET bytes_sent = bytes_sent + ?, bytes_received = bytes_received + ?
+                            WHERE code = ?
+                        ');
+                        $stmtExtInc->execute([$deltaSent, $deltaReceived, $client['ext_client_code']]);
+                    }
                     
                     $lastHandshake = $lastHandshakeVal > 0 ? date('Y-m-d H:i:s', $lastHandshakeVal) : null;
                     $stmt = $pdo->prepare('
