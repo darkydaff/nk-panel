@@ -1001,15 +1001,11 @@ Router::post('/clients/{id}/update', function ($params) {
                 $stmt = $pdo->prepare('UPDATE vpn_clients SET ext_client_code = NULL WHERE id = ?');
                 $stmt->execute([$clientId]);
             } else {
-                $stmtLoc = $pdo->prepare('SELECT 1 FROM ext_clients WHERE code = ? LIMIT 1');
-                $stmtLoc->execute([$extClientCode]);
-                if ($stmtLoc->fetchColumn() !== false) {
-                    $stmt = $pdo->prepare('UPDATE vpn_clients SET ext_client_code = ? WHERE id = ?');
-                    $stmt->execute([$extClientCode, $clientId]);
-                    
-                    // Force statistics sync to calculate aggregate immediately
-                    $client->syncStats();
-                }
+                $stmt = $pdo->prepare('UPDATE vpn_clients SET ext_client_code = ? WHERE id = ?');
+                $stmt->execute([$extClientCode, $clientId]);
+                
+                // Force statistics sync to calculate aggregate immediately
+                $client->syncStats();
             }
         }
         
