@@ -3,4 +3,4 @@
 
 ALTER TABLE vpn_clients DROP COLUMN qr_code;
 
-DELETE FROM translations WHERE `key` = 'clients.qr_code';
+DELETE FROM translations WHERE translation_key = 'clients.qr_code';
