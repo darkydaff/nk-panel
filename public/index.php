@@ -880,6 +880,13 @@ Router::post('/api/ext-clients/sync', function () {
         }
         $myPdo->commit();
 
+        // Run automatic client linking
+        try {
+            VpnClient::autoLinkAll();
+        } catch (Throwable $e) {
+            error_log('Automatic client linking failed during manual sync: ' . $e->getMessage());
+        }
+
         // Store last sync timestamp
         try {
             $myPdo->prepare("INSERT INTO system_settings (`key`, `value`) VALUES ('last_ext_clients_sync', ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)")

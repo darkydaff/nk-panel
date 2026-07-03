@@ -62,6 +62,15 @@ try {
     
     $myPdo->commit();
 
+    // Run automatic client linking
+    try {
+        require_once __DIR__ . '/../inc/VpnClient.php';
+        $linkedCount = VpnClient::autoLinkAll();
+        echo $logPrefix . "Automatically linked {$linkedCount} configurations to client codes.\n";
+    } catch (Throwable $e) {
+        echo $logPrefix . "WARNING: Failed to auto-link clients: " . $e->getMessage() . "\n";
+    }
+
     // Store last sync timestamp
     try {
         $myPdo->prepare("INSERT INTO system_settings (`key`, `value`) VALUES ('last_ext_clients_sync', ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)")

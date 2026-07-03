@@ -1078,4 +1078,59 @@ public static function getClientsOverLimit(): array {
     public static function disableClientsOverLimit(): int {
         return 0; // Functionality disabled per user request
     }
+
+    /**
+     * Automatically link all unlinked configurations (where ext_client_code IS NULL)
+     * to external clients in the cache table using fuzzy code/name matching.
+     */
+    public static function autoLinkAll(): int {
+        $pdo = DB::conn();
+        
+        // Fetch all unlinked configurations
+        $stmtClients = $pdo->query('SELECT id, name FROM vpn_clients WHERE ext_client_code IS NULL');
+        $unlinkedClients = $stmtClients->fetchAll(PDO::FETCH_ASSOC);
+        if (empty($unlinkedClients)) {
+            return 0;
+        }
+        
+        // Fetch all external client codes from the cache
+        $stmtExt = $pdo->query('SELECT code FROM ext_clients');
+        $extClients = $stmtExt->fetchAll(PDO::FETCH_COLUMN);
+        if (empty($extClients)) {
+            return 0;
+        }
+        
+        $linkedCount = 0;
+        $stmtUpdate = $pdo->prepare('UPDATE vpn_clients SET ext_client_code = ? WHERE id = ?');
+        
+        foreach ($unlinkedClients as $client) {
+            $clientName = trim($client['name']);
+            if ($clientName === '') continue;
+            
+            // Clean client config name
+            $cleanName = strtolower(str_replace(['#', '_', '-'], '', $clientName));
+            if ($cleanName === '') continue;
+            
+            foreach ($extClients as $code) {
+                $cleanCode = strtolower(str_replace(['#', '_', '-'], '', $code));
+                if ($cleanCode === '') continue;
+                
+                // If config name contains clean code
+                if (strpos($cleanName, $cleanCode) !== false) {
+                    $stmtUpdate->execute([$code, $client['id']]);
+                    
+                    // Also trigger statistics sync for this newly linked client
+                    try {
+                        $vpnClient = new VpnClient($client['id']);
+                        $vpnClient->syncStats();
+                    } catch (Throwable $e) {}
+                    
+                    $linkedCount++;
+                    break; // Link to the first matching external client code
+                }
+            }
+        }
+        
+        return $linkedCount;
+    }
 }
