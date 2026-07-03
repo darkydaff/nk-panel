@@ -572,15 +572,16 @@ Router::post('/servers/{id}/clients/create', function ($params) {
         $extClientCode = trim($_POST['ext_client_code'] ?? '');
         if ($extClientCode !== '') {
             try {
-                // Validate the code exists in the external DB
-                if (ExtDB::clientCodeExists($extClientCode)) {
-                    $pdo = DB::conn();
+                $pdo = DB::conn();
+                // Validate the code exists in local cached DB
+                $stmtLoc = $pdo->prepare('SELECT 1 FROM ext_clients WHERE code = ? LIMIT 1');
+                $stmtLoc->execute([$extClientCode]);
+                if ($stmtLoc->fetchColumn() !== false) {
                     $stmt = $pdo->prepare('UPDATE vpn_clients SET ext_client_code = ? WHERE id = ?');
                     $stmt->execute([$extClientCode, $clientId]);
                 }
             } catch (Throwable $e) {
-                // If external DB is down, silently skip — config is still created
-                error_log('ExtDB link failed for client ' . $clientId . ': ' . $e->getMessage());
+                error_log('Local cache link failed for client ' . $clientId . ': ' . $e->getMessage());
             }
         }
         
@@ -590,7 +591,7 @@ Router::post('/servers/{id}/clients/create', function ($params) {
     }
 });
 
-// Clients list (from external Postgres DB)
+// Clients list (from local MySQL cached ext_clients table)
 Router::get('/clients', function () {
     requireAuth();
 
@@ -605,11 +606,22 @@ Router::get('/clients', function () {
     $totalPages   = 1;
     $extDbError   = null;
 
-    // Fetch codes from external Postgres
+    // Check PostgreSQL connection status for header warning only
     try {
+        if (!ExtDB::isAvailable()) {
+            $extDbError = "External PostgreSQL database is unreachable.";
+        }
+    } catch (Throwable $e) {
+        $extDbError = $e->getMessage();
+    }
+
+    try {
+        $pdo = DB::conn();
         if ($codeFilter !== '') {
             // Exact match for the code filter
-            if (ExtDB::clientCodeExists($codeFilter)) {
+            $stmt = $pdo->prepare('SELECT 1 FROM ext_clients WHERE code = ? LIMIT 1');
+            $stmt->execute([$codeFilter]);
+            if ($stmt->fetchColumn() !== false) {
                 $totalCount = 1;
                 $rawCodes   = [['Code' => $codeFilter]];
             } else {
@@ -618,13 +630,30 @@ Router::get('/clients', function () {
             }
         } else {
             // Standard search (LIKE match)
-            $totalCount = ExtDB::countClients($search);
-            $rawCodes   = ExtDB::searchClients($search, $perPage, $offset);
+            if ($search !== '') {
+                $stmtCount = $pdo->prepare('SELECT COUNT(*) FROM ext_clients WHERE code LIKE ?');
+                $stmtCount->execute(['%' . $search . '%']);
+                $totalCount = (int)$stmtCount->fetchColumn();
+
+                $stmt = $pdo->prepare('SELECT code AS "Code" FROM ext_clients WHERE code LIKE ? ORDER BY code LIMIT ? OFFSET ?');
+                $stmt->bindValue(1, '%' . $search . '%', PDO::PARAM_STR);
+                $stmt->bindValue(2, $perPage, PDO::PARAM_INT);
+                $stmt->bindValue(3, $offset, PDO::PARAM_INT);
+                $stmt->execute();
+                $rawCodes = $stmt->fetchAll();
+            } else {
+                $totalCount = (int)$pdo->query('SELECT COUNT(*) FROM ext_clients')->fetchColumn();
+
+                $stmt = $pdo->prepare('SELECT code AS "Code" FROM ext_clients ORDER BY code LIMIT ? OFFSET ?');
+                $stmt->bindValue(1, $perPage, PDO::PARAM_INT);
+                $stmt->bindValue(2, $offset, PDO::PARAM_INT);
+                $stmt->execute();
+                $rawCodes = $stmt->fetchAll();
+            }
         }
         $totalPages = max(1, (int)ceil($totalCount / $perPage));
 
         // For each code, count and list linked vpn_clients in MySQL
-        $pdo = DB::conn();
         foreach ($rawCodes as $row) {
             $code = $row['Code'];
             $stmt = $pdo->prepare(
@@ -644,7 +673,7 @@ Router::get('/clients', function () {
             ];
         }
     } catch (Throwable $e) {
-        $extDbError = $e->getMessage();
+        $extDbError = "Local database query failed: " . $e->getMessage();
     }
 
     // If filtering by a single code, also load all configs for that code
@@ -683,7 +712,7 @@ Router::get('/clients', function () {
     ]);
 });
 
-// API: Autocomplete client codes from external Postgres
+// API: Autocomplete client codes from local cached MySQL table
 Router::get('/api/ext-clients/search', function () {
     requireAuth();
     header('Content-Type: application/json');
@@ -692,12 +721,55 @@ Router::get('/api/ext-clients/search', function () {
     $limit = min(20, max(1, (int)($_GET['limit'] ?? 15)));
 
     try {
-        $rows  = ExtDB::searchClients($q, $limit, 0);
-        $codes = array_column($rows, 'Code');
+        $pdo = DB::conn();
+        $stmt = $pdo->prepare('SELECT code FROM ext_clients WHERE code LIKE ? ORDER BY code LIMIT ?');
+        $stmt->bindValue(1, '%' . $q . '%', PDO::PARAM_STR);
+        $stmt->bindValue(2, $limit, PDO::PARAM_INT);
+        $stmt->execute();
+        $codes = $stmt->fetchAll(PDO::FETCH_COLUMN);
         echo json_encode(['codes' => $codes]);
     } catch (Throwable $e) {
-        http_response_code(503);
-        echo json_encode(['error' => 'External DB unavailable', 'codes' => []]);
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage(), 'codes' => []]);
+    }
+});
+
+// API: Manual trigger to synchronize Postgres to MySQL
+Router::post('/api/ext-clients/sync', function () {
+    requireAuth();
+    header('Content-Type: application/json');
+
+    try {
+        if (!ExtDB::isAvailable()) {
+            throw new Exception("External PostgreSQL database is unreachable.");
+        }
+
+        $pgPdo = ExtDB::conn();
+        $table = Config::get('EXT_PG_CLIENTS_TABLE', 'Clients');
+
+        $stmt = $pgPdo->query("SELECT \"Code\" FROM \"{$table}\" WHERE \"Code\" IS NOT NULL");
+        $rawCodes = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        $codes = array_map('trim', $rawCodes);
+        $codes = array_filter($codes);
+
+        $myPdo = DB::conn();
+        $myPdo->beginTransaction();
+        $myPdo->exec('DELETE FROM ext_clients');
+        if (!empty($codes)) {
+            $insertStmt = $myPdo->prepare('INSERT INTO ext_clients (code) VALUES (?)');
+            foreach ($codes as $code) {
+                $insertStmt->execute([$code]);
+            }
+        }
+        $myPdo->commit();
+
+        echo json_encode(['success' => true, 'count' => count($codes)]);
+    } catch (Throwable $e) {
+        if (isset($myPdo) && $myPdo->inTransaction()) {
+            $myPdo->rollBack();
+        }
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
     }
 });
 

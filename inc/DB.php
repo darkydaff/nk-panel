@@ -82,6 +82,23 @@ class DB {
           $pdo->exec($sql);
         }
       }
+
+      // Check if ext_clients table exists
+      try {
+        $pdo->query("SELECT 1 FROM ext_clients LIMIT 1");
+        $hasExtClientsTable = true;
+      } catch (Throwable $e) {
+        $hasExtClientsTable = false;
+      }
+
+      if (!$hasExtClientsTable) {
+        // Run external clients table migration
+        $sqlPath = __DIR__ . '/../migrations/021_create_ext_clients_table.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
     } catch (Throwable $e) {
       error_log("Database self-healing migration failed: " . $e->getMessage());
     }

@@ -29,32 +29,39 @@
         </div>
 
         {# Search form #}
-        <form method="GET" action="/clients" class="flex gap-2 w-full sm:w-auto" id="searchForm">
-            <div class="relative flex-1 sm:w-64">
-                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs pointer-events-none" id="searchIcon"></i>
-                <input
-                    type="text"
-                    name="search"
-                    id="clientSearchInput"
-                    value="{{ search }}"
-                    placeholder="Search by code..."
-                    class="input-field pl-9 pr-8 py-2.5 text-sm w-full rounded-lg"
-                    autocomplete="off"
-                    oninput="onSearchInput(this.value)"
-                >
-                <div id="searchDropdown"
-                     class="hidden absolute z-50 mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg shadow-xl overflow-hidden max-h-48 overflow-y-auto text-sm">
+        <div class="flex flex-wrap sm:flex-nowrap gap-2 w-full sm:w-auto items-center">
+            <form method="GET" action="/clients" class="flex gap-2 flex-1 sm:flex-initial" id="searchForm">
+                <div class="relative flex-1 sm:w-64">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs pointer-events-none" id="searchIcon"></i>
+                    <input
+                        type="text"
+                        name="search"
+                        id="clientSearchInput"
+                        value="{{ search }}"
+                        placeholder="Search by code..."
+                        class="input-field pl-9 pr-8 py-2.5 text-sm w-full rounded-lg"
+                        autocomplete="off"
+                        oninput="onSearchInput(this.value)"
+                    >
+                    <div id="searchDropdown"
+                         class="hidden absolute z-50 mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg shadow-xl overflow-hidden max-h-48 overflow-y-auto text-sm">
+                    </div>
                 </div>
-            </div>
-            <button type="submit" class="btn-primary px-4 py-2.5 text-sm whitespace-nowrap">
-                <i class="fas fa-search mr-2"></i>Search
+                <button type="submit" class="btn-primary px-4 py-2.5 text-sm whitespace-nowrap">
+                    <i class="fas fa-search mr-2"></i>Search
+                </button>
+                {% if search or code_filter %}
+                <a href="/clients" class="btn-secondary px-4 py-2.5 text-sm whitespace-nowrap">
+                    <i class="fas fa-times mr-1"></i>Clear
+                </a>
+                {% endif %}
+            </form>
+
+            <button type="button" onclick="triggerClientSync()" id="syncClientBtn"
+                    class="btn-secondary px-4 py-2.5 text-sm whitespace-nowrap flex items-center gap-2 bg-slate-800/45 hover:bg-slate-800 border-slate-700/80 hover:border-slate-600 transition-all rounded-lg">
+                <i class="fas fa-sync-alt" id="syncClientIcon"></i>Sync DB
             </button>
-            {% if search or code_filter %}
-            <a href="/clients" class="btn-secondary px-4 py-2.5 text-sm whitespace-nowrap">
-                <i class="fas fa-times mr-1"></i>Clear
-            </a>
-            {% endif %}
-        </form>
+        </div>
     </div>
 
     {# ─── External DB error banner ─── #}
@@ -385,6 +392,40 @@ function hideSearchDropdown() {
 
 function escapeHtml(str) {
     return str.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ── Sync with DB action ──────────────────────────────────────────────────────
+function triggerClientSync() {
+    const btn = document.getElementById('syncClientBtn');
+    const icon = document.getElementById('syncClientIcon');
+    
+    if (btn.disabled) return;
+    
+    btn.disabled = true;
+    btn.classList.add('opacity-70', 'cursor-not-allowed');
+    icon.classList.add('fa-spin');
+    
+    fetch('/api/ext-clients/sync', {
+        method: 'POST'
+    })
+    .then(r => r.json().then(data => ({ status: r.status, body: data })))
+    .then(res => {
+        if (res.status === 200 && res.body.success) {
+            alert('Sync successful! Loaded ' + res.body.count + ' clients.');
+            window.location.reload();
+        } else {
+            alert('Sync failed: ' + (res.body.error || 'Unknown error'));
+            btn.disabled = false;
+            btn.classList.remove('opacity-70', 'cursor-not-allowed');
+            icon.classList.remove('fa-spin');
+        }
+    })
+    .catch(err => {
+        alert('Sync error: ' + err.message);
+        btn.disabled = false;
+        btn.classList.remove('opacity-70', 'cursor-not-allowed');
+        icon.classList.remove('fa-spin');
+    });
 }
 
 // Close autocomplete dropdown when clicking outside
