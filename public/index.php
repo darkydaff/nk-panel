@@ -244,9 +244,38 @@ Router::get('/dashboard', function () {
     // Get user's clients
     $clients = VpnClient::listByUser($user['id']);
     
+    // Get subscription health stats
+    $subStats = [
+        'active' => 0,
+        'expiring_soon' => 0,
+        'expired' => 0,
+        'paused' => 0
+    ];
+    try {
+        $pdo = DB::conn();
+        $subQuery = $pdo->query("
+            SELECT 
+                SUM(CASE WHEN func = 'WORK' AND DATE_ADD(start_date, INTERVAL (sub * 30) DAY) > DATE_ADD(CURDATE(), INTERVAL 10 DAY) THEN 1 ELSE 0 END) as active,
+                SUM(CASE WHEN func = 'WORK' AND DATE_ADD(start_date, INTERVAL (sub * 30) DAY) > CURDATE() AND DATE_ADD(start_date, INTERVAL (sub * 30) DAY) <= DATE_ADD(CURDATE(), INTERVAL 10 DAY) THEN 1 ELSE 0 END) as expiring_soon,
+                SUM(CASE WHEN func = 'WORK' AND DATE_ADD(start_date, INTERVAL (sub * 30) DAY) <= CURDATE() THEN 1 ELSE 0 END) as expired,
+                SUM(CASE WHEN func = 'PAUSE' THEN 1 ELSE 0 END) as paused
+            FROM ext_clients
+        ");
+        $rowStats = $subQuery->fetch(PDO::FETCH_ASSOC);
+        if ($rowStats) {
+            $subStats['active'] = (int)($rowStats['active'] ?? 0);
+            $subStats['expiring_soon'] = (int)($rowStats['expiring_soon'] ?? 0);
+            $subStats['expired'] = (int)($rowStats['expired'] ?? 0);
+            $subStats['paused'] = (int)($rowStats['paused'] ?? 0);
+        }
+    } catch (Throwable $e) {
+        // Table system_settings / ext_clients might not be created yet during first load
+    }
+    
     View::render('dashboard.twig', [
         'servers' => $servers,
         'clients' => $clients,
+        'sub_stats' => $subStats,
     ]);
 });
 
@@ -597,6 +626,8 @@ Router::get('/clients', function () {
 
     $search     = trim($_GET['search'] ?? '');
     $codeFilter = trim($_GET['code'] ?? '');
+    $filter     = trim($_GET['filter'] ?? 'all');
+    $sort       = trim($_GET['sort'] ?? 'code');
     $page       = max(1, (int)($_GET['page'] ?? 1));
     $perPage    = 30;
     $offset     = ($page - 1) * $perPage;
@@ -605,6 +636,7 @@ Router::get('/clients', function () {
     $totalCount   = 0;
     $totalPages   = 1;
     $extDbError   = null;
+    $lastSync     = null;
 
     // Check PostgreSQL connection status for header warning only
     try {
@@ -616,6 +648,16 @@ Router::get('/clients', function () {
     }
     try {
         $pdo = DB::conn();
+
+        // Get last sync timestamp
+        try {
+            $stmtSync = $pdo->query("SELECT `value` FROM system_settings WHERE `key` = 'last_ext_clients_sync' LIMIT 1");
+            $lastSyncVal = $stmtSync->fetchColumn();
+            if ($lastSyncVal) {
+                $lastSync = date('d.m.Y H:i', strtotime($lastSyncVal));
+            }
+        } catch (Throwable $e) {}
+
         if ($codeFilter !== '') {
             // Exact match for the code filter
             $stmt = $pdo->prepare('SELECT code, name, start_date, sub, func, router FROM ext_clients WHERE code = ? LIMIT 1');
@@ -629,45 +671,68 @@ Router::get('/clients', function () {
                 $rawCodes   = [];
             }
         } else {
-            // Standard search (LIKE match)
-            if ($search !== '') {
-                // Search matching local vpn_clients name/IP or ext_clients code/name/router
-                $stmtCount = $pdo->prepare('
-                    SELECT COUNT(DISTINCT ec.code) 
-                    FROM ext_clients ec
-                    LEFT JOIN vpn_clients vc ON vc.ext_client_code = ec.code
-                    WHERE ec.code LIKE ? OR ec.name LIKE ? OR ec.router LIKE ? OR vc.name LIKE ? OR vc.client_ip LIKE ?
-                ');
-                $likeParam = '%' . $search . '%';
-                $stmtCount->execute([$likeParam, $likeParam, $likeParam, $likeParam, $likeParam]);
-                $totalCount = (int)$stmtCount->fetchColumn();
+            // Build WHERE clauses dynamically based on search & status filter
+            $whereClauses = [];
+            $queryParams = [];
 
-                $stmt = $pdo->prepare('
-                    SELECT DISTINCT ec.code AS "Code", ec.name, ec.start_date, ec.sub, ec.func, ec.router
-                    FROM ext_clients ec
-                    LEFT JOIN vpn_clients vc ON vc.ext_client_code = ec.code
-                    WHERE ec.code LIKE ? OR ec.name LIKE ? OR ec.router LIKE ? OR vc.name LIKE ? OR vc.client_ip LIKE ?
-                    ORDER BY ec.code 
-                    LIMIT ? OFFSET ?
-                ');
-                $stmt->bindValue(1, $likeParam, PDO::PARAM_STR);
-                $stmt->bindValue(2, $likeParam, PDO::PARAM_STR);
-                $stmt->bindValue(3, $likeParam, PDO::PARAM_STR);
-                $stmt->bindValue(4, $likeParam, PDO::PARAM_STR);
-                $stmt->bindValue(5, $likeParam, PDO::PARAM_STR);
-                $stmt->bindValue(6, $perPage, PDO::PARAM_INT);
-                $stmt->bindValue(7, $offset, PDO::PARAM_INT);
-                $stmt->execute();
-                $rawCodes = $stmt->fetchAll();
-            } else {
-                $totalCount = (int)$pdo->query('SELECT COUNT(*) FROM ext_clients')->fetchColumn();
-
-                $stmt = $pdo->prepare('SELECT code AS "Code", name, start_date, sub, func, router FROM ext_clients ORDER BY code LIMIT ? OFFSET ?');
-                $stmt->bindValue(1, $perPage, PDO::PARAM_INT);
-                $stmt->bindValue(2, $offset, PDO::PARAM_INT);
-                $stmt->execute();
-                $rawCodes = $stmt->fetchAll();
+            if ($filter === 'active') {
+                $whereClauses[] = "ec.func = 'WORK' AND DATE_ADD(ec.start_date, INTERVAL (ec.sub * 30) DAY) > DATE_ADD(CURDATE(), INTERVAL 10 DAY)";
+            } elseif ($filter === 'expiring') {
+                $whereClauses[] = "ec.func = 'WORK' AND DATE_ADD(ec.start_date, INTERVAL (ec.sub * 30) DAY) > CURDATE() AND DATE_ADD(ec.start_date, INTERVAL (ec.sub * 30) DAY) <= DATE_ADD(CURDATE(), INTERVAL 10 DAY)";
+            } elseif ($filter === 'expired') {
+                $whereClauses[] = "ec.func = 'WORK' AND DATE_ADD(ec.start_date, INTERVAL (ec.sub * 30) DAY) <= CURDATE()";
+            } elseif ($filter === 'paused') {
+                $whereClauses[] = "ec.func = 'PAUSE'";
             }
+
+            if ($search !== '') {
+                $whereClauses[] = "(ec.code LIKE ? OR ec.name LIKE ? OR ec.router LIKE ? OR vc.name LIKE ? OR vc.client_ip LIKE ?)";
+                $likeParam = '%' . $search . '%';
+                $queryParams = array_merge($queryParams, [$likeParam, $likeParam, $likeParam, $likeParam, $likeParam]);
+            }
+
+            $whereSql = '';
+            if (!empty($whereClauses)) {
+                $whereSql = 'WHERE ' . implode(' AND ', $whereClauses);
+            }
+
+            // Determine sorting clause
+            $orderBy = 'ec.code ASC';
+            if ($sort === 'expiry_asc') {
+                $orderBy = "CASE WHEN ec.func = 'WORK' AND ec.start_date IS NOT NULL AND ec.sub IS NOT NULL AND ec.sub > 0 THEN DATE_ADD(ec.start_date, INTERVAL (ec.sub * 30) DAY) ELSE '9999-12-31' END ASC, ec.code ASC";
+            } elseif ($sort === 'expiry_desc') {
+                $orderBy = "CASE WHEN ec.func = 'WORK' AND ec.start_date IS NOT NULL AND ec.sub IS NOT NULL AND ec.sub > 0 THEN DATE_ADD(ec.start_date, INTERVAL (ec.sub * 30) DAY) ELSE '1970-01-01' END DESC, ec.code ASC";
+            }
+
+            // Get total count
+            $countSql = "
+                SELECT COUNT(DISTINCT ec.code) 
+                FROM ext_clients ec
+                LEFT JOIN vpn_clients vc ON vc.ext_client_code = ec.code
+                {$whereSql}
+            ";
+            $stmtCount = $pdo->prepare($countSql);
+            $stmtCount->execute($queryParams);
+            $totalCount = (int)$stmtCount->fetchColumn();
+
+            // Fetch list
+            $selectSql = "
+                SELECT DISTINCT ec.code AS \"Code\", ec.name, ec.start_date, ec.sub, ec.func, ec.router
+                FROM ext_clients ec
+                LEFT JOIN vpn_clients vc ON vc.ext_client_code = ec.code
+                {$whereSql}
+                ORDER BY {$orderBy}
+                LIMIT ? OFFSET ?
+            ";
+            $stmt = $pdo->prepare($selectSql);
+            $paramIndex = 1;
+            foreach ($queryParams as $val) {
+                $stmt->bindValue($paramIndex++, $val, PDO::PARAM_STR);
+            }
+            $stmt->bindValue($paramIndex++, $perPage, PDO::PARAM_INT);
+            $stmt->bindValue($paramIndex++, $offset, PDO::PARAM_INT);
+            $stmt->execute();
+            $rawCodes = $stmt->fetchAll();
         }
         $totalPages = max(1, (int)ceil($totalCount / $perPage));
 
@@ -743,6 +808,9 @@ Router::get('/clients', function () {
         'total_pages'  => $totalPages,
         'current_page' => $page,
         'search'       => $search,
+        'filter'       => $filter,
+        'sort'         => $sort,
+        'last_sync'    => $lastSync,
         'code_filter'  => $codeFilter,
         'code_configs' => $codeConfigs,
         'all_servers'  => $allServers,
@@ -809,6 +877,12 @@ Router::post('/api/ext-clients/sync', function () {
             }
         }
         $myPdo->commit();
+
+        // Store last sync timestamp
+        try {
+            $myPdo->prepare("INSERT INTO system_settings (`key`, `value`) VALUES ('last_ext_clients_sync', ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)")
+                  ->execute([date('Y-m-d H:i:s')]);
+        } catch (Throwable $e) {}
 
         echo json_encode(['success' => true, 'count' => $syncedCount]);
     } catch (Throwable $e) {

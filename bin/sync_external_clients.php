@@ -61,6 +61,15 @@ try {
     }
     
     $myPdo->commit();
+
+    // Store last sync timestamp
+    try {
+        $myPdo->prepare("INSERT INTO system_settings (`key`, `value`) VALUES ('last_ext_clients_sync', ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)")
+              ->execute([date('Y-m-d H:i:s')]);
+    } catch (Throwable $e) {
+        echo $logPrefix . "WARNING: Failed to save sync timestamp: " . $e->getMessage() . "\n";
+    }
+
     echo $logPrefix . "Successfully synchronized {$syncedCount} clients to MySQL cached ext_clients table.\n";
     exit(0);
 

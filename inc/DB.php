@@ -133,6 +133,23 @@ class DB {
           $pdo->exec($sql);
         }
       }
+
+      // Check if system_settings table exists
+      try {
+        $stmtSettings = $pdo->query("SHOW TABLES LIKE 'system_settings'");
+        $hasSettingsTable = $stmtSettings->rowCount() > 0;
+      } catch (Throwable $e) {
+        $hasSettingsTable = false;
+      }
+
+      if (!$hasSettingsTable) {
+        // Run migration to create system_settings table
+        $sqlPath = __DIR__ . '/../migrations/024_create_settings_table.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
     } catch (Throwable $e) {
       error_log("Database self-healing migration failed: " . $e->getMessage());
     }

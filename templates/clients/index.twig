@@ -22,6 +22,9 @@
             <p class="mt-1 text-sm text-slate-500">
                 Clients from external DB &mdash;
                 <span class="text-slate-400 font-mono">{{ total_count }}</span> total
+                {% if last_sync %}
+                    &middot; <span class="text-slate-400 text-xs" title="Last cache update"><i class="fas fa-clock mr-1"></i>Last synced: {{ last_sync }}</span>
+                {% endif %}
                 {% if ext_db_error %}
                     &middot; <span class="text-red-400 text-xs"><i class="fas fa-exclamation-triangle mr-1"></i>External DB unavailable</span>
                 {% endif %}
@@ -31,6 +34,8 @@
         {# Search form #}
         <div class="flex flex-wrap sm:flex-nowrap gap-2 w-full sm:w-auto items-center">
             <form method="GET" action="/clients" class="flex gap-2 flex-1 sm:flex-initial" id="searchForm">
+                <input type="hidden" name="filter" value="{{ filter }}">
+                <input type="hidden" name="sort" value="{{ sort }}">
                 <div class="relative flex-1 sm:w-64">
                     <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs pointer-events-none" id="searchIcon"></i>
                     <input
@@ -74,6 +79,44 @@
         </div>
     </div>
     {% endif %}
+
+    {# ─── Filtering & Sorting Controls ─── #}
+    <div class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/30 p-4 border border-slate-800/80 rounded-xl backdrop-blur-sm">
+        {# Status Filters #}
+        <div class="flex flex-wrap gap-1.5">
+            <a href="/clients?filter=all&sort={{ sort }}&search={{ search|url_encode }}"
+               class="px-3.5 py-1.5 rounded-lg text-xs font-medium border transition-all {% if filter == 'all' or filter == '' %}bg-indigo-600 text-white border-indigo-500 font-semibold{% else %}bg-slate-800/40 border-slate-750 text-slate-400 hover:text-slate-200 hover:bg-slate-800{% endif %}">
+                All
+            </a>
+            <a href="/clients?filter=active&sort={{ sort }}&search={{ search|url_encode }}"
+               class="px-3.5 py-1.5 rounded-lg text-xs font-medium border transition-all {% if filter == 'active' %}bg-emerald-600 text-white border-emerald-500 font-semibold{% else %}bg-slate-800/40 border-slate-750 text-emerald-400 hover:text-emerald-300 hover:bg-slate-800{% endif %}">
+                <i class="fas fa-calendar-check mr-1"></i>Active
+            </a>
+            <a href="/clients?filter=expiring&sort={{ sort }}&search={{ search|url_encode }}"
+               class="px-3.5 py-1.5 rounded-lg text-xs font-medium border transition-all {% if filter == 'expiring' %}bg-amber-600 text-white border-amber-500 font-semibold{% else %}bg-slate-800/40 border-slate-750 text-amber-400 hover:text-amber-300 hover:bg-slate-800{% endif %}">
+                <i class="fas fa-calendar-minus mr-1"></i>Expiring Soon
+            </a>
+            <a href="/clients?filter=expired&sort={{ sort }}&search={{ search|url_encode }}"
+               class="px-3.5 py-1.5 rounded-lg text-xs font-medium border transition-all {% if filter == 'expired' %}bg-rose-600 text-white border-rose-500 font-semibold{% else %}bg-slate-800/40 border-slate-750 text-rose-400 hover:text-rose-300 hover:bg-slate-800{% endif %}">
+                <i class="fas fa-calendar-times mr-1"></i>Expired
+            </a>
+            <a href="/clients?filter=paused&sort={{ sort }}&search={{ search|url_encode }}"
+               class="px-3.5 py-1.5 rounded-lg text-xs font-medium border transition-all {% if filter == 'paused' %}bg-sky-600 text-white border-sky-500 font-semibold{% else %}bg-slate-800/40 border-slate-750 text-sky-400 hover:text-sky-300 hover:bg-slate-800{% endif %}">
+                <i class="fas fa-pause-circle mr-1"></i>Paused
+            </a>
+        </div>
+
+        {# Sort Selector #}
+        <div class="flex items-center gap-2">
+            <span class="text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Sort by:</span>
+            <select onchange="window.location.href='/clients?filter={{ filter }}&search={{ search|url_encode }}&sort=' + this.value"
+                    class="bg-slate-900 border border-slate-750 rounded-lg text-xs text-slate-300 px-3 py-1.5 focus:outline-none focus:border-indigo-500 cursor-pointer min-w-[170px]">
+                <option value="code" {% if sort == 'code' or sort == '' %}selected{% endif %}>Client Code (A-Z)</option>
+                <option value="expiry_asc" {% if sort == 'expiry_asc' %}selected{% endif %}>Expiration (Soonest first)</option>
+                <option value="expiry_desc" {% if sort == 'expiry_desc' %}selected{% endif %}>Expiration (Latest first)</option>
+            </select>
+        </div>
+    </div>
 
     {# ─── Clients Grid ─── #}
     {% if clients is empty %}
@@ -198,7 +241,7 @@
     <div class="flex items-center justify-center gap-1.5 mt-8 flex-wrap">
         {# Prev Button #}
         {% if current_page > 1 %}
-        <a href="/clients?search={{ search|url_encode }}&page={{ current_page - 1 }}"
+        <a href="/clients?search={{ search|url_encode }}&filter={{ filter }}&sort={{ sort }}&page={{ current_page - 1 }}"
            class="px-3 py-1.5 rounded-lg bg-slate-800/60 hover:bg-slate-700 text-xs text-slate-300 hover:text-white border border-slate-700/60 transition-all mr-1">
             <i class="fas fa-chevron-left"></i>
         </a>
@@ -218,7 +261,7 @@
         {% endif %}
 
         {% if start_page > 1 %}
-        <a href="/clients?search={{ search|url_encode }}&page=1"
+        <a href="/clients?search={{ search|url_encode }}&filter={{ filter }}&sort={{ sort }}&page=1"
            class="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-800/40 hover:bg-slate-700 text-xs text-slate-400 hover:text-white border border-slate-750/60 transition-all font-mono">1</a>
         {% if start_page > 2 %}
         <span class="text-slate-650 px-0.5 text-xs font-mono select-none">...</span>
@@ -226,7 +269,7 @@
         {% endif %}
 
         {% for p in start_page..end_page %}
-        <a href="/clients?search={{ search|url_encode }}&page={{ p }}"
+        <a href="/clients?search={{ search|url_encode }}&filter={{ filter }}&sort={{ sort }}&page={{ p }}"
            class="w-8 h-8 flex items-center justify-center rounded-lg text-xs border transition-all font-mono {% if p == current_page %}bg-indigo-600 text-white border-indigo-500 font-bold{% else %}bg-slate-800/40 hover:bg-slate-700 text-slate-400 hover:text-white border-slate-750/60{% endif %}">
             {{ p }}
         </a>
@@ -236,13 +279,13 @@
         {% if end_page < total_pages - 1 %}
         <span class="text-slate-655 px-0.5 text-xs font-mono select-none">...</span>
         {% endif %}
-        <a href="/clients?search={{ search|url_encode }}&page={{ total_pages }}"
+        <a href="/clients?search={{ search|url_encode }}&filter={{ filter }}&sort={{ sort }}&page={{ total_pages }}"
            class="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-800/40 hover:bg-slate-700 text-xs text-slate-400 hover:text-white border border-slate-750/60 transition-all font-mono">{{ total_pages }}</a>
         {% endif %}
 
         {# Next Button #}
         {% if current_page < total_pages %}
-        <a href="/clients?search={{ search|url_encode }}&page={{ current_page + 1 }}"
+        <a href="/clients?search={{ search|url_encode }}&filter={{ filter }}&sort={{ sort }}&page={{ current_page + 1 }}"
            class="px-3 py-1.5 rounded-lg bg-slate-800/60 hover:bg-slate-700 text-xs text-slate-300 hover:text-white border border-slate-700/60 transition-all ml-1">
             <i class="fas fa-chevron-right"></i>
         </a>

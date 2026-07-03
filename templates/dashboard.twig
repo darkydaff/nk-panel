@@ -106,6 +106,59 @@
         </div>
     </div>
 
+    <!-- Subscription Health Section -->
+    <div class="panel border-slate-800/60 bg-slate-900/40 p-5 space-y-4">
+        <div>
+            <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Subscription Health Overview</h3>
+            <p class="text-xs text-slate-500 mt-1">Sync status of client subscriptions from external DB. Click card to view list.</p>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <!-- Active Subscriptions -->
+            <a href="/clients?filter=active" class="panel p-4 border-slate-800 bg-slate-900/60 hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all flex items-center gap-4 group">
+                <div class="w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0 group-hover:bg-emerald-500/20 transition-all">
+                    <i class="fas fa-calendar-check text-base"></i>
+                </div>
+                <div>
+                    <div class="text-2xl font-bold text-white font-mono">{{ sub_stats.active }}</div>
+                    <div class="text-[11px] text-slate-500 font-medium group-hover:text-slate-400 transition-colors">Active (10+ days)</div>
+                </div>
+            </a>
+
+            <!-- Expiring Soon -->
+            <a href="/clients?filter=expiring" class="panel p-4 border-slate-800 bg-slate-900/60 hover:border-amber-500/30 hover:bg-amber-500/5 transition-all flex items-center gap-4 group">
+                <div class="w-10 h-10 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0 group-hover:bg-amber-500/20 transition-all">
+                    <i class="fas fa-calendar-minus text-base animate-pulse"></i>
+                </div>
+                <div>
+                    <div class="text-2xl font-bold text-white font-mono">{{ sub_stats.expiring_soon }}</div>
+                    <div class="text-[11px] text-slate-500 font-medium group-hover:text-slate-400 transition-colors">Expiring Soon</div>
+                </div>
+            </a>
+
+            <!-- Expired -->
+            <a href="/clients?filter=expired" class="panel p-4 border-slate-800 bg-slate-900/60 hover:border-rose-500/30 hover:bg-rose-500/5 transition-all flex items-center gap-4 group">
+                <div class="w-10 h-10 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center shrink-0 group-hover:bg-rose-500/20 transition-all">
+                    <i class="fas fa-calendar-times text-base"></i>
+                </div>
+                <div>
+                    <div class="text-2xl font-bold text-white font-mono">{{ sub_stats.expired }}</div>
+                    <div class="text-[11px] text-slate-500 font-medium group-hover:text-slate-400 transition-colors">Expired</div>
+                </div>
+            </a>
+
+            <!-- Paused -->
+            <a href="/clients?filter=paused" class="panel p-4 border-slate-800 bg-slate-900/60 hover:border-sky-500/30 hover:bg-sky-500/5 transition-all flex items-center gap-4 group">
+                <div class="w-10 h-10 rounded-lg bg-sky-500/10 text-sky-400 flex items-center justify-center shrink-0 group-hover:bg-sky-500/20 transition-all">
+                    <i class="fas fa-pause-circle text-base"></i>
+                </div>
+                <div>
+                    <div class="text-2xl font-bold text-white font-mono">{{ sub_stats.paused }}</div>
+                    <div class="text-[11px] text-slate-500 font-medium group-hover:text-slate-400 transition-colors">Paused</div>
+                </div>
+            </a>
+        </div>
+    </div>
+
     <!-- Network Traffic & Bandwidth Chart Panel -->
     <div class="panel border-slate-800/60 bg-slate-900/60 backdrop-blur p-5 space-y-4">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
