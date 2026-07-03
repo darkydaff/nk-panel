@@ -1080,6 +1080,41 @@ public static function getClientsOverLimit(): array {
     }
 
     /**
+     * Find a matching external client code for a given configuration name
+     * by resolving substring matches and preventing prefix collisions.
+     */
+    public static function findMatchingCode(string $clientName): ?string {
+        $clientName = trim($clientName);
+        if ($clientName === '') return null;
+        
+        $pdo = DB::conn();
+        $stmtExt = $pdo->query('SELECT code FROM ext_clients');
+        $extClients = $stmtExt->fetchAll(PDO::FETCH_COLUMN);
+        if (empty($extClients)) {
+            return null;
+        }
+        
+        // Sort codes by length descending to match longer ones first (e.g., #0000nk before #0000)
+        usort($extClients, function($a, $b) {
+            return strlen($b) <=> strlen($a);
+        });
+        
+        $cleanName = strtolower(str_replace(['#', '_', '-'], '', $clientName));
+        if ($cleanName === '') return null;
+        
+        foreach ($extClients as $code) {
+            $cleanCode = strtolower(str_replace(['#', '_', '-'], '', $code));
+            if ($cleanCode === '') continue;
+            
+            if (strpos($cleanName, $cleanCode) !== false) {
+                return $code;
+            }
+        }
+        
+        return null;
+    }
+
+    /**
      * Automatically link all unlinked configurations (where ext_client_code IS NULL)
      * to external clients in the cache table using fuzzy code/name matching.
      */
@@ -1093,41 +1128,21 @@ public static function getClientsOverLimit(): array {
             return 0;
         }
         
-        // Fetch all external client codes from the cache
-        $stmtExt = $pdo->query('SELECT code FROM ext_clients');
-        $extClients = $stmtExt->fetchAll(PDO::FETCH_COLUMN);
-        if (empty($extClients)) {
-            return 0;
-        }
-        
         $linkedCount = 0;
         $stmtUpdate = $pdo->prepare('UPDATE vpn_clients SET ext_client_code = ? WHERE id = ?');
         
         foreach ($unlinkedClients as $client) {
-            $clientName = trim($client['name']);
-            if ($clientName === '') continue;
-            
-            // Clean client config name
-            $cleanName = strtolower(str_replace(['#', '_', '-'], '', $clientName));
-            if ($cleanName === '') continue;
-            
-            foreach ($extClients as $code) {
-                $cleanCode = strtolower(str_replace(['#', '_', '-'], '', $code));
-                if ($cleanCode === '') continue;
+            $matchingCode = self::findMatchingCode($client['name']);
+            if ($matchingCode !== null) {
+                $stmtUpdate->execute([$matchingCode, $client['id']]);
                 
-                // If config name contains clean code
-                if (strpos($cleanName, $cleanCode) !== false) {
-                    $stmtUpdate->execute([$code, $client['id']]);
-                    
-                    // Also trigger statistics sync for this newly linked client
-                    try {
-                        $vpnClient = new VpnClient($client['id']);
-                        $vpnClient->syncStats();
-                    } catch (Throwable $e) {}
-                    
-                    $linkedCount++;
-                    break; // Link to the first matching external client code
-                }
+                // Also trigger statistics sync for this newly linked client
+                try {
+                    $vpnClient = new VpnClient($client['id']);
+                    $vpnClient->syncStats();
+                } catch (Throwable $e) {}
+                
+                $linkedCount++;
             }
         }
         

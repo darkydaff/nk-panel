@@ -597,20 +597,27 @@ Router::post('/servers/{id}/clients/create', function ($params) {
             $client->setTrafficLimit($trafficLimitBytes);
         }
 
-        // Link to external client code if provided and valid
+        // Link to external client code if provided, otherwise try auto-linking
         $extClientCode = trim($_POST['ext_client_code'] ?? '');
         if ($extClientCode !== '') {
             try {
                 $pdo = DB::conn();
-                // Validate the code exists in local cached DB
-                $stmtLoc = $pdo->prepare('SELECT 1 FROM ext_clients WHERE code = ? LIMIT 1');
-                $stmtLoc->execute([$extClientCode]);
-                if ($stmtLoc->fetchColumn() !== false) {
+                $stmt = $pdo->prepare('UPDATE vpn_clients SET ext_client_code = ? WHERE id = ?');
+                $stmt->execute([$extClientCode, $clientId]);
+            } catch (Throwable $e) {
+                error_log('Manual link failed for client ' . $clientId . ': ' . $e->getMessage());
+            }
+        } else {
+            // Try auto-linking
+            try {
+                $matchingCode = VpnClient::findMatchingCode($clientName);
+                if ($matchingCode !== null) {
+                    $pdo = DB::conn();
                     $stmt = $pdo->prepare('UPDATE vpn_clients SET ext_client_code = ? WHERE id = ?');
-                    $stmt->execute([$extClientCode, $clientId]);
+                    $stmt->execute([$matchingCode, $clientId]);
                 }
             } catch (Throwable $e) {
-                error_log('Local cache link failed for client ' . $clientId . ': ' . $e->getMessage());
+                error_log('Auto-link on create failed for client ' . $clientId . ': ' . $e->getMessage());
             }
         }
         
