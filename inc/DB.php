@@ -116,6 +116,23 @@ class DB {
           $pdo->exec($sql);
         }
       }
+
+      // Check if func column exists in ext_clients
+      try {
+        $stmtExtCols2 = $pdo->query("SHOW COLUMNS FROM ext_clients LIKE 'func'");
+        $hasFuncCol = $stmtExtCols2->rowCount() > 0;
+      } catch (Throwable $e) {
+        $hasFuncCol = false;
+      }
+
+      if (!$hasFuncCol) {
+        // Run migration to add func and router fields
+        $sqlPath = __DIR__ . '/../migrations/023_add_func_to_ext_clients.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
     } catch (Throwable $e) {
       error_log("Database self-healing migration failed: " . $e->getMessage());
     }

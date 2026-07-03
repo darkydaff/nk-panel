@@ -25,7 +25,7 @@ try {
         throw new Exception("External PostgreSQL database is unreachable.");
     }
 
-    $stmt = $pgPdo->query("SELECT \"Code\", \"Name\", \"Start_Date\", \"Sub\" FROM \"{$table}\" WHERE \"Code\" IS NOT NULL");
+    $stmt = $pgPdo->query("SELECT \"Code\", \"Name\", \"Start_Date\", \"Sub\", \"Func\", \"Router\" FROM \"{$table}\" WHERE \"Code\" IS NOT NULL");
     $rawClients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     echo $logPrefix . "Fetched " . count($rawClients) . " records from external PostgreSQL.\n";
@@ -41,7 +41,7 @@ try {
     
     // Batch insert new codes
     if (!empty($rawClients)) {
-        $insertStmt = $myPdo->prepare('INSERT INTO ext_clients (code, name, start_date, sub) VALUES (?, ?, ?, ?)');
+        $insertStmt = $myPdo->prepare('INSERT INTO ext_clients (code, name, start_date, sub, func, router) VALUES (?, ?, ?, ?, ?, ?)');
         $syncedCount = 0;
         foreach ($rawClients as $row) {
             $code = trim($row['Code'] ?? '');
@@ -52,8 +52,10 @@ try {
             $startDate = isset($row['Start_Date']) ? trim($row['Start_Date']) : null;
             if ($startDate === '') $startDate = null;
             $sub = isset($row['Sub']) ? (int)$row['Sub'] : null;
+            $func = isset($row['Func']) ? trim($row['Func']) : null;
+            $router = isset($row['Router']) ? trim($row['Router']) : null;
 
-            $insertStmt->execute([$code, $name, $startDate, $sub]);
+            $insertStmt->execute([$code, $name, $startDate, $sub, $func, $router]);
             $syncedCount++;
         }
     }

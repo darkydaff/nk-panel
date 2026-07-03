@@ -618,12 +618,12 @@ Router::get('/clients', function () {
         $pdo = DB::conn();
         if ($codeFilter !== '') {
             // Exact match for the code filter
-            $stmt = $pdo->prepare('SELECT code, name, start_date, sub FROM ext_clients WHERE code = ? LIMIT 1');
+            $stmt = $pdo->prepare('SELECT code, name, start_date, sub, func, router FROM ext_clients WHERE code = ? LIMIT 1');
             $stmt->execute([$codeFilter]);
             $rowExt = $stmt->fetch();
             if ($rowExt) {
                 $totalCount = 1;
-                $rawCodes   = [['Code' => $codeFilter, 'name' => $rowExt['name'], 'start_date' => $rowExt['start_date'], 'sub' => $rowExt['sub']]];
+                $rawCodes   = [['Code' => $codeFilter, 'name' => $rowExt['name'], 'start_date' => $rowExt['start_date'], 'sub' => $rowExt['sub'], 'func' => $rowExt['func'], 'router' => $rowExt['router']]];
             } else {
                 $totalCount = 0;
                 $rawCodes   = [];
@@ -631,21 +631,21 @@ Router::get('/clients', function () {
         } else {
             // Standard search (LIKE match)
             if ($search !== '') {
-                // Search matching local vpn_clients name/IP or ext_clients code/name
+                // Search matching local vpn_clients name/IP or ext_clients code/name/router
                 $stmtCount = $pdo->prepare('
                     SELECT COUNT(DISTINCT ec.code) 
                     FROM ext_clients ec
                     LEFT JOIN vpn_clients vc ON vc.ext_client_code = ec.code
-                    WHERE ec.code LIKE :q OR ec.name LIKE :q OR vc.name LIKE :q OR vc.client_ip LIKE :q
+                    WHERE ec.code LIKE :q OR ec.name LIKE :q OR ec.router LIKE :q OR vc.name LIKE :q OR vc.client_ip LIKE :q
                 ');
                 $stmtCount->execute(['q' => '%' . $search . '%']);
                 $totalCount = (int)$stmtCount->fetchColumn();
 
                 $stmt = $pdo->prepare('
-                    SELECT DISTINCT ec.code AS "Code", ec.name, ec.start_date, ec.sub 
+                    SELECT DISTINCT ec.code AS "Code", ec.name, ec.start_date, ec.sub, ec.func, ec.router
                     FROM ext_clients ec
                     LEFT JOIN vpn_clients vc ON vc.ext_client_code = ec.code
-                    WHERE ec.code LIKE :q OR ec.name LIKE :q OR vc.name LIKE :q OR vc.client_ip LIKE :q
+                    WHERE ec.code LIKE :q OR ec.name LIKE :q OR ec.router LIKE :q OR vc.name LIKE :q OR vc.client_ip LIKE :q
                     ORDER BY ec.code 
                     LIMIT :limit OFFSET :offset
                 ');
@@ -657,7 +657,7 @@ Router::get('/clients', function () {
             } else {
                 $totalCount = (int)$pdo->query('SELECT COUNT(*) FROM ext_clients')->fetchColumn();
 
-                $stmt = $pdo->prepare('SELECT code AS "Code", name, start_date, sub FROM ext_clients ORDER BY code LIMIT ? OFFSET ?');
+                $stmt = $pdo->prepare('SELECT code AS "Code", name, start_date, sub, func, router FROM ext_clients ORDER BY code LIMIT ? OFFSET ?');
                 $stmt->bindValue(1, $perPage, PDO::PARAM_INT);
                 $stmt->bindValue(2, $offset, PDO::PARAM_INT);
                 $stmt->execute();
@@ -679,21 +679,26 @@ Router::get('/clients', function () {
             $stmt->execute([$code]);
             $configs = $stmt->fetchAll();
 
-            // Calculate subscription expiry
+            // Calculate subscription expiry ONLY if Func is WORK
             $expiryDate = null;
             $daysLeft = null;
-            $startDate = $row['start_date'] ?? null;
-            $sub = $row['sub'] ?? null;
-            if ($startDate && $sub !== null && $sub > 0) {
-                $daysToAdd = (int)$sub * 30;
-                $expiryTimestamp = strtotime($startDate . " + $daysToAdd days");
-                $expiryDate = date('Y-m-d', $expiryTimestamp);
-                $daysLeft = (int)round(($expiryTimestamp - strtotime(date('Y-m-d'))) / 86400);
+            $func = $row['func'] ?? null;
+            if ($func !== null && strtoupper($func) === 'WORK') {
+                $startDate = $row['start_date'] ?? null;
+                $sub = $row['sub'] ?? null;
+                if ($startDate && $sub !== null && $sub > 0) {
+                    $daysToAdd = (int)$sub * 30;
+                    $expiryTimestamp = strtotime($startDate . " + $daysToAdd days");
+                    $expiryDate = date('Y-m-d', $expiryTimestamp);
+                    $daysLeft = (int)round(($expiryTimestamp - strtotime(date('Y-m-d'))) / 86400);
+                }
             }
 
             $clients[] = [
                 'Code'         => $code,
                 'Name'         => $row['name'] ?? null,
+                'Func'         => $row['func'] ?? null,
+                'Router'       => $row['router'] ?? null,
                 'ExpiryDate'   => $expiryDate,
                 'DaysLeft'     => $daysLeft,
                 'configs'      => $configs,
@@ -775,14 +780,14 @@ Router::post('/api/ext-clients/sync', function () {
         $pgPdo = ExtDB::conn();
         $table = Config::get('EXT_PG_CLIENTS_TABLE', 'Clients');
 
-        $stmt = $pgPdo->query("SELECT \"Code\", \"Name\", \"Start_Date\", \"Sub\" FROM \"{$table}\" WHERE \"Code\" IS NOT NULL");
+        $stmt = $pgPdo->query("SELECT \"Code\", \"Name\", \"Start_Date\", \"Sub\", \"Func\", \"Router\" FROM \"{$table}\" WHERE \"Code\" IS NOT NULL");
         $rawClients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $myPdo = DB::conn();
         $myPdo->beginTransaction();
         $myPdo->exec('DELETE FROM ext_clients');
         if (!empty($rawClients)) {
-            $insertStmt = $myPdo->prepare('INSERT INTO ext_clients (code, name, start_date, sub) VALUES (?, ?, ?, ?)');
+            $insertStmt = $myPdo->prepare('INSERT INTO ext_clients (code, name, start_date, sub, func, router) VALUES (?, ?, ?, ?, ?, ?)');
             $syncedCount = 0;
             foreach ($rawClients as $row) {
                 $code = trim($row['Code'] ?? '');
@@ -791,8 +796,10 @@ Router::post('/api/ext-clients/sync', function () {
                 $startDate = isset($row['Start_Date']) ? trim($row['Start_Date']) : null;
                 if ($startDate === '') $startDate = null;
                 $sub = isset($row['Sub']) ? (int)$row['Sub'] : null;
+                $func = isset($row['Func']) ? trim($row['Func']) : null;
+                $router = isset($row['Router']) ? trim($row['Router']) : null;
 
-                $insertStmt->execute([$code, $name, $startDate, $sub]);
+                $insertStmt->execute([$code, $name, $startDate, $sub, $func, $router]);
                 $syncedCount++;
             }
         }
@@ -840,13 +847,16 @@ Router::get('/clients/{id}', function ($params) {
             if ($rowExt) {
                 $expiryDate = null;
                 $daysLeft = null;
-                $startDate = $rowExt['start_date'] ?? null;
-                $sub = $rowExt['sub'] ?? null;
-                if ($startDate && $sub !== null && $sub > 0) {
-                    $daysToAdd = (int)$sub * 30;
-                    $expiryTimestamp = strtotime($startDate . " + $daysToAdd days");
-                    $expiryDate = date('Y-m-d', $expiryTimestamp);
-                    $daysLeft = (int)round(($expiryTimestamp - strtotime(date('Y-m-d'))) / 86400);
+                $func = $rowExt['func'] ?? null;
+                if ($func !== null && strtoupper($func) === 'WORK') {
+                    $startDate = $rowExt['start_date'] ?? null;
+                    $sub = $rowExt['sub'] ?? null;
+                    if ($startDate && $sub !== null && $sub > 0) {
+                        $daysToAdd = (int)$sub * 30;
+                        $expiryTimestamp = strtotime($startDate . " + $daysToAdd days");
+                        $expiryDate = date('Y-m-d', $expiryTimestamp);
+                        $daysLeft = (int)round(($expiryTimestamp - strtotime(date('Y-m-d'))) / 86400);
+                    }
                 }
 
                 $extClient = [
@@ -854,6 +864,8 @@ Router::get('/clients/{id}', function ($params) {
                     'name'        => $rowExt['name'],
                     'start_date'  => $rowExt['start_date'],
                     'sub'         => $rowExt['sub'],
+                    'func'        => $rowExt['func'],
+                    'router'      => $rowExt['router'],
                     'expiry_date' => $expiryDate,
                     'days_left'   => $daysLeft,
                 ];

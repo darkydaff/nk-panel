@@ -111,29 +111,43 @@
                 </span>
             </div>
 
-            {# Subscription status badge #}
-            <div class="mb-4 text-xs">
-                {% if client.ExpiryDate %}
+            {# Subscription status & Router model info #}
+            <div class="mb-4 flex flex-wrap gap-2 items-center">
+                {# Expiry/Status Badge #}
+                {% if client.Func == 'PAUSE' %}
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-sky-500/10 text-sky-400 border border-sky-500/20 font-medium text-xs">
+                        <i class="fas fa-pause-circle text-[10px]"></i>
+                        <span>Paused</span>
+                    </span>
+                {% elseif client.ExpiryDate %}
                     {% if client.DaysLeft > 10 %}
-                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium text-xs">
                             <i class="fas fa-calendar-check text-[10px]"></i>
                             <span>Expires: {{ client.ExpiryDate }} ({{ client.DaysLeft }} days left)</span>
                         </span>
                     {% elseif client.DaysLeft > 0 %}
-                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium animate-pulse">
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium text-xs animate-pulse">
                             <i class="fas fa-calendar-minus text-[10px]"></i>
                             <span>Expires soon: {{ client.ExpiryDate }} ({{ client.DaysLeft }} days left)</span>
                         </span>
                     {% else %}
-                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/20 font-medium">
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/20 font-medium text-xs">
                             <i class="fas fa-calendar-times text-[10px]"></i>
                             <span>{% if client.DaysLeft == 0 %}Expired today!{% else %}Expired: {{ client.ExpiryDate }} ({{ client.DaysLeft|abs }} days ago){% endif %}</span>
                         </span>
                     {% endif %}
                 {% else %}
-                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800 text-slate-500 border border-slate-750 font-medium">
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800 text-slate-500 border border-slate-750 font-medium text-xs">
                         <i class="fas fa-calendar-alt text-[10px] opacity-60"></i>
                         <span>No subscription data</span>
+                    </span>
+                {% endif %}
+
+                {# Router model badge if exists #}
+                {% if client.Router %}
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800/80 text-slate-400 border border-slate-700/50 text-[10px] font-mono" title="Router model">
+                        <i class="fas fa-network-wired text-[8px] opacity-75"></i>
+                        <span>{{ client.Router }}</span>
                     </span>
                 {% endif %}
             </div>
