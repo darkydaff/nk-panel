@@ -615,15 +615,15 @@ Router::get('/clients', function () {
         $extDbError = $e->getMessage();
     }
 
-    try {
         $pdo = DB::conn();
         if ($codeFilter !== '') {
             // Exact match for the code filter
-            $stmt = $pdo->prepare('SELECT 1 FROM ext_clients WHERE code = ? LIMIT 1');
+            $stmt = $pdo->prepare('SELECT code, name, start_date, sub FROM ext_clients WHERE code = ? LIMIT 1');
             $stmt->execute([$codeFilter]);
-            if ($stmt->fetchColumn() !== false) {
+            $rowExt = $stmt->fetch();
+            if ($rowExt) {
                 $totalCount = 1;
-                $rawCodes   = [['Code' => $codeFilter]];
+                $rawCodes   = [['Code' => $codeFilter, 'name' => $rowExt['name'], 'start_date' => $rowExt['start_date'], 'sub' => $rowExt['sub']]];
             } else {
                 $totalCount = 0;
                 $rawCodes   = [];
@@ -631,20 +631,33 @@ Router::get('/clients', function () {
         } else {
             // Standard search (LIKE match)
             if ($search !== '') {
-                $stmtCount = $pdo->prepare('SELECT COUNT(*) FROM ext_clients WHERE code LIKE ?');
-                $stmtCount->execute(['%' . $search . '%']);
+                // Search matching local vpn_clients name/IP or ext_clients code/name
+                $stmtCount = $pdo->prepare('
+                    SELECT COUNT(DISTINCT ec.code) 
+                    FROM ext_clients ec
+                    LEFT JOIN vpn_clients vc ON vc.ext_client_code = ec.code
+                    WHERE ec.code LIKE :q OR ec.name LIKE :q OR vc.name LIKE :q OR vc.client_ip LIKE :q
+                ');
+                $stmtCount->execute(['q' => '%' . $search . '%']);
                 $totalCount = (int)$stmtCount->fetchColumn();
 
-                $stmt = $pdo->prepare('SELECT code AS "Code" FROM ext_clients WHERE code LIKE ? ORDER BY code LIMIT ? OFFSET ?');
-                $stmt->bindValue(1, '%' . $search . '%', PDO::PARAM_STR);
-                $stmt->bindValue(2, $perPage, PDO::PARAM_INT);
-                $stmt->bindValue(3, $offset, PDO::PARAM_INT);
+                $stmt = $pdo->prepare('
+                    SELECT DISTINCT ec.code AS "Code", ec.name, ec.start_date, ec.sub 
+                    FROM ext_clients ec
+                    LEFT JOIN vpn_clients vc ON vc.ext_client_code = ec.code
+                    WHERE ec.code LIKE :q OR ec.name LIKE :q OR vc.name LIKE :q OR vc.client_ip LIKE :q
+                    ORDER BY ec.code 
+                    LIMIT :limit OFFSET :offset
+                ');
+                $stmt->bindValue('q', '%' . $search . '%', PDO::PARAM_STR);
+                $stmt->bindValue('limit', $perPage, PDO::PARAM_INT);
+                $stmt->bindValue('offset', $offset, PDO::PARAM_INT);
                 $stmt->execute();
                 $rawCodes = $stmt->fetchAll();
             } else {
                 $totalCount = (int)$pdo->query('SELECT COUNT(*) FROM ext_clients')->fetchColumn();
 
-                $stmt = $pdo->prepare('SELECT code AS "Code" FROM ext_clients ORDER BY code LIMIT ? OFFSET ?');
+                $stmt = $pdo->prepare('SELECT code AS "Code", name, start_date, sub FROM ext_clients ORDER BY code LIMIT ? OFFSET ?');
                 $stmt->bindValue(1, $perPage, PDO::PARAM_INT);
                 $stmt->bindValue(2, $offset, PDO::PARAM_INT);
                 $stmt->execute();
@@ -666,8 +679,23 @@ Router::get('/clients', function () {
             $stmt->execute([$code]);
             $configs = $stmt->fetchAll();
 
+            // Calculate subscription expiry
+            $expiryDate = null;
+            $daysLeft = null;
+            $startDate = $row['start_date'] ?? null;
+            $sub = $row['sub'] ?? null;
+            if ($startDate && $sub !== null && $sub > 0) {
+                $daysToAdd = (int)$sub * 30;
+                $expiryTimestamp = strtotime($startDate . " + $daysToAdd days");
+                $expiryDate = date('Y-m-d', $expiryTimestamp);
+                $daysLeft = (int)round(($expiryTimestamp - strtotime(date('Y-m-d'))) / 86400);
+            }
+
             $clients[] = [
                 'Code'         => $code,
+                'Name'         => $row['name'] ?? null,
+                'ExpiryDate'   => $expiryDate,
+                'DaysLeft'     => $daysLeft,
                 'configs'      => $configs,
                 'config_count' => count($configs),
             ];
@@ -747,23 +775,30 @@ Router::post('/api/ext-clients/sync', function () {
         $pgPdo = ExtDB::conn();
         $table = Config::get('EXT_PG_CLIENTS_TABLE', 'Clients');
 
-        $stmt = $pgPdo->query("SELECT \"Code\" FROM \"{$table}\" WHERE \"Code\" IS NOT NULL");
-        $rawCodes = $stmt->fetchAll(PDO::FETCH_COLUMN);
-        $codes = array_map('trim', $rawCodes);
-        $codes = array_filter($codes);
+        $stmt = $pgPdo->query("SELECT \"Code\", \"Name\", \"Start_Date\", \"Sub\" FROM \"{$table}\" WHERE \"Code\" IS NOT NULL");
+        $rawClients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $myPdo = DB::conn();
         $myPdo->beginTransaction();
         $myPdo->exec('DELETE FROM ext_clients');
-        if (!empty($codes)) {
-            $insertStmt = $myPdo->prepare('INSERT INTO ext_clients (code) VALUES (?)');
-            foreach ($codes as $code) {
-                $insertStmt->execute([$code]);
+        if (!empty($rawClients)) {
+            $insertStmt = $myPdo->prepare('INSERT INTO ext_clients (code, name, start_date, sub) VALUES (?, ?, ?, ?)');
+            $syncedCount = 0;
+            foreach ($rawClients as $row) {
+                $code = trim($row['Code'] ?? '');
+                if ($code === '') continue;
+                $name = isset($row['Name']) ? trim($row['Name']) : null;
+                $startDate = isset($row['Start_Date']) ? trim($row['Start_Date']) : null;
+                if ($startDate === '') $startDate = null;
+                $sub = isset($row['Sub']) ? (int)$row['Sub'] : null;
+
+                $insertStmt->execute([$code, $name, $startDate, $sub]);
+                $syncedCount++;
             }
         }
         $myPdo->commit();
 
-        echo json_encode(['success' => true, 'count' => count($codes)]);
+        echo json_encode(['success' => true, 'count' => $syncedCount]);
     } catch (Throwable $e) {
         if (isset($myPdo) && $myPdo->inTransaction()) {
             $myPdo->rollBack();
@@ -795,10 +830,41 @@ Router::get('/clients/{id}', function ($params) {
         $server = new VpnServer($clientData['server_id']);
         $serverData = $server->getData();
         
+        // Fetch external client details if linked
+        $extClient = null;
+        if (!empty($clientData['ext_client_code'])) {
+            $pdo = DB::conn();
+            $stmtExt = $pdo->prepare('SELECT * FROM ext_clients WHERE code = ? LIMIT 1');
+            $stmtExt->execute([$clientData['ext_client_code']]);
+            $rowExt = $stmtExt->fetch();
+            if ($rowExt) {
+                $expiryDate = null;
+                $daysLeft = null;
+                $startDate = $rowExt['start_date'] ?? null;
+                $sub = $rowExt['sub'] ?? null;
+                if ($startDate && $sub !== null && $sub > 0) {
+                    $daysToAdd = (int)$sub * 30;
+                    $expiryTimestamp = strtotime($startDate . " + $daysToAdd days");
+                    $expiryDate = date('Y-m-d', $expiryTimestamp);
+                    $daysLeft = (int)round(($expiryTimestamp - strtotime(date('Y-m-d'))) / 86400);
+                }
+
+                $extClient = [
+                    'code'        => $rowExt['code'],
+                    'name'        => $rowExt['name'],
+                    'start_date'  => $rowExt['start_date'],
+                    'sub'         => $rowExt['sub'],
+                    'expiry_date' => $expiryDate,
+                    'days_left'   => $daysLeft,
+                ];
+            }
+        }
+        
         View::render('clients/view.twig', [
             'client' => $clientData,
             'stats' => $stats,
-            'server' => $serverData
+            'server' => $serverData,
+            'ext_client' => $extClient
         ]);
     } catch (Exception $e) {
         http_response_code(404);

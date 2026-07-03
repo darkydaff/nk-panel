@@ -25,12 +25,10 @@ try {
         throw new Exception("External PostgreSQL database is unreachable.");
     }
 
-    $stmt = $pgPdo->query("SELECT \"Code\" FROM \"{$table}\" WHERE \"Code\" IS NOT NULL");
-    $rawCodes = $stmt->fetchAll(PDO::FETCH_COLUMN);
-    $codes = array_map('trim', $rawCodes);
-    $codes = array_filter($codes); // remove empty values
+    $stmt = $pgPdo->query("SELECT \"Code\", \"Name\", \"Start_Date\", \"Sub\" FROM \"{$table}\" WHERE \"Code\" IS NOT NULL");
+    $rawClients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    echo $logPrefix . "Fetched " . count($codes) . " codes from external PostgreSQL.\n";
+    echo $logPrefix . "Fetched " . count($rawClients) . " records from external PostgreSQL.\n";
 
     // 2. Sync to local MySQL ext_clients table
     $myPdo = DB::conn();
@@ -42,15 +40,26 @@ try {
     $myPdo->exec('DELETE FROM ext_clients');
     
     // Batch insert new codes
-    if (!empty($codes)) {
-        $insertStmt = $myPdo->prepare('INSERT INTO ext_clients (code) VALUES (?)');
-        foreach ($codes as $code) {
-            $insertStmt->execute([$code]);
+    if (!empty($rawClients)) {
+        $insertStmt = $myPdo->prepare('INSERT INTO ext_clients (code, name, start_date, sub) VALUES (?, ?, ?, ?)');
+        $syncedCount = 0;
+        foreach ($rawClients as $row) {
+            $code = trim($row['Code'] ?? '');
+            if ($code === '') {
+                continue;
+            }
+            $name = isset($row['Name']) ? trim($row['Name']) : null;
+            $startDate = isset($row['Start_Date']) ? trim($row['Start_Date']) : null;
+            if ($startDate === '') $startDate = null;
+            $sub = isset($row['Sub']) ? (int)$row['Sub'] : null;
+
+            $insertStmt->execute([$code, $name, $startDate, $sub]);
+            $syncedCount++;
         }
     }
     
     $myPdo->commit();
-    echo $logPrefix . "Successfully synchronized " . count($codes) . " codes to MySQL cached ext_clients table.\n";
+    echo $logPrefix . "Successfully synchronized {$syncedCount} clients to MySQL cached ext_clients table.\n";
     exit(0);
 
 } catch (Throwable $e) {

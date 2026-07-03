@@ -92,13 +92,16 @@
         <div class="panel p-5 border-slate-800/60 bg-slate-900/60 backdrop-blur hover:border-indigo-500/30 hover:-translate-y-0.5 transition-all duration-200 group">
             {# Header row #}
             <div class="flex items-start justify-between mb-4">
-                <div class="flex items-center gap-3">
+                <div class="flex items-center gap-3 min-w-0">
                     <div class="w-9 h-9 rounded-lg bg-indigo-500/15 text-indigo-400 flex items-center justify-center shrink-0 group-hover:bg-indigo-500/25 transition-colors">
                         <i class="fas fa-user text-sm"></i>
                     </div>
-                    <div>
-                        <span class="font-semibold text-white font-mono text-sm tracking-wide">{{ client.Code }}</span>
-                        <p class="text-[10px] text-slate-500 mt-0.5 uppercase tracking-wider">Client Code</p>
+                    <div class="min-w-0">
+                        <div class="flex items-baseline gap-1.5 flex-wrap sm:flex-nowrap">
+                            <span class="font-semibold text-white font-mono text-sm tracking-wide shrink-0">{{ client.Code }}</span>
+                            <span class="text-xs text-slate-300 font-medium truncate max-w-[130px]" title="{{ client.Name }}">{{ client.Name|default('No Name') }}</span>
+                        </div>
+                        <p class="text-[10px] text-slate-500 mt-0.5 uppercase tracking-wider">Client Code & Name</p>
                     </div>
                 </div>
 
@@ -106,6 +109,33 @@
                 <span class="bg-slate-800 border border-slate-700 text-slate-300 px-2.5 py-1 rounded-lg text-xs font-mono shrink-0">
                     {{ client.config_count }} config{{ client.config_count != 1 ? 's' : '' }}
                 </span>
+            </div>
+
+            {# Subscription status badge #}
+            <div class="mb-4 text-xs">
+                {% if client.ExpiryDate %}
+                    {% if client.DaysLeft > 0 %}
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+                            <i class="fas fa-calendar-check text-[10px]"></i>
+                            <span>Expires: {{ client.ExpiryDate }} ({{ client.DaysLeft }} days left)</span>
+                        </span>
+                    {% elseif client.DaysLeft == 0 %}
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium animate-pulse">
+                            <i class="fas fa-calendar-minus text-[10px]"></i>
+                            <span>Expires today!</span>
+                        </span>
+                    {% else %}
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/20 font-medium">
+                            <i class="fas fa-calendar-times text-[10px]"></i>
+                            <span>Expired: {{ client.ExpiryDate }} ({{ client.DaysLeft|abs }} days ago)</span>
+                        </span>
+                    {% endif %}
+                {% else %}
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800 text-slate-500 border border-slate-750 font-medium">
+                        <i class="fas fa-calendar-alt text-[10px] opacity-60"></i>
+                        <span>No subscription data</span>
+                    </span>
+                {% endif %}
             </div>
 
             {# Config chips #}

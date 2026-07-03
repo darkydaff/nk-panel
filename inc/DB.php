@@ -99,6 +99,23 @@ class DB {
           $pdo->exec($sql);
         }
       }
+
+      // Check if name column exists in ext_clients
+      try {
+        $stmtExtCols = $pdo->query("SHOW COLUMNS FROM ext_clients LIKE 'name'");
+        $hasNameCol = $stmtExtCols->rowCount() > 0;
+      } catch (Throwable $e) {
+        $hasNameCol = false;
+      }
+
+      if (!$hasNameCol) {
+        // Run migration to add name, start_date, and sub fields
+        $sqlPath = __DIR__ . '/../migrations/022_add_fields_to_ext_clients.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
     } catch (Throwable $e) {
       error_log("Database self-healing migration failed: " . $e->getMessage());
     }
