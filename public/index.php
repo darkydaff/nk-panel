@@ -614,7 +614,7 @@ Router::get('/clients', function () {
     } catch (Throwable $e) {
         $extDbError = $e->getMessage();
     }
-
+    try {
         $pdo = DB::conn();
         if ($codeFilter !== '') {
             // Exact match for the code filter
