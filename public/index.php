@@ -2635,8 +2635,27 @@ Router::post('/settings/backup-create', function () {
         } else {
             $serverId = (int)$target;
             $server = new VpnServer($serverId);
-            $path = $server->createBackup($user['id']);
-            $_SESSION['settings_success'] = 'Server backup successfully created';
+            $backupId = $server->createBackup($user['id']);
+            
+            $pdo = DB::conn();
+            $stmtBackup = $pdo->prepare("SELECT backup_path FROM server_backups WHERE id = ?");
+            $stmtBackup->execute([$backupId]);
+            $backupPath = $stmtBackup->fetchColumn();
+            
+            if ($backupPath) {
+                $tgErr = '';
+                if (!$bm->sendToTelegram($backupPath, $tgErr)) {
+                    if (!empty($tgErr)) {
+                        $_SESSION['settings_success'] = 'Server backup successfully created, but Telegram upload failed: ' . $tgErr;
+                    } else {
+                        $_SESSION['settings_success'] = 'Server backup successfully created (Telegram upload is disabled).';
+                    }
+                } else {
+                    $_SESSION['settings_success'] = 'Server backup successfully created and uploaded to Telegram.';
+                }
+            } else {
+                $_SESSION['settings_success'] = 'Server backup successfully created';
+            }
         }
     } catch (Exception $e) {
         $_SESSION['settings_error'] = 'Backup failed: ' . $e->getMessage();

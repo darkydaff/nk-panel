@@ -871,7 +871,8 @@ public static function getMimicryPresets(): array
         }
 
         $pdo = DB::conn();
-        $backupName = 'backup_' . $this->serverId . '_' . date('Y-m-d_His') . '.json';
+        $safeServerName = preg_replace('/[^a-zA-Z0-9_-]/', '_', $this->data['name']);
+        $backupName = $safeServerName . '_backup_' . $this->serverId . '_' . date('Y-m-d_His') . '.json';
         $backupDir = '/var/www/html/backups';
         $backupPath = $backupDir . '/' . $backupName;
 
