@@ -2558,6 +2558,45 @@ Router::post('/settings/backup-config', function () {
     redirect('/settings#backups');
 });
 
+// Test Telegram Connection (AJAX)
+Router::post('/settings/backup-test-telegram', function () {
+    requireAdmin();
+    header('Content-Type: application/json');
+
+    $botToken = trim($_POST['bot_token'] ?? '');
+    $chatId = trim($_POST['chat_id'] ?? '');
+
+    if (empty($botToken) || empty($chatId)) {
+        echo json_encode(['error' => 'Please provide bot token and chat ID first.']);
+        return;
+    }
+
+    $message = "🔔 *Nk-VPN Panel Backup System Test*\nYour Telegram backup connection has been configured successfully! 🎉";
+    $url = "https://api.telegram.org/bot" . $botToken . "/sendMessage";
+    
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, [
+        'chat_id' => $chatId,
+        'text' => $message,
+        'parse_mode' => 'Markdown'
+    ]);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode === 200) {
+        echo json_encode(['success' => true]);
+    } else {
+        $data = json_decode($response, true);
+        $errDetail = $data['description'] ?? 'HTTP Code ' . $httpCode;
+        echo json_encode(['error' => 'Telegram API error: ' . $errDetail]);
+    }
+});
+
 // Create Backup
 Router::post('/settings/backup-create', function () {
     requireAdmin();

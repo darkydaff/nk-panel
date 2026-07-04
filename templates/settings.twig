@@ -203,11 +203,11 @@
                                 </label>
                                 <div>
                                     <label class="block text-xs font-medium text-slate-400 mb-2">Bot Token</label>
-                                    <input type="password" name="bot_token" value="{{ backup_settings.bot_token }}" class="input-field w-full px-3 py-2 text-sm">
+                                    <input type="password" name="bot_token" id="backup-bot-token" value="{{ backup_settings.bot_token }}" class="input-field w-full px-3 py-2 text-sm">
                                 </div>
                                 <div>
                                     <label class="block text-xs font-medium text-slate-400 mb-2">Chat ID</label>
-                                    <input type="text" name="chat_id" value="{{ backup_settings.chat_id }}" class="input-field w-full px-3 py-2 text-sm">
+                                    <input type="text" name="chat_id" id="backup-chat-id" value="{{ backup_settings.chat_id }}" class="input-field w-full px-3 py-2 text-sm">
                                 </div>
                                 <div>
                                     <label class="block text-xs font-medium text-slate-400 mb-2">Backup Schedule</label>
@@ -221,9 +221,14 @@
                                     <label class="block text-xs font-medium text-slate-400 mb-2">Local Retention (Days)</label>
                                     <input type="number" name="retention_days" value="{{ backup_settings.retention_days|default(7) }}" class="input-field w-full px-3 py-2 text-sm">
                                 </div>
-                                <button type="submit" class="btn-primary w-full py-2.5 text-sm">
-                                    <i class="fas fa-save mr-2"></i>Save Config
-                                </button>
+                                <div class="flex gap-2">
+                                    <button type="submit" class="btn-primary flex-1 py-2.5 text-sm">
+                                        <i class="fas fa-save mr-2"></i>Save Config
+                                    </button>
+                                    <button type="button" onclick="testTelegramConnection()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-650 rounded-lg text-sm transition-colors" title="Test Connection">
+                                        <i class="fas fa-paper-plane"></i>
+                                    </button>
+                                </div>
                             </div>
                         </form>
                     </div>
@@ -566,5 +571,33 @@ document.getElementById('restore-form').addEventListener('submit', function (e) 
         }
     }
 });
+async function testTelegramConnection() {
+    const token = document.getElementById('backup-bot-token').value;
+    const chat = document.getElementById('backup-chat-id').value;
+
+    if (!token || !chat) {
+        alert('Please fill out both Bot Token and Chat ID to run connection test.');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('bot_token', token);
+    formData.append('chat_id', chat);
+
+    try {
+        const res = await fetch('/settings/backup-test-telegram', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert('Success! Check your Telegram chat for the test notification.');
+        } else {
+            alert('Failed: ' + data.error);
+        }
+    } catch (err) {
+        alert('Connection test failed: ' + err);
+    }
+}
 </script>
 {% endblock %}
