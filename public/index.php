@@ -364,18 +364,39 @@ Router::post('/servers/{id}/delete', function ($params) {
     requireAuth();
     $user = Auth::user();
     $serverId = (int)$params['id'];
-    
+    $isAjax = isJsonRequest();
+
+    // Require password confirmation
+    $adminPassword = $_POST['admin_password'] ?? '';
+    if (empty($adminPassword) || !password_verify($adminPassword, $user['password_hash'])) {
+        if ($isAjax) {
+            http_response_code(403);
+            header('Content-Type: application/json');
+            echo json_encode(['error' => 'Incorrect password. Server not deleted.']);
+            exit;
+        }
+        $_SESSION['error_message'] = 'Incorrect password. Server not deleted.';
+        redirect('/servers');
+        return;
+    }
+
     try {
         $server = new VpnServer($serverId);
         $serverData = $server->getData();
-        
+
         // Check ownership or admin
         if ($serverData['user_id'] != $user['id'] && !Auth::isAdmin()) {
+            if ($isAjax) {
+                http_response_code(403);
+                header('Content-Type: application/json');
+                echo json_encode(['error' => 'Forbidden']);
+                exit;
+            }
             http_response_code(403);
             echo 'Forbidden';
             return;
         }
-        
+
         $server->delete();
         $_SESSION['success_message'] = 'Server deleted successfully';
         redirect('/servers');
@@ -535,29 +556,7 @@ Router::get('/servers/{id}', function ($params) {
 
 
 
-// Delete server
-Router::post('/servers/{id}/delete', function ($params) {
-    requireAuth();
-    $serverId = (int)$params['id'];
-    
-    try {
-        $server = new VpnServer($serverId);
-        $serverData = $server->getData();
-        
-        // Check ownership
-        $user = Auth::user();
-        if ($serverData['user_id'] != $user['id'] && !Auth::isAdmin()) {
-            http_response_code(403);
-            echo 'Forbidden';
-            return;
-        }
-        
-        $server->delete();
-        redirect('/servers');
-    } catch (Exception $e) {
-        redirect('/servers');
-    }
-});
+// (Delete server route is defined above, near the create route)
 
 // Create client for server
 Router::post('/servers/{id}/clients/create', function ($params) {

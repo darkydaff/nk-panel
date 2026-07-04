@@ -78,11 +78,6 @@
                 <a href="/servers/{{ server.id }}" class="btn-secondary flex-1 text-center py-2 text-xs">
                     <i class="fas fa-eye mr-1"></i> {{ t('servers.view') }}
                 </a>
-                <form method="POST" action="/servers/{{ server.id }}/delete" class="inline" onsubmit="return confirm('Delete server {{ server.name }}?');">
-                    <button type="submit" class="px-3 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-colors text-xs" title="Delete">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
-                </form>
             </div>
         </div>
         {% endfor %}

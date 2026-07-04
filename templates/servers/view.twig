@@ -41,11 +41,9 @@
             <button onclick="installAgent({{ server.id }})" id="installAgentBtn" class="px-4 py-2 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 transition-colors text-sm">
                 <i class="fas fa-satellite-dish mr-2"></i>Install Agent
             </button>
-            <form method="POST" action="/servers/{{ server.id }}/delete" onsubmit="return confirm('Delete this server?');">
-                <button type="submit" class="px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-colors text-sm">
-                    <i class="fas fa-trash-alt mr-2"></i>Delete
-                </button>
-            </form>
+            <button type="button" onclick="openDeleteServerModal({{ server.id }}, '{{ server.name|e('js') }}')" class="px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-colors text-sm">
+                <i class="fas fa-trash-alt mr-2"></i>Delete
+            </button>
         </div>
     </div>
     
@@ -859,5 +857,142 @@ async function installAgent(serverId) {
         btn.disabled = false;
     }
 }
+</script>
+
+<!-- Delete Server Password Modal -->
+<div id="deleteServerModal" class="fixed inset-0 z-50 flex items-center justify-center hidden" role="dialog" aria-modal="true" aria-labelledby="deleteServerModalTitle">
+    <!-- Backdrop -->
+    <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeDeleteServerModal()"></div>
+    <!-- Dialog -->
+    <div class="relative z-10 w-full max-w-md mx-4 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-6 animate-in">
+        <div class="flex items-center gap-3 mb-5">
+            <div class="w-10 h-10 rounded-lg bg-red-500/15 border border-red-500/30 flex items-center justify-center shrink-0">
+                <i class="fas fa-trash-alt text-red-400"></i>
+            </div>
+            <div>
+                <h2 id="deleteServerModalTitle" class="text-lg font-semibold text-white">Delete Server</h2>
+                <p id="deleteServerModalSubtitle" class="text-sm text-slate-400 mt-0.5"></p>
+            </div>
+        </div>
+
+        <div class="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 mb-5 text-sm text-red-300 flex items-start gap-2">
+            <i class="fas fa-exclamation-triangle text-red-400 mt-0.5 shrink-0"></i>
+            <span>This action is <strong>irreversible</strong>. All clients and configurations associated with this server will be permanently removed.</span>
+        </div>
+
+        <form id="deleteServerForm" method="POST" action="" onsubmit="return handleDeleteServerSubmit(event)">
+            <input type="hidden" name="admin_password" id="deleteServerPasswordInput">
+            <div class="mb-4">
+                <label for="deleteServerPasswordVisible" class="block text-sm font-medium text-slate-300 mb-1.5">
+                    Confirm with your password
+                </label>
+                <div class="relative">
+                    <input type="password" id="deleteServerPasswordVisible"
+                           autocomplete="current-password"
+                           placeholder="Enter your admin password"
+                           class="w-full bg-slate-800 border border-slate-600 focus:border-red-500/70 focus:ring-1 focus:ring-red-500/40 rounded-lg px-4 py-2.5 pr-10 text-sm text-white placeholder-slate-500 outline-none transition-colors">
+                    <button type="button" onclick="toggleDeletePasswordVisibility()" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors" tabindex="-1">
+                        <i id="deletePasswordEyeIcon" class="fas fa-eye text-sm"></i>
+                    </button>
+                </div>
+            </div>
+            <div id="deleteServerError" class="hidden mb-4 text-sm text-red-400 flex items-center gap-1.5">
+                <i class="fas fa-times-circle"></i>
+                <span id="deleteServerErrorMsg">Incorrect password.</span>
+            </div>
+            <div class="flex gap-3">
+                <button type="button" onclick="closeDeleteServerModal()" class="flex-1 px-4 py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium transition-colors">
+                    Cancel
+                </button>
+                <button type="submit" id="deleteServerSubmitBtn" class="flex-1 px-4 py-2.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/40 text-sm font-medium transition-colors">
+                    <i class="fas fa-trash-alt mr-1.5"></i>Delete Server
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+let _deleteServerId = null;
+
+function openDeleteServerModal(serverId, serverName) {
+    _deleteServerId = serverId;
+    document.getElementById('deleteServerModalSubtitle').textContent = 'Server: ' + serverName;
+    document.getElementById('deleteServerForm').action = '/servers/' + serverId + '/delete';
+    document.getElementById('deleteServerPasswordVisible').value = '';
+    document.getElementById('deleteServerPasswordInput').value = '';
+    document.getElementById('deleteServerError').classList.add('hidden');
+    document.getElementById('deleteServerModal').classList.remove('hidden');
+    setTimeout(() => document.getElementById('deleteServerPasswordVisible').focus(), 100);
+}
+
+function closeDeleteServerModal() {
+    document.getElementById('deleteServerModal').classList.add('hidden');
+    _deleteServerId = null;
+}
+
+function toggleDeletePasswordVisibility() {
+    const input = document.getElementById('deleteServerPasswordVisible');
+    const icon  = document.getElementById('deletePasswordEyeIcon');
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.className = 'fas fa-eye-slash text-sm';
+    } else {
+        input.type = 'password';
+        icon.className = 'fas fa-eye text-sm';
+    }
+}
+
+function handleDeleteServerSubmit(e) {
+    e.preventDefault();
+    const visibleInput = document.getElementById('deleteServerPasswordVisible');
+    const password = visibleInput.value.trim();
+    if (!password) {
+        showDeleteServerError('Please enter your password.');
+        return false;
+    }
+    // Copy value to the hidden input that will be submitted
+    document.getElementById('deleteServerPasswordInput').value = password;
+
+    const btn = document.getElementById('deleteServerSubmitBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1.5"></i>Deleting…';
+    document.getElementById('deleteServerError').classList.add('hidden');
+
+    const form = document.getElementById('deleteServerForm');
+    const formData = new FormData(form);
+
+    fetch(form.action, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+        body: formData
+    }).then(async res => {
+        if (res.ok) {
+            window.location.href = '/servers';
+        } else {
+            const data = await res.json().catch(() => ({}));
+            showDeleteServerError(data.error || 'Incorrect password. Server not deleted.');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-trash-alt mr-1.5"></i>Delete Server';
+        }
+    }).catch(() => {
+        showDeleteServerError('Network error. Please try again.');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-trash-alt mr-1.5"></i>Delete Server';
+    });
+
+    return false;
+}
+
+function showDeleteServerError(msg) {
+    const el = document.getElementById('deleteServerError');
+    document.getElementById('deleteServerErrorMsg').textContent = msg;
+    el.classList.remove('hidden');
+}
+
+// Close modal on Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeDeleteServerModal();
+});
 </script>
 {% endblock %}
