@@ -59,8 +59,11 @@ RUN echo "0 * * * * www-data cd /var/www/html && /usr/local/bin/php bin/check_ex
 # Make monitor script executable
 RUN chmod +x /var/www/html/bin/monitor_metrics.sh
 
-# Create startup script
 RUN echo '#!/bin/bash\n\
+# Ensure backups directories exist and have correct permissions\n\
+mkdir -p /var/www/html/backups/panel /var/www/html/backups/servers\n\
+chown -R www-data:www-data /var/www/html/backups\n\
+chmod -R 777 /var/www/html/backups\n\
 service cron start\n\
 # Start metrics collector on container startup\n\
 /bin/bash /var/www/html/bin/monitor_metrics.sh\n\
