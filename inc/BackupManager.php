@@ -232,28 +232,58 @@ class BackupManager {
                   $dbName = Config::get('DB_DATABASE', 'amnezia_panel');
                   $dbUser = Config::get('DB_USERNAME', 'amnezia');
                   $dbPass = Config::get('DB_PASSWORD', 'amnezia');
-                  $cmd = "mysql -h {$dbHost} -P {$dbPort} -u {$dbUser} -p{$dbPass} {$dbName} < {$tempDir}/panel_db.sql 2>/dev/null";
+                  
+                  $dbHostEsc = escapeshellarg($dbHost);
+                  $dbPortEsc = escapeshellarg($dbPort);
+                  $dbUserEsc = escapeshellarg($dbUser);
+                  $dbNameEsc = escapeshellarg($dbName);
+                  $sqlPathEsc = escapeshellarg("{$tempDir}/panel_db.sql");
+
+                  $cmd = "MYSQL_PWD=" . escapeshellarg($dbPass) . " mysql -h {$dbHostEsc} -P {$dbPortEsc} -u {$dbUserEsc} {$dbNameEsc} < {$sqlPathEsc} 2>&1";
                   exec($cmd, $output, $returnVar);
-                  $results['mysql'] = ($returnVar === 0);
+                  if ($returnVar !== 0) {
+                      $err = implode("\n", $output);
+                      throw new Exception("MySQL restore failed with exit code {$returnVar}. Error: {$err}");
+                  }
+                  $results['mysql'] = true;
               }
 
               // 2. PostgreSQL Restore
-              if (isset($options['restore_postgres']) && $options['restore_postgres'] && file_exists("{$tempDir}/postgres_db.sql")) {
-                  $pgHost = Config::get('EXT_PG_HOST');
-                  if (!empty($pgHost)) {
-                      $pgPort = Config::get('EXT_PG_PORT', '5432');
-                      $pgDb = Config::get('EXT_PG_DB');
-                      $pgUser = Config::get('EXT_PG_USER');
-                      $pgPass = Config::get('EXT_PG_PASSWORD');
-                      $pgCmd = "PGPASSWORD='{$pgPass}' psql -h {$pgHost} -p {$pgPort} -U {$pgUser} -d {$pgDb} < {$tempDir}/postgres_db.sql 2>/dev/null";
-                      exec($pgCmd, $outputPg, $returnVarPg);
-                      $results['postgres'] = ($returnVarPg === 0);
+              $pgHost = Config::get('EXT_PG_HOST');
+              if (isset($options['restore_postgres']) && $options['restore_postgres'] && !empty($pgHost) && file_exists("{$tempDir}/postgres_db.sql")) {
+                  $pgPort = Config::get('EXT_PG_PORT', '5432');
+                  $pgDb = Config::get('EXT_PG_DB');
+                  $pgUser = Config::get('EXT_PG_USER');
+                  $pgPass = Config::get('EXT_PG_PASSWORD');
+                  
+                  $pgHostEsc = escapeshellarg($pgHost);
+                  $pgPortEsc = escapeshellarg($pgPort);
+                  $pgUserEsc = escapeshellarg($pgUser);
+                  $pgDbEsc = escapeshellarg($pgDb);
+                  $sqlPathEsc = escapeshellarg("{$tempDir}/postgres_db.sql");
+
+                  $pgCmd = "PGPASSWORD=" . escapeshellarg($pgPass) . " psql -h {$pgHostEsc} -p {$pgPortEsc} -U {$pgUserEsc} -d {$pgDbEsc} < {$sqlPathEsc} 2>&1";
+                  exec($pgCmd, $outputPg, $returnVarPg);
+                  if ($returnVarPg !== 0) {
+                      $errPg = implode("\n", $outputPg);
+                      throw new Exception("PostgreSQL restore failed with exit code {$returnVarPg}. Error: {$errPg}");
                   }
+                  $results['postgres'] = true;
               }
 
               // 3. Env Restore
               if (isset($options['restore_env']) && $options['restore_env'] && file_exists("{$tempDir}/config.env")) {
-                  copy("{$tempDir}/config.env", '/var/www/html/.env');
+                  $envPath = '/var/www/html/.env';
+                  if (file_exists($envPath)) {
+                      @chmod($envPath, 0666);
+                      @unlink($envPath);
+                  }
+                  if (!@copy("{$tempDir}/config.env", $envPath)) {
+                      $content = file_get_contents("{$tempDir}/config.env");
+                      if (@file_put_contents($envPath, $content) === false) {
+                          throw new Exception("Unable to restore .env file due to write permissions on {$envPath}. Please ensure the file is writable by the web server.");
+                      }
+                  }
                   $results['env'] = true;
               }
           } else {
