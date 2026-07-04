@@ -382,7 +382,8 @@ class BackupManager {
                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'deploying')
               ");
               $stmt->execute([
-                  $s['user_id'], $s['name'], $s['host'], $s['port'], $s['username'], $s['password'],
+                  $s['user_id'] ?? 1, $s['name'], $s['host'], $s['port'],
+                  $s['username'] ?? null, $s['password'] ?? null,
                   $s['container_name'], $s['vpn_port'], $s['vpn_subnet'],
                   $s['server_public_key'], $s['server_private_key'] ?? null, $s['preshared_key'],
                   is_array($s['awg_params']) ? json_encode($s['awg_params']) : $s['awg_params']
@@ -403,7 +404,7 @@ class BackupManager {
                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'disabled', ?)
               ");
               $ins->execute([
-                  $serverId, $s['user_id'], $c['name'], $c['client_ip'],
+                  $serverId, $s['user_id'] ?? 1, $c['name'], $c['client_ip'],
                   $c['public_key'], $c['private_key'], $c['preshared_key'],
                   $c['config'], $c['expires_at']
               ]);

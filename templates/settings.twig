@@ -402,6 +402,24 @@
                                     <!-- populated dynamically -->
                                 </select>
                             </div>
+                            <!-- SSH credentials – only shown when importing as a new server -->
+                            <div id="new-server-ssh-fields" class="hidden mt-3 space-y-2">
+                                <p class="text-[11px] text-amber-400/80">Server backups don't store SSH credentials. Enter them so the new server can be deployed.</p>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label class="block text-xs text-slate-400 mb-1">SSH Username</label>
+                                        <input type="text" name="ssh_username" id="restore-ssh-username" autocomplete="off"
+                                               class="input-field w-full px-3 py-2 text-sm bg-slate-800"
+                                               placeholder="root">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs text-slate-400 mb-1">SSH Password</label>
+                                        <input type="password" name="ssh_password" id="restore-ssh-password" autocomplete="new-password"
+                                               class="input-field w-full px-3 py-2 text-sm bg-slate-800"
+                                               placeholder="••••••••">
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <label class="flex items-center text-sm font-medium text-slate-300 cursor-pointer">
                             <input type="checkbox" name="sync_keys" value="1" checked class="rounded bg-slate-850 border-slate-700 mr-2 text-accent focus:ring-0">
@@ -545,10 +563,13 @@ async function handleBackupUpload(file) {
 function toggleServerSelect() {
     const val = document.getElementById('server-action-select').value;
     const selectDiv = document.getElementById('target-server-select-div');
+    const sshFields = document.getElementById('new-server-ssh-fields');
     if (val === 'overwrite') {
         selectDiv.classList.remove('hidden');
+        if (sshFields) sshFields.classList.add('hidden');
     } else {
         selectDiv.classList.add('hidden');
+        if (sshFields) sshFields.classList.remove('hidden');
     }
 }
 

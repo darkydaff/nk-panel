@@ -2822,7 +2822,13 @@ Router::post('/settings/backup-restore', function () {
             $serverData = json_decode(file_get_contents($filepath), true);
             $action = $_POST['server_action'] ?? 'new';
             $targetServerId = ($action === 'overwrite') ? (int)($_POST['target_server_id'] ?? 0) : null;
-            
+
+            // Inject SSH credentials supplied via the restore form (only relevant for 'new')
+            if ($action === 'new') {
+                $serverData['server']['username'] = trim($_POST['ssh_username'] ?? '');
+                $serverData['server']['password'] = trim($_POST['ssh_password'] ?? '');
+            }
+
             $res = $bm->restoreServerBackup($serverData, $targetServerId);
             
             if (isset($_POST['sync_keys'])) {
