@@ -30,11 +30,17 @@ class BackupManager {
         $dbPass = Config::get('DB_PASSWORD', 'amnezia');
         $mysqlDumpPath = "{$tempDir}/panel_db.sql";
         
-        // Use password directly in command (docker environment is local and single-tenant)
-        $cmd = "mysqldump -h {$dbHost} -P {$dbPort} -u {$dbUser} -p{$dbPass} {$dbName} > {$mysqlDumpPath} 2>/dev/null";
+        $dbHostEsc = escapeshellarg($dbHost);
+        $dbPortEsc = escapeshellarg($dbPort);
+        $dbUserEsc = escapeshellarg($dbUser);
+        $dbNameEsc = escapeshellarg($dbName);
+        $mysqlDumpPathEsc = escapeshellarg($mysqlDumpPath);
+        
+        $cmd = "MYSQL_PWD=" . escapeshellarg($dbPass) . " mysqldump -h {$dbHostEsc} -P {$dbPortEsc} -u {$dbUserEsc} {$dbNameEsc} > {$mysqlDumpPathEsc} 2>&1";
         exec($cmd, $output, $returnVar);
         if ($returnVar !== 0) {
-            throw new Exception("MySQL dump failed with exit code {$returnVar}");
+            $err = implode("\n", $output);
+            throw new Exception("MySQL dump failed with exit code {$returnVar}. Error: {$err}");
         }
 
         // 2. PostgreSQL Dump
@@ -45,8 +51,19 @@ class BackupManager {
             $pgUser = Config::get('EXT_PG_USER');
             $pgPass = Config::get('EXT_PG_PASSWORD');
             $postgresDumpPath = "{$tempDir}/postgres_db.sql";
-            $pgCmd = "PGPASSWORD='{$pgPass}' pg_dump -h {$pgHost} -p {$pgPort} -U {$pgUser} -d {$pgDb} -F p > {$postgresDumpPath} 2>/dev/null";
+
+            $pgHostEsc = escapeshellarg($pgHost);
+            $pgPortEsc = escapeshellarg($pgPort);
+            $pgUserEsc = escapeshellarg($pgUser);
+            $pgDbEsc = escapeshellarg($pgDb);
+            $postgresDumpPathEsc = escapeshellarg($postgresDumpPath);
+
+            $pgCmd = "PGPASSWORD=" . escapeshellarg($pgPass) . " pg_dump -h {$pgHostEsc} -p {$pgPortEsc} -U {$pgUserEsc} -d {$pgDbEsc} -F p > {$postgresDumpPathEsc} 2>&1";
             exec($pgCmd, $outputPg, $returnVarPg);
+            if ($returnVarPg !== 0) {
+                $errPg = implode("\n", $outputPg);
+                error_log("PostgreSQL dump failed: {$errPg}");
+            }
         }
 
         // 3. Env Copy
