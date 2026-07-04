@@ -602,9 +602,8 @@ Router::post('/servers/{id}/clients/create', function ($params) {
         $extClientCode = trim($_POST['ext_client_code'] ?? '');
         if ($extClientCode !== '') {
             try {
-                $pdo = DB::conn();
-                $stmt = $pdo->prepare('UPDATE vpn_clients SET ext_client_code = ? WHERE id = ?');
-                $stmt->execute([$extClientCode, $clientId]);
+                $client = new VpnClient($clientId);
+                $client->linkToExtClient($extClientCode);
             } catch (Throwable $e) {
                 error_log('Manual link failed for client ' . $clientId . ': ' . $e->getMessage());
             }
@@ -613,9 +612,8 @@ Router::post('/servers/{id}/clients/create', function ($params) {
             try {
                 $matchingCode = VpnClient::findMatchingCode($clientName);
                 if ($matchingCode !== null) {
-                    $pdo = DB::conn();
-                    $stmt = $pdo->prepare('UPDATE vpn_clients SET ext_client_code = ? WHERE id = ?');
-                    $stmt->execute([$matchingCode, $clientId]);
+                    $client = new VpnClient($clientId);
+                    $client->linkToExtClient($matchingCode);
                 }
             } catch (Throwable $e) {
                 error_log('Auto-link on create failed for client ' . $clientId . ': ' . $e->getMessage());
@@ -872,13 +870,23 @@ Router::post('/api/ext-clients/sync', function () {
 
         $myPdo = DB::conn();
         $myPdo->beginTransaction();
-        $myPdo->exec('DELETE FROM ext_clients');
         if (!empty($rawClients)) {
-            $insertStmt = $myPdo->prepare('INSERT INTO ext_clients (code, name, start_date, sub, func, router) VALUES (?, ?, ?, ?, ?, ?)');
+            $insertStmt = $myPdo->prepare('
+                INSERT INTO ext_clients (code, name, start_date, sub, func, router) 
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE 
+                    name = VALUES(name), 
+                    start_date = VALUES(start_date), 
+                    sub = VALUES(sub), 
+                    func = VALUES(func), 
+                    router = VALUES(router)
+            ');
             $syncedCount = 0;
+            $activeCodes = [];
             foreach ($rawClients as $row) {
                 $code = trim($row['Code'] ?? '');
                 if ($code === '') continue;
+                $activeCodes[] = $code;
                 $name = isset($row['Name']) ? trim($row['Name']) : null;
                 $startDate = isset($row['Start_Date']) ? trim($row['Start_Date']) : null;
                 if ($startDate === '') $startDate = null;
@@ -889,6 +897,18 @@ Router::post('/api/ext-clients/sync', function () {
                 $insertStmt->execute([$code, $name, $startDate, $sub, $func, $router]);
                 $syncedCount++;
             }
+            
+            // Delete clients that are no longer in the external database
+            if (!empty($activeCodes)) {
+                $placeholders = implode(',', array_fill(0, count($activeCodes), '?'));
+                $deleteStmt = $myPdo->prepare("DELETE FROM ext_clients WHERE code NOT IN ($placeholders)");
+                $deleteStmt->execute($activeCodes);
+            } else {
+                $myPdo->exec('DELETE FROM ext_clients');
+            }
+        } else {
+            $myPdo->exec('DELETE FROM ext_clients');
+            $syncedCount = 0;
         }
         $myPdo->commit();
 
@@ -1017,17 +1037,12 @@ Router::post('/clients/{id}/update', function ($params) {
         if (isset($_POST['ext_client_code'])) {
             $extClientCode = trim($_POST['ext_client_code']);
             if ($extClientCode === '') {
-                $stmt = $pdo->prepare('UPDATE vpn_clients SET ext_client_code = NULL WHERE id = ?');
-                $stmt->execute([$clientId]);
+                $client->linkToExtClient(null);
             } else {
                 $stmtLoc = $pdo->prepare('SELECT 1 FROM ext_clients WHERE code = ? LIMIT 1');
                 $stmtLoc->execute([$extClientCode]);
                 if ($stmtLoc->fetchColumn() !== false) {
-                    $stmt = $pdo->prepare('UPDATE vpn_clients SET ext_client_code = ? WHERE id = ?');
-                    $stmt->execute([$extClientCode, $clientId]);
-                    
-                    // Force statistics sync to calculate aggregate immediately
-                    $client->syncStats();
+                    $client->linkToExtClient($extClientCode);
                 }
             }
         }

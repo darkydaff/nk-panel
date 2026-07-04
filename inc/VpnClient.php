@@ -299,6 +299,9 @@ class VpnClient {
      * Execute command on server
      */
     private static function executeServerCommand(array $serverData, string $command, bool $sudo = false): string {
+        if (getenv('MOCK_SSH_RESPONSE') !== false) {
+            return getenv('MOCK_SSH_RESPONSE');
+        }
         if ($sudo && strtolower($serverData['username']) !== 'root') {
             $command = "echo '{$serverData['password']}' | sudo -S " . $command;
         }
@@ -627,12 +630,65 @@ class VpnClient {
             $newSent = (int)$stats['bytes_sent'];
             $newReceived = (int)$stats['bytes_received'];
 
-            $deltaSent = $newSent - $oldSent;
-            $deltaReceived = $newReceived - $oldReceived;
+            // Fetch latest recorded raw metrics from client_metrics to determine baseline
+            $stmtPrev = $pdo->prepare('
+                SELECT bytes_sent, bytes_received, collected_at 
+                FROM client_metrics 
+                WHERE client_id = ? 
+                ORDER BY collected_at DESC 
+                LIMIT 1
+            ');
+            $stmtPrev->execute([$this->clientId]);
+            $prev = $stmtPrev->fetch(PDO::FETCH_ASSOC);
 
-            if ($deltaSent < 0) $deltaSent = $newSent;
-            if ($deltaReceived < 0) $deltaReceived = $newReceived;
+            $prevSent = null;
+            $prevReceived = null;
+            $timeDiff = 0;
 
+            if ($prev) {
+                $prevSent = (int)$prev['bytes_sent'];
+                $prevReceived = (int)$prev['bytes_received'];
+                $timeDiff = time() - strtotime($prev['collected_at']);
+            } else {
+                // Fallback for transition phase:
+                // old values in vpn_clients were raw values
+                $prevSent = $oldSent;
+                $prevReceived = $oldReceived;
+            }
+
+            $deltaSent = $newSent;
+            $deltaReceived = $newReceived;
+
+            if ($prevSent !== null && $newSent >= $prevSent) {
+                $deltaSent = $newSent - $prevSent;
+            }
+            if ($prevReceived !== null && $newReceived >= $prevReceived) {
+                $deltaReceived = $newReceived - $prevReceived;
+            }
+
+            // Calculate speed
+            $speedUp = 0;
+            $speedDown = 0;
+            if ($prev && $timeDiff > 0) {
+                $speedUp = round(($deltaReceived * 8) / $timeDiff / 1000, 2);
+                $speedDown = round(($deltaSent * 8) / $timeDiff / 1000, 2);
+            }
+
+            // Save raw metrics to client_metrics
+            $stmtMetric = $pdo->prepare('
+                INSERT INTO client_metrics 
+                (client_id, bytes_sent, bytes_received, speed_up_kbps, speed_down_kbps)
+                VALUES (?, ?, ?, ?, ?)
+            ');
+            $stmtMetric->execute([
+                $this->clientId,
+                $newSent,
+                $newReceived,
+                $speedUp,
+                $speedDown
+            ]);
+
+            // Increment persistent traffic aggregate in ext_clients
             if (!empty($this->data['ext_client_code']) && ($deltaSent > 0 || $deltaReceived > 0)) {
                 $stmtExtInc = $pdo->prepare('
                     UPDATE ext_clients 
@@ -642,9 +698,18 @@ class VpnClient {
                 $stmtExtInc->execute([$deltaSent, $deltaReceived, $this->data['ext_client_code']]);
             }
 
+            // Accumulate client traffic in main vpn_clients table
+            $newTotalSent = $oldSent + $deltaSent;
+            $newTotalReceived = $oldReceived + $deltaReceived;
+
             $stmt = $pdo->prepare('
                 UPDATE vpn_clients 
-                SET bytes_sent = ?, bytes_received = ?, last_handshake = ?, last_sync_at = NOW()
+                SET bytes_sent = ?, 
+                    bytes_received = ?, 
+                    speed_up_kbps = ?, 
+                    speed_down_kbps = ?, 
+                    last_handshake = ?, 
+                    last_sync_at = NOW()
                 WHERE id = ?
             ');
             
@@ -652,12 +717,23 @@ class VpnClient {
                 ? date('Y-m-d H:i:s', $stats['last_handshake']) 
                 : null;
             
-            return $stmt->execute([
-                $stats['bytes_sent'],
-                $stats['bytes_received'],
+            $success = $stmt->execute([
+                $newTotalSent,
+                $newTotalReceived,
+                $speedUp,
+                $speedDown,
                 $lastHandshake,
                 $this->clientId
             ]);
+
+            if ($success) {
+                // Keep the loaded model state updated with cumulative total bytes
+                $this->data['bytes_sent'] = $newTotalSent;
+                $this->data['bytes_received'] = $newTotalReceived;
+                $this->data['last_handshake'] = $lastHandshake;
+            }
+
+            return $success;
         } catch (Exception $e) {
             error_log('Failed to sync client stats: ' . $e->getMessage());
             return false;
@@ -1115,9 +1191,69 @@ public static function getClientsOverLimit(): array {
     }
 
     /**
-     * Automatically link all unlinked configurations (where ext_client_code IS NULL)
-     * to external clients in the cache table using fuzzy code/name matching.
+     * Link configuration to an external client code and manage traffic totals
      */
+    public function linkToExtClient(?string $code): bool {
+        if (!$this->data) {
+            throw new Exception('Client not loaded');
+        }
+        $pdo = DB::conn();
+        $clientId = (int)$this->data['id'];
+        $oldCode = $this->data['ext_client_code'] ?? null;
+        
+        $code = ($code !== null) ? trim($code) : null;
+        if ($code === '') {
+            $code = null;
+        }
+        
+        if ($oldCode === $code) {
+            return true; // No change
+        }
+        
+        // Update database
+        $stmt = $pdo->prepare('UPDATE vpn_clients SET ext_client_code = ? WHERE id = ?');
+        $stmt->execute([$code, $clientId]);
+        
+        // Refresh this instance's local data array
+        $this->data['ext_client_code'] = $code;
+        
+        // Traffic adjustment
+        $bytesSent = (int)($this->data['bytes_sent'] ?? 0);
+        $bytesReceived = (int)($this->data['bytes_received'] ?? 0);
+        
+        if ($bytesSent > 0 || $bytesReceived > 0) {
+            // Subtract traffic from old external client code
+            if (!empty($oldCode)) {
+                $stmtSub = $pdo->prepare('
+                    UPDATE ext_clients 
+                    SET bytes_sent = GREATEST(0, CAST(bytes_sent AS SIGNED) - ?),
+                        bytes_received = GREATEST(0, CAST(bytes_received AS SIGNED) - ?)
+                    WHERE code = ?
+                ');
+                $stmtSub->execute([$bytesSent, $bytesReceived, $oldCode]);
+            }
+            
+            // Add traffic to new external client code
+            if (!empty($code)) {
+                $stmtAdd = $pdo->prepare('
+                    UPDATE ext_clients 
+                    SET bytes_sent = bytes_sent + ?,
+                        bytes_received = bytes_received + ?
+                    WHERE code = ?
+                ');
+                $stmtAdd->execute([$bytesSent, $bytesReceived, $code]);
+            }
+        }
+        
+        // Sync stats immediately to pull fresh values and add latest delta if active
+        if ($code !== null) {
+            $this->syncStats();
+        }
+        
+        return true;
+    }
+
+    /**
     public static function autoLinkAll(): int {
         $pdo = DB::conn();
         
@@ -1129,20 +1265,17 @@ public static function getClientsOverLimit(): array {
         }
         
         $linkedCount = 0;
-        $stmtUpdate = $pdo->prepare('UPDATE vpn_clients SET ext_client_code = ? WHERE id = ?');
         
         foreach ($unlinkedClients as $client) {
             $matchingCode = self::findMatchingCode($client['name']);
             if ($matchingCode !== null) {
-                $stmtUpdate->execute([$matchingCode, $client['id']]);
-                
-                // Also trigger statistics sync for this newly linked client
                 try {
                     $vpnClient = new VpnClient($client['id']);
-                    $vpnClient->syncStats();
-                } catch (Throwable $e) {}
-                
-                $linkedCount++;
+                    $vpnClient->linkToExtClient($matchingCode);
+                    $linkedCount++;
+                } catch (Throwable $e) {
+                    error_log('Failed to auto-link client ' . $client['id'] . ': ' . $e->getMessage());
+                }
             }
         }
         

@@ -36,18 +36,26 @@ try {
     // We use a transaction so the local list is not left empty if something fails
     $myPdo->beginTransaction();
     
-    // Delete existing cached codes (transactional)
-    $myPdo->exec('DELETE FROM ext_clients');
-    
-    // Batch insert new codes
+    // Batch insert/update new codes (non-destructive to preserve traffic)
     if (!empty($rawClients)) {
-        $insertStmt = $myPdo->prepare('INSERT INTO ext_clients (code, name, start_date, sub, func, router) VALUES (?, ?, ?, ?, ?, ?)');
+        $insertStmt = $myPdo->prepare('
+            INSERT INTO ext_clients (code, name, start_date, sub, func, router) 
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE 
+                name = VALUES(name), 
+                start_date = VALUES(start_date), 
+                sub = VALUES(sub), 
+                func = VALUES(func), 
+                router = VALUES(router)
+        ');
         $syncedCount = 0;
+        $activeCodes = [];
         foreach ($rawClients as $row) {
             $code = trim($row['Code'] ?? '');
             if ($code === '') {
                 continue;
             }
+            $activeCodes[] = $code;
             $name = isset($row['Name']) ? trim($row['Name']) : null;
             $startDate = isset($row['Start_Date']) ? trim($row['Start_Date']) : null;
             if ($startDate === '') $startDate = null;
@@ -58,6 +66,18 @@ try {
             $insertStmt->execute([$code, $name, $startDate, $sub, $func, $router]);
             $syncedCount++;
         }
+        
+        // Delete clients that are no longer in the external database
+        if (!empty($activeCodes)) {
+            $placeholders = implode(',', array_fill(0, count($activeCodes), '?'));
+            $deleteStmt = $myPdo->prepare("DELETE FROM ext_clients WHERE code NOT IN ($placeholders)");
+            $deleteStmt->execute($activeCodes);
+        } else {
+            $myPdo->exec('DELETE FROM ext_clients');
+        }
+    } else {
+        $myPdo->exec('DELETE FROM ext_clients');
+        $syncedCount = 0;
     }
     
     $myPdo->commit();
