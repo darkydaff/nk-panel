@@ -112,6 +112,17 @@ function requireAuth(): void {
         }
         redirect('/login');
     }
+    // Also verify the user still exists in the DB (e.g. account was deleted while session was active)
+    if (Auth::user() === null) {
+        Auth::logout();
+        if (isJsonRequest()) {
+            http_response_code(401);
+            header('Content-Type: application/json');
+            echo json_encode(['error' => 'Session expired']);
+            exit;
+        }
+        redirect('/login');
+    }
 }
 
 // Helper function to require admin
