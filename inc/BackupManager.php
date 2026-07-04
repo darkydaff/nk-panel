@@ -39,12 +39,17 @@ class BackupManager {
         $dbErrorPath = "{$tempDir}/mysql_dump.err";
         $dbErrorPathEsc = escapeshellarg($dbErrorPath);
         
-        $cmd = "MYSQL_PWD=" . escapeshellarg($dbPass) . " mysqldump --no-tablespaces -h {$dbHostEsc} -P {$dbPortEsc} -u {$dbUserEsc} {$dbNameEsc} > {$mysqlDumpPathEsc} 2> {$dbErrorPathEsc}";
-        exec($cmd, $output, $returnVar);
+        $cmdIgnore = "MYSQL_PWD=" . escapeshellarg($dbPass) . " mysqldump --no-tablespaces -h {$dbHostEsc} -P {$dbPortEsc} -u {$dbUserEsc} --ignore-table={$dbName}.client_metrics --ignore-table={$dbName}.server_metrics {$dbNameEsc} > {$mysqlDumpPathEsc} 2> {$dbErrorPathEsc}";
+        exec($cmdIgnore, $output, $returnVar);
         if ($returnVar !== 0) {
             $err = file_exists($dbErrorPath) ? trim(file_get_contents($dbErrorPath)) : 'Unknown error';
             throw new Exception("MySQL dump failed with exit code {$returnVar}. Error: {$err}");
         }
+
+        // Dump ONLY the schema of large metrics tables (no data)
+        // to prevent massive backup sizes while ensuring table structures exist on restore
+        $cmdSchema = "MYSQL_PWD=" . escapeshellarg($dbPass) . " mysqldump --no-tablespaces --no-data -h {$dbHostEsc} -P {$dbPortEsc} -u {$dbUserEsc} {$dbNameEsc} client_metrics server_metrics >> {$mysqlDumpPathEsc} 2>/dev/null";
+        exec($cmdSchema, $outputSchema, $returnVarSchema);
 
         // 2. PostgreSQL Dump
         $pgHost = Config::get('EXT_PG_HOST');
