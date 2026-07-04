@@ -208,7 +208,7 @@ class VpnServer
      * Execute command on remote server and return output.
      * Throws an exception if the command exits non-zero.
      */
-    private function executeCommand(string $command, bool $sudo = false, bool $checkExit = false): string
+    public function executeCommand(string $command, bool $sudo = false, bool $checkExit = false): string
     {
         if ($sudo && strtolower($this->data['username']) !== 'root') {
             $command = "echo '{$this->data['password']}' | sudo -S " . $command;
