@@ -239,11 +239,11 @@ Router::get('/dashboard', function () {
     requireAuth();
     $user = Auth::user();
     
-    // Get user's servers
-    $servers = VpnServer::listByUser($user['id']);
+    // Get servers (admins see all, regular users see their own)
+    $servers = Auth::isAdmin() ? VpnServer::listAll() : VpnServer::listByUser($user['id']);
     
-    // Get user's clients
-    $clients = VpnClient::listByUser($user['id']);
+    // Get clients (admins see all, regular users see their own)
+    $clients = Auth::isAdmin() ? VpnClient::listAll() : VpnClient::listByUser($user['id']);
     
     // Get subscription health stats
     $subStats = [
@@ -1555,7 +1555,8 @@ Router::get('/api/servers', function () {
         return;
     }
     
-    $servers = VpnServer::listByUser($user['id']);
+    // Admins see all servers, regular users see only their own
+    $servers = ($user['role'] === 'admin') ? VpnServer::listAll() : VpnServer::listByUser($user['id']);
     echo json_encode(['servers' => $servers]);
 });
 

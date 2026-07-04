@@ -346,7 +346,21 @@ class VpnClient {
         $stmt->execute([$userId]);
         return $stmt->fetchAll();
     }
-    
+
+    /**
+     * Get all clients across all users (admin only)
+     */
+    public static function listAll(): array {
+        $pdo = DB::conn();
+        $stmt = $pdo->query('
+            SELECT c.*, s.name as server_name, s.host as server_host
+            FROM vpn_clients c
+            LEFT JOIN vpn_servers s ON c.server_id = s.id
+            ORDER BY c.created_at DESC
+        ');
+        return $stmt->fetchAll();
+    }
+
     /**
      * Revoke client access (disable without deleting)
      */
