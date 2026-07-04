@@ -2616,6 +2616,143 @@ Router::get('/settings/backup-delete/{id}', function ($params) {
     redirect('/settings#backups');
 });
 
+// Analyze Backup Upload (AJAX)
+Router::post('/settings/backup-analyze', function () {
+    requireAdmin();
+    header('Content-Type: application/json');
+
+    if (!isset($_FILES['backup_file']) || $_FILES['backup_file']['error'] !== UPLOAD_ERR_OK) {
+        echo json_encode(['error' => 'File upload failed']);
+        return;
+    }
+
+    $tmpPath = $_FILES['backup_file']['tmp_name'];
+    $origName = $_FILES['backup_file']['name'];
+    $ext = pathinfo($origName, PATHINFO_EXTENSION);
+
+    // Move file to temporary backups folder
+    $destDir = '/var/www/html/backups/temp';
+    if (!is_dir($destDir)) {
+        mkdir($destDir, 0777, true);
+    }
+    $filepath = $destDir . '/' . uniqid() . '.' . $ext;
+    move_uploaded_file($tmpPath, $filepath);
+
+    if ($ext === 'zip') {
+        $zip = new ZipArchive();
+        if ($zip->open($filepath) !== true) {
+            echo json_encode(['error' => 'Invalid ZIP file']);
+            return;
+        }
+        $tempExtract = "/tmp/analyze_" . time();
+        mkdir($tempExtract);
+        $zip->extractTo($tempExtract);
+        $zip->close();
+
+        $servers = [];
+        $serverFiles = glob("{$tempExtract}/servers/*.json");
+        foreach ($serverFiles as $sf) {
+            $sData = json_decode(file_get_contents($sf), true);
+            if (isset($sData['server'])) {
+                $servers[] = [
+                    'id' => $sData['server']['id'],
+                    'name' => $sData['server']['name'],
+                    'host' => $sData['server']['host']
+                ];
+            }
+        }
+        
+        // Recursive delete helper since PHP doesn't have standard rmdir recursive
+        $deleteDir = function($dir) use (&$deleteDir) {
+            if (!file_exists($dir)) return true;
+            if (!is_dir($dir)) return unlink($dir);
+            foreach (scandir($dir) as $item) {
+                if ($item == '.' || $item == '..') continue;
+                if (!$deleteDir($dir . DIRECTORY_SEPARATOR . $item)) return false;
+            }
+            return rmdir($dir);
+        };
+        $deleteDir($tempExtract);
+
+        echo json_encode([
+            'scope' => 'panel',
+            'filepath' => $filepath,
+            'servers' => $servers
+        ]);
+    } else {
+        // JSON Individual Server Backup
+        $sData = json_decode(file_get_contents($filepath), true);
+        if (!isset($sData['server'])) {
+            echo json_encode(['error' => 'Invalid server JSON format']);
+            return;
+        }
+        
+        $allServers = VpnServer::listAll();
+
+        echo json_encode([
+            'scope' => 'server',
+            'filepath' => $filepath,
+            'server' => $sData['server'],
+            'all_servers' => $allServers
+        ]);
+    }
+});
+
+// Submit Backup Restore
+Router::post('/settings/backup-restore', function () {
+    requireAdmin();
+    $filepath = $_POST['filepath'] ?? '';
+    $scope = $_POST['scope'] ?? '';
+
+    if (empty($filepath) || !file_exists($filepath)) {
+        $_SESSION['settings_error'] = 'Backup file not found';
+        redirect('/settings#backups');
+    }
+
+    try {
+        $bm = new BackupManager();
+        if ($scope === 'panel') {
+            $options = [
+                'restore_mysql' => isset($_POST['restore_mysql']),
+                'restore_postgres' => isset($_POST['restore_postgres']),
+                'restore_env' => isset($_POST['restore_env']),
+                'selective_servers' => $_POST['selective_servers'] ?? []
+            ];
+
+            $res = $bm->restorePanelBackup($filepath, $options);
+            if (empty($options['selective_servers'])) {
+                $_SESSION['settings_success'] = 'Panel successfully restored. Sessions might have been reset.';
+            } else {
+                $_SESSION['settings_success'] = 'Selective servers and clients restored successfully: ' . count($res['servers_restored']);
+            }
+        } else {
+            // Server JSON Restore
+            $serverData = json_decode(file_get_contents($filepath), true);
+            $action = $_POST['server_action'] ?? 'new';
+            $targetServerId = ($action === 'overwrite') ? (int)($_POST['target_server_id'] ?? 0) : null;
+            
+            $res = $bm->restoreServerBackup($serverData, $targetServerId);
+            
+            if (isset($_POST['sync_keys'])) {
+                if (file_exists($filepath)) {
+                    unlink($filepath);
+                }
+                redirect("/servers/{$res['server_id']}/deploy");
+                return;
+            } else {
+                $_SESSION['settings_success'] = "Server '{$res['name']}' database entries restored successfully.";
+            }
+        }
+    } catch (Exception $e) {
+        $_SESSION['settings_error'] = 'Restore failed: ' . $e->getMessage();
+    }
+
+    if (file_exists($filepath)) {
+        unlink($filepath);
+    }
+    redirect('/settings#backups');
+});
+
 
 
 /**
