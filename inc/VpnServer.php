@@ -159,6 +159,9 @@ class VpnServer
             // Reload data
             $this->load();
 
+            // Sync all clients to the container
+            $this->syncAllClientsToContainer();
+
             // Deploy monitoring agent if panelUrl is provided
             if ($panelUrl) {
                 try {
@@ -523,18 +526,35 @@ public static function getMimicryPresets(): array
         // Create directory
         $this->executeCommand("docker exec -i {$containerName} mkdir -p /opt/amnezia/awg", true);
 
-        // Generate keys
-        $this->executeCommand("docker exec -i {$containerName} sh -c 'cd /opt/amnezia/awg && umask 077 && /usr/local/bin/awg genkey | tee server_private.key | /usr/local/bin/awg pubkey > wireguard_server_public_key.key'", true, true);
-        $this->executeCommand("docker exec -i {$containerName} sh -c 'cd /opt/amnezia/awg && /usr/local/bin/awg genpsk > wireguard_psk.key'", true, true);
-        $this->executeCommand("docker exec -i {$containerName} chmod 600 /opt/amnezia/awg/server_private.key /opt/amnezia/awg/wireguard_psk.key /opt/amnezia/awg/wireguard_server_public_key.key", true, true);
+        $pdo = DB::conn();
 
-        // Get keys
-        $privKey = trim($this->executeCommand("docker exec -i {$containerName} cat /opt/amnezia/awg/server_private.key", true));
-        $pubKey = trim($this->executeCommand("docker exec -i {$containerName} cat /opt/amnezia/awg/wireguard_server_public_key.key", true));
-        $psk = trim($this->executeCommand("docker exec -i {$containerName} cat /opt/amnezia/awg/wireguard_psk.key", true));
+        if (!empty($this->data['server_private_key'])) {
+            // Restore existing keys
+            $privKey = trim($this->data['server_private_key']);
+            $psk = trim($this->data['preshared_key']);
+
+            $this->executeCommand("echo \"{$privKey}\" | docker exec -i {$containerName} sh -c 'cat > /opt/amnezia/awg/server_private.key'", true);
+            $this->executeCommand("echo \"{$psk}\" | docker exec -i {$containerName} sh -c 'cat > /opt/amnezia/awg/wireguard_psk.key'", true);
+            $this->executeCommand("docker exec -i {$containerName} sh -c 'cat /opt/amnezia/awg/server_private.key | /usr/local/bin/awg pubkey > /opt/amnezia/awg/wireguard_server_public_key.key'", true);
+            $this->executeCommand("docker exec -i {$containerName} chmod 600 /opt/amnezia/awg/server_private.key /opt/amnezia/awg/wireguard_psk.key /opt/amnezia/awg/wireguard_server_public_key.key", true);
+            
+            $pubKey = trim($this->executeCommand("docker exec -i {$containerName} cat /opt/amnezia/awg/wireguard_server_public_key.key", true));
+            
+            // Securely clear private key from DB since it is successfully deployed
+            $pdo->prepare("UPDATE vpn_servers SET server_private_key = NULL WHERE id = ?")->execute([$this->serverId]);
+        } else {
+            // Generate keys
+            $this->executeCommand("docker exec -i {$containerName} sh -c 'cd /opt/amnezia/awg && umask 077 && /usr/local/bin/awg genkey | tee server_private.key | /usr/local/bin/awg pubkey > wireguard_server_public_key.key'", true, true);
+            $this->executeCommand("docker exec -i {$containerName} sh -c 'cd /opt/amnezia/awg && /usr/local/bin/awg genpsk > wireguard_psk.key'", true, true);
+            $this->executeCommand("docker exec -i {$containerName} chmod 600 /opt/amnezia/awg/server_private.key /opt/amnezia/awg/wireguard_psk.key /opt/amnezia/awg/wireguard_server_public_key.key", true, true);
+            
+            $privKey = trim($this->executeCommand("docker exec -i {$containerName} cat /opt/amnezia/awg/server_private.key", true));
+            $pubKey = trim($this->executeCommand("docker exec -i {$containerName} cat /opt/amnezia/awg/wireguard_server_public_key.key", true));
+            $psk = trim($this->executeCommand("docker exec -i {$containerName} cat /opt/amnezia/awg/wireguard_psk.key", true));
+        }
 
         if (empty($privKey) || empty($pubKey) || empty($psk)) {
-            throw new Exception('Key generation failed inside container — private/public/psk key is empty. Check that amneziawg-tools compiled correctly.');
+            throw new Exception('Key generation failed inside container — private/public/psk key is empty.');
         }
 
         // Decode selected mimicry type
@@ -1242,5 +1262,72 @@ EOF
     fi
 done
 BASH;
+    }
+
+    /**
+     * Batch synchronization of all server clients from database to remote container.
+     */
+    public function syncAllClientsToContainer(): bool {
+        if (!$this->data) return false;
+        $containerName = $this->data['container_name'];
+        $pdo = DB::conn();
+
+        // Retrieve server private key from remote container to re-derive/construct
+        $privKey = trim($this->executeCommand("docker exec -i {$containerName} cat /opt/amnezia/awg/server_private.key 2>/dev/null", true));
+        if (empty($privKey)) {
+            return false;
+        }
+
+        $stmt = $pdo->prepare("SELECT name, client_ip, public_key, preshared_key, status FROM vpn_clients WHERE server_id = ?");
+        $stmt->execute([$this->serverId]);
+        $clients = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Build Interface section
+        $vpnPort = $this->data['vpn_port'] ?: 51820;
+        $subnetBase = substr($this->data['vpn_subnet'], 0, strrpos($this->data['vpn_subnet'], '.'));
+        $awgParams = is_string($this->data['awg_params']) ? json_decode($this->data['awg_params'], true) : $this->data['awg_params'];
+        $awgParams = $awgParams ?: [];
+
+        $wgConfig = "[Interface]\n";
+        $wgConfig .= "PrivateKey = {$privKey}\n";
+        $wgConfig .= "Address = {$subnetBase}.1/24\n";
+        $wgConfig .= "ListenPort = {$vpnPort}\n";
+        $wgConfig .= "MTU = 1280\n";
+        foreach ($awgParams as $key => $value) {
+            if (empty($value) || $key === 'mimicry_type') continue;
+            $wgConfig .= "{$key} = {$value}\n";
+        }
+        $wgConfig .= "\n";
+
+        // Build Peer sections & clientsTable structure
+        $clientsTable = [];
+        foreach ($clients as $c) {
+            if ($c['status'] !== 'active') continue;
+            
+            $wgConfig .= "[Peer]\n";
+            $wgConfig .= "PublicKey = {$c['public_key']}\n";
+            if (!empty($c['preshared_key'])) {
+                $wgConfig .= "PresharedKey = {$c['preshared_key']}\n";
+            }
+            $wgConfig .= "AllowedIPs = {$c['client_ip']}/32\n\n";
+
+            $clientsTable[] = [
+                'name' => $c['name'],
+                'client_ip' => $c['client_ip'],
+                'public_key' => $c['public_key'],
+                'preshared_key' => $c['preshared_key']
+            ];
+        }
+
+        $base64Config = base64_encode($wgConfig);
+        $base64Table = base64_encode(json_encode($clientsTable));
+
+        $this->executeCommand("echo \"{$base64Config}\" | docker exec -i {$containerName} sh -c 'base64 -d > /opt/amnezia/awg/wg0.conf'", true);
+        $this->executeCommand("docker exec -i {$containerName} chmod 600 /opt/amnezia/awg/wg0.conf", true);
+        $this->executeCommand("echo \"{$base64Table}\" | docker exec -i {$containerName} sh -c 'base64 -d > /opt/amnezia/awg/clientsTable'", true);
+
+        // Apply rules and syncconf
+        $this->executeCommand("docker exec -i {$containerName} bash -c '/usr/local/bin/awg syncconf wg0 <(/usr/local/bin/awg-quick strip /opt/amnezia/awg/wg0.conf)'", true);
+        return true;
     }
 }
