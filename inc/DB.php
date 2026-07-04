@@ -167,6 +167,23 @@ class DB {
           $pdo->exec($sql);
         }
       }
+
+      // Check if backup_scope column exists in server_backups
+      try {
+        $stmtBackupCols = $pdo->query("SHOW COLUMNS FROM server_backups LIKE 'backup_scope'");
+        $hasBackupScope = $stmtBackupCols->rowCount() > 0;
+      } catch (Throwable $e) {
+        $hasBackupScope = false;
+      }
+
+      if (!$hasBackupScope) {
+        // Run migration to support comprehensive backups
+        $sqlPath = __DIR__ . '/../migrations/026_backup_restore_system_support.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
     } catch (Throwable $e) {
       error_log("Database self-healing migration failed: " . $e->getMessage());
     }
