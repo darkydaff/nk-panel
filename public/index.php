@@ -2607,8 +2607,16 @@ Router::post('/settings/backup-create', function () {
         $bm = new BackupManager();
         if ($target === 'panel') {
             $path = $bm->createPanelBackup($user['id']);
-            $bm->sendToTelegram($path);
-            $_SESSION['settings_success'] = 'Full panel backup successfully created';
+            $tgErr = '';
+            if (!$bm->sendToTelegram($path, $tgErr)) {
+                if (!empty($tgErr)) {
+                    $_SESSION['settings_success'] = 'Full panel backup successfully created, but Telegram upload failed: ' . $tgErr;
+                } else {
+                    $_SESSION['settings_success'] = 'Full panel backup successfully created (Telegram upload is disabled).';
+                }
+            } else {
+                $_SESSION['settings_success'] = 'Full panel backup successfully created and uploaded to Telegram.';
+            }
         } else {
             $serverId = (int)$target;
             $server = new VpnServer($serverId);

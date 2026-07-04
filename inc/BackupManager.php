@@ -149,46 +149,67 @@ class BackupManager {
       /**
        * Transmits a backup archive file to Telegram.
        */
-      public function sendToTelegram(string $filePath): bool {
-          if (!file_exists($filePath)) {
-              return false;
-          }
+       public function sendToTelegram(string $filePath, string &$errorReason = ''): bool {
+           if (!file_exists($filePath)) {
+               $errorReason = 'Backup file not found on disk';
+               return false;
+           }
 
-          // Read settings from DB namespace 'backup'
-          $stmt = $this->pdo->prepare("SELECT value FROM settings WHERE namespace = 'backup' AND `key` = 'telegram_settings'");
-          $stmt->execute();
-          $res = $stmt->fetch();
-          
-          $botToken = Config::get('TELEGRAM_BOT_TOKEN');
-          $chatId = Config::get('TELEGRAM_CHAT_ID');
-          $enabled = false;
+           // Read settings from DB namespace 'backup'
+           $stmt = $this->pdo->prepare("SELECT value FROM settings WHERE namespace = 'backup' AND `key` = 'telegram_settings'");
+           $stmt->execute();
+           $res = $stmt->fetch();
+           
+           $botToken = Config::get('TELEGRAM_BOT_TOKEN');
+           $chatId = Config::get('TELEGRAM_CHAT_ID');
+           $enabled = false;
 
-          if ($res) {
-              $settings = json_decode($res['value'], true);
-              $botToken = $settings['bot_token'] ?: $botToken;
-              $chatId = $settings['chat_id'] ?: $chatId;
-              $enabled = $settings['enabled'] ?? false;
-          }
+           if ($res) {
+               $settings = json_decode($res['value'], true);
+               $botToken = $settings['bot_token'] ?: $botToken;
+               $chatId = $settings['chat_id'] ?: $chatId;
+               $enabled = $settings['enabled'] ?? false;
+           }
 
-          if (!$enabled || empty($botToken) || empty($chatId)) {
-              return false;
-          }
+           if (!$enabled) {
+               return false;
+           }
 
-          $url = "https://api.telegram.org/bot{$botToken}/sendDocument";
-          $ch = curl_init($url);
-          curl_setopt($ch, CURLOPT_POST, true);
-          curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-          curl_setopt($ch, CURLOPT_POSTFIELDS, [
-              'chat_id' => $chatId,
-              'document' => new CURLFile($filePath),
-              'caption' => "🛡️ Nk-VPN Panel Backup: " . basename($filePath)
-          ]);
-          $response = curl_exec($ch);
-          $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-          curl_close($ch);
+           if (empty($botToken) || empty($chatId)) {
+               $errorReason = 'Telegram integration is enabled but Bot Token or Chat ID is empty';
+               $this->pdo->prepare("UPDATE server_backups SET error_message = ? WHERE backup_path = ?")->execute([$errorReason, $filePath]);
+               return false;
+           }
 
-          return $httpCode === 200;
-      }
+           $url = "https://api.telegram.org/bot{$botToken}/sendDocument";
+           $ch = curl_init($url);
+           curl_setopt($ch, CURLOPT_POST, true);
+           curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+           curl_setopt($ch, CURLOPT_POSTFIELDS, [
+               'chat_id' => $chatId,
+               'document' => new CURLFile($filePath),
+               'caption' => "🛡️ Nk-VPN Panel Backup: " . basename($filePath)
+           ]);
+           
+           $response = curl_exec($ch);
+           $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+           
+           if ($response === false) {
+               $errorReason = curl_error($ch);
+           }
+           curl_close($ch);
+
+           if ($httpCode === 200) {
+               return true;
+           } else {
+               if (empty($errorReason)) {
+                   $data = json_decode($response, true);
+                   $errorReason = $data['description'] ?? 'HTTP Code ' . $httpCode;
+               }
+               $this->pdo->prepare("UPDATE server_backups SET error_message = ? WHERE backup_path = ?")->execute(['Telegram upload failed: ' . $errorReason, $filePath]);
+               return false;
+           }
+       }
 
       /**
        * Prunes local backups according to the retention policy.
