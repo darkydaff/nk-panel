@@ -1254,6 +1254,9 @@ public static function getClientsOverLimit(): array {
     }
 
     /**
+     * Automatically link all unlinked configurations (where ext_client_code IS NULL)
+     * to external clients in the cache table using fuzzy code/name matching.
+     */
     public static function autoLinkAll(): int {
         $pdo = DB::conn();
         
