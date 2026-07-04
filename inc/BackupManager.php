@@ -36,10 +36,13 @@ class BackupManager {
         $dbNameEsc = escapeshellarg($dbName);
         $mysqlDumpPathEsc = escapeshellarg($mysqlDumpPath);
         
-        $cmd = "MYSQL_PWD=" . escapeshellarg($dbPass) . " mysqldump -h {$dbHostEsc} -P {$dbPortEsc} -u {$dbUserEsc} {$dbNameEsc} > {$mysqlDumpPathEsc} 2>&1";
+        $dbErrorPath = "{$tempDir}/mysql_dump.err";
+        $dbErrorPathEsc = escapeshellarg($dbErrorPath);
+        
+        $cmd = "MYSQL_PWD=" . escapeshellarg($dbPass) . " mysqldump --no-tablespaces -h {$dbHostEsc} -P {$dbPortEsc} -u {$dbUserEsc} {$dbNameEsc} > {$mysqlDumpPathEsc} 2> {$dbErrorPathEsc}";
         exec($cmd, $output, $returnVar);
         if ($returnVar !== 0) {
-            $err = implode("\n", $output);
+            $err = file_exists($dbErrorPath) ? trim(file_get_contents($dbErrorPath)) : 'Unknown error';
             throw new Exception("MySQL dump failed with exit code {$returnVar}. Error: {$err}");
         }
 
@@ -58,10 +61,13 @@ class BackupManager {
             $pgDbEsc = escapeshellarg($pgDb);
             $postgresDumpPathEsc = escapeshellarg($postgresDumpPath);
 
-            $pgCmd = "PGPASSWORD=" . escapeshellarg($pgPass) . " pg_dump -h {$pgHostEsc} -p {$pgPortEsc} -U {$pgUserEsc} -d {$pgDbEsc} -F p > {$postgresDumpPathEsc} 2>&1";
+            $pgErrorPath = "{$tempDir}/pg_dump.err";
+            $pgErrorPathEsc = escapeshellarg($pgErrorPath);
+
+            $pgCmd = "PGPASSWORD=" . escapeshellarg($pgPass) . " pg_dump -h {$pgHostEsc} -p {$pgPortEsc} -U {$pgUserEsc} -d {$pgDbEsc} -F p > {$postgresDumpPathEsc} 2> {$pgErrorPathEsc}";
             exec($pgCmd, $outputPg, $returnVarPg);
             if ($returnVarPg !== 0) {
-                $errPg = implode("\n", $outputPg);
+                $errPg = file_exists($pgErrorPath) ? trim(file_get_contents($pgErrorPath)) : 'Unknown error';
                 error_log("PostgreSQL dump failed: {$errPg}");
             }
         }
@@ -239,10 +245,13 @@ class BackupManager {
                   $dbNameEsc = escapeshellarg($dbName);
                   $sqlPathEsc = escapeshellarg("{$tempDir}/panel_db.sql");
 
-                  $cmd = "MYSQL_PWD=" . escapeshellarg($dbPass) . " mysql -h {$dbHostEsc} -P {$dbPortEsc} -u {$dbUserEsc} {$dbNameEsc} < {$sqlPathEsc} 2>&1";
+                  $dbErrorPath = "{$tempDir}/mysql_restore.err";
+                  $dbErrorPathEsc = escapeshellarg($dbErrorPath);
+
+                  $cmd = "MYSQL_PWD=" . escapeshellarg($dbPass) . " mysql -h {$dbHostEsc} -P {$dbPortEsc} -u {$dbUserEsc} {$dbNameEsc} < {$sqlPathEsc} 2> {$dbErrorPathEsc}";
                   exec($cmd, $output, $returnVar);
                   if ($returnVar !== 0) {
-                      $err = implode("\n", $output);
+                      $err = file_exists($dbErrorPath) ? trim(file_get_contents($dbErrorPath)) : 'Unknown error';
                       throw new Exception("MySQL restore failed with exit code {$returnVar}. Error: {$err}");
                   }
                   $results['mysql'] = true;
@@ -262,10 +271,13 @@ class BackupManager {
                   $pgDbEsc = escapeshellarg($pgDb);
                   $sqlPathEsc = escapeshellarg("{$tempDir}/postgres_db.sql");
 
-                  $pgCmd = "PGPASSWORD=" . escapeshellarg($pgPass) . " psql -h {$pgHostEsc} -p {$pgPortEsc} -U {$pgUserEsc} -d {$pgDbEsc} < {$sqlPathEsc} 2>&1";
+                  $pgErrorPath = "{$tempDir}/pg_restore.err";
+                  $pgErrorPathEsc = escapeshellarg($pgErrorPath);
+
+                  $pgCmd = "PGPASSWORD=" . escapeshellarg($pgPass) . " psql -h {$pgHostEsc} -p {$pgPortEsc} -U {$pgUserEsc} -d {$pgDbEsc} < {$sqlPathEsc} 2> {$pgErrorPathEsc}";
                   exec($pgCmd, $outputPg, $returnVarPg);
                   if ($returnVarPg !== 0) {
-                      $errPg = implode("\n", $outputPg);
+                      $errPg = file_exists($pgErrorPath) ? trim(file_get_contents($pgErrorPath)) : 'Unknown error';
                       throw new Exception("PostgreSQL restore failed with exit code {$returnVarPg}. Error: {$errPg}");
                   }
                   $results['postgres'] = true;
