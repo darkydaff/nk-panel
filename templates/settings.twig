@@ -330,6 +330,83 @@
         </div>
     </div>
     {% endif %}
+    </div>
+
+    <!-- Restore Confirmation Modal -->
+    <div id="restoreModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl max-w-lg w-full overflow-hidden shadow-2xl">
+            <div class="px-5 py-4 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center">
+                <h3 class="text-base font-semibold text-white"><i class="fas fa-history mr-2 text-accent"></i>Confirm Restoration</h3>
+                <button type="button" onclick="closeRestoreModal()" class="text-slate-400 hover:text-slate-200"><i class="fas fa-times"></i></button>
+            </div>
+            <form id="restore-form" method="POST" action="/settings/backup-restore">
+                <input type="hidden" name="filepath" id="restore-filepath">
+                <input type="hidden" name="scope" id="restore-scope">
+                <div class="p-5 space-y-4">
+                    <!-- Panel Restore Options -->
+                    <div id="panel-restore-options" class="hidden space-y-4">
+                        <div class="bg-red-500/10 border border-red-500/20 text-red-300 px-4 py-3 rounded-lg text-xs leading-relaxed">
+                            ⚠️ WARNING: A Full Panel restore will overwrite your current database configurations, clients, and user sessions.
+                        </div>
+                        <div class="space-y-2">
+                            <label class="flex items-center text-sm font-medium text-slate-300 cursor-pointer">
+                                <input type="checkbox" name="restore_mysql" value="1" checked class="rounded bg-slate-850 border-slate-700 mr-2 text-accent focus:ring-0">
+                                Restore Panel Database Schema & Data
+                            </label>
+                            <label class="flex items-center text-sm font-medium text-slate-300 cursor-pointer">
+                                <input type="checkbox" name="restore_postgres" value="1" checked class="rounded bg-slate-850 border-slate-700 mr-2 text-accent focus:ring-0">
+                                Restore External PostgreSQL DB Data
+                            </label>
+                            <label class="flex items-center text-sm font-medium text-slate-300 cursor-pointer">
+                                <input type="checkbox" name="restore_env" value="1" checked class="rounded bg-slate-850 border-slate-700 mr-2 text-accent focus:ring-0">
+                                Restore Environment Variables (.env)
+                            </label>
+                        </div>
+                        <div class="pt-3 border-t border-slate-800">
+                            <label class="block text-xs text-slate-400 mb-1 font-semibold uppercase">Selective Server Restore</label>
+                            <p class="text-[11px] text-slate-500 mb-3">Check boxes below to ONLY extract and restore specific VPN servers (does not overwrite other data):</p>
+                            <div id="panel-selective-servers" class="space-y-1.5 max-h-36 overflow-y-auto pr-2">
+                                <!-- populated dynamically -->
+                            </div>
+                        </div>
+                        <div class="pt-2">
+                            <label class="block text-xs text-slate-400 mb-1.5 font-medium">Type "RESTORE" to confirm entire panel restore</label>
+                            <input type="text" id="confirm-input" class="input-field w-full px-3 py-2 text-sm font-mono" placeholder="RESTORE">
+                        </div>
+                    </div>
+
+                    <!-- Server Restore Options -->
+                    <div id="server-restore-options" class="hidden space-y-4">
+                        <div class="bg-slate-800/40 p-4 rounded-lg border border-slate-800">
+                            <div class="text-xs text-slate-400">Target Host Config:</div>
+                            <div class="text-sm font-bold text-white mb-2" id="backup-server-host"></div>
+                            <div>
+                                <label class="block text-xs text-slate-400 mb-1">Restoration Action:</label>
+                                <select name="server_action" id="server-action-select" class="input-field w-full px-3 py-2 text-sm bg-slate-800" onchange="toggleServerSelect()">
+                                    <option value="overwrite">Overwrite existing server with matching Host</option>
+                                    <option value="new">Import as a brand new VPN Server Copy</option>
+                                </select>
+                            </div>
+                            <div id="target-server-select-div" class="mt-3">
+                                <label class="block text-xs text-slate-400 mb-1">Target server to overwrite:</label>
+                                <select name="target_server_id" id="target-server-select" class="input-field w-full px-3 py-2 text-sm bg-slate-800">
+                                    <!-- populated dynamically -->
+                                </select>
+                            </div>
+                        </div>
+                        <label class="flex items-center text-sm font-medium text-slate-300 cursor-pointer">
+                            <input type="checkbox" name="sync_keys" value="1" checked class="rounded bg-slate-850 border-slate-700 mr-2 text-accent focus:ring-0">
+                            Sync restored keys & active clients directly to remote VPS
+                        </label>
+                    </div>
+                </div>
+                <div class="px-5 py-4 border-t border-slate-800 bg-slate-900/50 flex justify-end space-x-3">
+                    <button type="button" onclick="closeRestoreModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-lg text-sm transition-colors">Cancel</button>
+                    <button type="submit" id="restore-submit-btn" class="btn-primary px-5 py-2 text-sm">Proceed Restoration</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 
     <style>
@@ -353,6 +430,136 @@ document.addEventListener('DOMContentLoaded', function() {
     const hash = window.location.hash.substring(1);
     if (hash && document.getElementById('tab-' + hash)) {
         showTab(hash);
+    }
+
+    // Dropzone logic
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('restore-file-input');
+
+    if (dropZone && fileInput) {
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-accent');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-accent');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-accent');
+            if (e.dataTransfer.files.length) {
+                handleBackupUpload(e.dataTransfer.files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleBackupUpload(e.target.files[0]);
+            }
+        });
+    }
+});
+
+async function handleBackupUpload(file) {
+    const formData = new FormData();
+    formData.append('backup_file', file);
+
+    const dropZone = document.getElementById('drop-zone');
+    const originalContent = dropZone.innerHTML;
+    dropZone.innerHTML = '<i class="fas fa-spinner fa-spin text-2xl text-slate-500 mb-2"></i><p class="text-xs text-slate-400">Uploading and analyzing backup file...</p>';
+
+    try {
+        const res = await fetch('/settings/backup-analyze', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+        dropZone.innerHTML = originalContent;
+
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+        
+        document.getElementById('restore-filepath').value = data.filepath;
+        document.getElementById('restore-scope').value = data.scope;
+        
+        if (data.scope === 'panel') {
+            document.getElementById('panel-restore-options').classList.remove('hidden');
+            document.getElementById('server-restore-options').classList.add('hidden');
+            
+            // Populate selective server checkboxes
+            const serverDiv = document.getElementById('panel-selective-servers');
+            serverDiv.innerHTML = '';
+            if (data.servers && data.servers.length) {
+                data.servers.forEach(srv => {
+                    serverDiv.innerHTML += `
+                        <label class="flex items-center text-xs text-slate-350 cursor-pointer">
+                            <input type="checkbox" name="selective_servers[]" value="${srv.id}" class="rounded bg-slate-850 border-slate-700 mr-2 text-accent focus:ring-0">
+                            ${srv.name} (${srv.host})
+                        </label>
+                    `;
+                });
+            } else {
+                serverDiv.innerHTML = '<p class="text-xs text-slate-550 italic">No VPN servers found in backup archive.</p>';
+            }
+        } else {
+            document.getElementById('panel-restore-options').classList.add('hidden');
+            document.getElementById('server-restore-options').classList.remove('hidden');
+            document.getElementById('backup-server-host').innerText = `${data.server.name} (${data.server.host})`;
+            
+            // Populate target servers overwrite dropdown
+            const select = document.getElementById('target-server-select');
+            select.innerHTML = '';
+            if (data.all_servers && data.all_servers.length) {
+                data.all_servers.forEach(srv => {
+                    const selected = srv.host === data.server.host ? 'selected' : '';
+                    select.innerHTML += `<option value="${srv.id}" ${selected}>${srv.name} (${srv.host})</option>`;
+                });
+            } else {
+                select.innerHTML = '<option value="">No servers available to overwrite</option>';
+            }
+            toggleServerSelect();
+        }
+        
+        document.getElementById('restoreModal').classList.remove('hidden');
+    } catch (err) {
+        dropZone.innerHTML = originalContent;
+        alert('Upload failed: ' + err);
+    }
+}
+
+function toggleServerSelect() {
+    const val = document.getElementById('server-action-select').value;
+    const selectDiv = document.getElementById('target-server-select-div');
+    if (val === 'overwrite') {
+        selectDiv.classList.remove('hidden');
+    } else {
+        selectDiv.classList.add('hidden');
+    }
+}
+
+function closeRestoreModal() {
+    document.getElementById('restoreModal').classList.add('hidden');
+    document.getElementById('confirm-input').value = '';
+}
+
+document.getElementById('restore-form').addEventListener('submit', function (e) {
+    const scope = document.getElementById('restore-scope').value;
+    if (scope === 'panel') {
+        // Only require confirmation string if we are restoring the whole panel database
+        const selectiveChecked = document.querySelectorAll('input[name="selective_servers[]"]:checked').length > 0;
+        if (!selectiveChecked) {
+            const confirmText = document.getElementById('confirm-input').value;
+            if (confirmText !== 'RESTORE') {
+                e.preventDefault();
+                alert('Please type RESTORE to confirm entire panel wipe.');
+            }
+        }
     }
 });
 </script>
