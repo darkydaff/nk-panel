@@ -401,12 +401,12 @@ class BackupManager {
               $ins = $this->pdo->prepare("
                   INSERT INTO vpn_clients 
                   (server_id, user_id, name, client_ip, public_key, private_key, preshared_key, config, status, expires_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'disabled', ?)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               ");
               $ins->execute([
                   $serverId, $s['user_id'] ?? 1, $c['name'], $c['client_ip'],
                   $c['public_key'], $c['private_key'], $c['preshared_key'],
-                  $c['config'], $c['expires_at']
+                  $c['config'], $c['status'] ?? 'active', $c['expires_at']
               ]);
               $restoredClientsCount++;
           }

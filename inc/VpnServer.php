@@ -109,8 +109,8 @@ class VpnServer
             // Create directories
             $this->executeCommand('mkdir -p /opt/amnezia/nk-awg-v2', true);
 
-            // Find free UDP port
-            $vpnPort = $this->findFreeUdpPort();
+            // Reuse existing VPN port if configured, otherwise find a free UDP port
+            $vpnPort = !empty($this->data['vpn_port']) ? (int)$this->data['vpn_port'] : $this->findFreeUdpPort();
 
             // Create Dockerfile
             $this->createDockerfile();
@@ -158,6 +158,19 @@ class VpnServer
 
             // Reload data
             $this->load();
+
+            // Regenerate client config files to match new/restored server details
+            $stmtC = $pdo->prepare("SELECT id FROM vpn_clients WHERE server_id = ?");
+            $stmtC->execute([$this->serverId]);
+            $clientIds = $stmtC->fetchAll(PDO::FETCH_COLUMN);
+            foreach ($clientIds as $cId) {
+                try {
+                    $client = new VpnClient((int)$cId);
+                    $client->regenerateConfig();
+                } catch (Exception $e) {
+                    error_log("Failed to regenerate config for client ID {$cId} during deploy: " . $e->getMessage());
+                }
+            }
 
             // Sync all clients to the container
             $this->syncAllClientsToContainer();
@@ -564,61 +577,67 @@ public static function getMimicryPresets(): array
         }
         $mimicryType = $params['mimicry_type'] ?? 'quic';
 
-        // Load mimicry payloads if needed
-        $mimicry = [];
-        if ($mimicryType === 'quic') {
-            $mimicry = $this->getDynamicQuicPayloads();
-        }
-        if (empty($mimicry)) {
-            $mimicry = $this->getMimicryPreset();
-        }
-
-        // Junk packet profile tuned for stable DPI blur with low overhead.
-        // Note: We keep Jmin >= 64 for AWG compatibility.
-        $jmin = 64;
-        $jmax = random_int(max($jmin + 1, 70), 80);
-
-        if ($mimicryType === 'none') {
-            // Standard AWG V1: Single integers for H1-H4, no S3/S4, no I1-I5 payload mimicry.
-            $headers = [];
-            $used = [];
-            foreach (['H1', 'H2', 'H3', 'H4'] as $key) {
-                do {
-                    $val = random_int(100000000, 2000000000);
-                } while (in_array($val, $used));
-                $used[] = $val;
-                $headers[$key] = $val;
+        // Check if we have complete existing AWG parameters to preserve
+        $hasExistingParams = isset($params['H1'], $params['S1'], $params['Jc']);
+        if ($hasExistingParams) {
+            $awgParams = $params;
+        } else {
+            // Load mimicry payloads if needed
+            $mimicry = [];
+            if ($mimicryType === 'quic') {
+                $mimicry = $this->getDynamicQuicPayloads();
+            }
+            if (empty($mimicry)) {
+                $mimicry = $this->getMimicryPreset();
             }
 
-            $awgParams = [
-                'mimicry_type' => 'none',
-                'Jc' => random_int(3, 5),
-                'Jmin' => $jmin,
-                'Jmax' => $jmax,
-                'S1' => rand(0, 64),
-                'S2' => rand(0, 64),
-                'H1' => $headers['H1'],
-                'H2' => $headers['H2'],
-                'H3' => $headers['H3'],
-                'H4' => $headers['H4']
-            ];
-        } else {
-            // AWG 2.0: Header ranges for H1-H4, S3/S4, and payload mimicry
-            $headerRanges = $this->generateNonOverlappingHeaderRanges();
-            $awgParams = array_merge([
-                'mimicry_type' => $mimicryType,
-                'Jc' => random_int(3, 5),
-                'Jmin' => $jmin,
-                'Jmax' => $jmax,
-                'S1' => rand(0, 64),
-                'S2' => rand(0, 64),
-                'S3' => rand(0, 64),
-                'S4' => rand(0, 32),
-                'H1' => $headerRanges['H1'],
-                'H2' => $headerRanges['H2'],
-                'H3' => $headerRanges['H3'],
-                'H4' => $headerRanges['H4']
-            ], $mimicry);
+            // Junk packet profile tuned for stable DPI blur with low overhead.
+            // Note: We keep Jmin >= 64 for AWG compatibility.
+            $jmin = 64;
+            $jmax = random_int(max($jmin + 1, 70), 80);
+
+            if ($mimicryType === 'none') {
+                // Standard AWG V1: Single integers for H1-H4, no S3/S4, no I1-I5 payload mimicry.
+                $headers = [];
+                $used = [];
+                foreach (['H1', 'H2', 'H3', 'H4'] as $key) {
+                    do {
+                        $val = random_int(100000000, 2000000000);
+                    } while (in_array($val, $used));
+                    $used[] = $val;
+                    $headers[$key] = $val;
+                }
+
+                $awgParams = [
+                    'mimicry_type' => 'none',
+                    'Jc' => random_int(3, 5),
+                    'Jmin' => $jmin,
+                    'Jmax' => $jmax,
+                    'S1' => rand(0, 64),
+                    'S2' => rand(0, 64),
+                    'H1' => $headers['H1'],
+                    'H2' => $headers['H2'],
+                    'H3' => $headers['H3'],
+                    'H4' => $headers['H4']
+                ];
+            } else {
+                // AWG 2.0: Header ranges for H1-H4, S3/S4, and payload mimicry
+                $headerRanges = $this->generateNonOverlappingHeaderRanges();
+                $awgParams = array_merge([
+                    'mimicry_type' => $mimicryType,
+                    'Jc' => random_int(3, 5),
+                    'Jmin' => $jmin,
+                    'Jmax' => $jmax,
+                    'S1' => rand(0, 64),
+                    'S2' => rand(0, 64),
+                    'S3' => rand(0, 64),
+                    'S4' => rand(0, 32),
+                    'H1' => $headerRanges['H1'],
+                    'H2' => $headerRanges['H2'],
+                    'H3' => $headerRanges['H3'],
+                    'H4' => $headerRanges['H4']
+                ], $mimicry);
+            }
         }
 
         // Create wg0.conf
@@ -892,6 +911,15 @@ public static function getMimicryPresets(): array
             $stmt->execute([$this->serverId]);
             $clients = $stmt->fetchAll();
 
+            // Extract private key from remote container dynamically if possible
+            $privKey = null;
+            try {
+                $containerName = $this->data['container_name'];
+                $privKey = trim($this->executeCommand("docker exec -i {$containerName} cat /opt/amnezia/awg/server_private.key 2>/dev/null", true));
+            } catch (Exception $e) {
+                // Ignore error if server is offline or unreachable, keep it null
+            }
+
             // Prepare backup data
             $backupData = [
                 'server' => [
@@ -902,6 +930,7 @@ public static function getMimicryPresets(): array
                     'vpn_subnet' => $this->data['vpn_subnet'],
                     'container_name' => $this->data['container_name'],
                     'server_public_key' => $this->data['server_public_key'],
+                    'server_private_key' => $privKey,
                     'preshared_key' => $this->data['preshared_key'],
                     'awg_params' => $this->data['awg_params'],
                 ],
