@@ -134,7 +134,7 @@ class VpnClient {
         );
         
         $out = shell_exec($sshCmd);
-        $parts = explode("---", trim($out));
+        $parts = explode("---", trim($out ?? ''));
         
         if (count($parts) < 2) {
             throw new Exception("Failed to generate client keys");
