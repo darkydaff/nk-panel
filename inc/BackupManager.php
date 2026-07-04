@@ -187,4 +187,149 @@ class BackupManager {
           }
           return $deleted;
       }
+
+      public function restorePanelBackup(string $zipPath, array $options = []): array {
+          $tempDir = "/tmp/panel_restore_" . time();
+          mkdir($tempDir, 0755, true);
+
+          $zip = new ZipArchive();
+          if ($zip->open($zipPath) !== true) {
+              throw new Exception("Unable to open backup ZIP");
+          }
+          $zip->extractTo($tempDir);
+          $zip->close();
+
+          $results = [
+              'mysql' => false,
+              'postgres' => false,
+              'env' => false,
+              'servers_restored' => []
+          ];
+
+          // Case A: Restore everything
+          if (empty($options['selective_servers'])) {
+              // 1. MySQL Restore
+              if (isset($options['restore_mysql']) && $options['restore_mysql'] && file_exists("{$tempDir}/panel_db.sql")) {
+                  $dbHost = Config::get('DB_HOST', 'db');
+                  $dbPort = Config::get('DB_PORT', '3306');
+                  $dbName = Config::get('DB_DATABASE', 'amnezia_panel');
+                  $dbUser = Config::get('DB_USERNAME', 'amnezia');
+                  $dbPass = Config::get('DB_PASSWORD', 'amnezia');
+                  $cmd = "mysql -h {$dbHost} -P {$dbPort} -u {$dbUser} -p{$dbPass} {$dbName} < {$tempDir}/panel_db.sql 2>/dev/null";
+                  exec($cmd, $output, $returnVar);
+                  $results['mysql'] = ($returnVar === 0);
+              }
+
+              // 2. PostgreSQL Restore
+              if (isset($options['restore_postgres']) && $options['restore_postgres'] && file_exists("{$tempDir}/postgres_db.sql")) {
+                  $pgHost = Config::get('EXT_PG_HOST');
+                  if (!empty($pgHost)) {
+                      $pgPort = Config::get('EXT_PG_PORT', '5432');
+                      $pgDb = Config::get('EXT_PG_DB');
+                      $pgUser = Config::get('EXT_PG_USER');
+                      $pgPass = Config::get('EXT_PG_PASSWORD');
+                      $pgCmd = "PGPASSWORD='{$pgPass}' psql -h {$pgHost} -p {$pgPort} -U {$pgUser} -d {$pgDb} < {$tempDir}/postgres_db.sql 2>/dev/null";
+                      exec($pgCmd, $outputPg, $returnVarPg);
+                      $results['postgres'] = ($returnVarPg === 0);
+                  }
+              }
+
+              // 3. Env Restore
+              if (isset($options['restore_env']) && $options['restore_env'] && file_exists("{$tempDir}/config.env")) {
+                  copy("{$tempDir}/config.env", '/var/www/html/.env');
+                  $results['env'] = true;
+              }
+          } else {
+              // Case B: Selective restore from extracted servers directory
+              foreach ($options['selective_servers'] as $serverId) {
+                  $serverJsonPath = "{$tempDir}/servers/server_{$serverId}.json";
+                  if (file_exists($serverJsonPath)) {
+                      $serverData = json_decode(file_get_contents($serverJsonPath), true);
+                      $res = $this->restoreServerBackup($serverData);
+                      $results['servers_restored'][] = $res;
+                  }
+              }
+          }
+
+          exec("rm -rf {$tempDir}");
+          return $results;
+      }
+
+      public function restoreServerBackup(array $backupData, ?int $targetServerId = null): array {
+          $s = $backupData['server'];
+          $clients = $backupData['clients'] ?? [];
+
+          // Determine if we overwrite or create a new server
+          if ($targetServerId === null) {
+              // Check if host IP already exists
+              $stmt = $this->pdo->prepare("SELECT id FROM vpn_servers WHERE host = ?");
+              $stmt->execute([$s['host']]);
+              $existing = $stmt->fetch();
+              if ($existing) {
+                  $targetServerId = (int)$existing['id'];
+              }
+          }
+
+          if ($targetServerId !== null) {
+              // Overwrite existing
+              $stmt = $this->pdo->prepare("
+                  UPDATE vpn_servers 
+                  SET name = ?, host = ?, port = ?, username = ?, password = ?, 
+                      container_name = ?, vpn_port = ?, vpn_subnet = ?, 
+                      server_public_key = ?, server_private_key = ?, preshared_key = ?, 
+                      awg_params = ?, status = 'deploying'
+                  WHERE id = ?
+              ");
+              $stmt->execute([
+                  $s['name'], $s['host'], $s['port'], $s['username'], $s['password'],
+                  $s['container_name'], $s['vpn_port'], $s['vpn_subnet'],
+                  $s['server_public_key'], $s['server_private_key'] ?? null, $s['preshared_key'],
+                  is_array($s['awg_params']) ? json_encode($s['awg_params']) : $s['awg_params'],
+                  $targetServerId
+              ]);
+              $serverId = $targetServerId;
+          } else {
+              // Create new
+              $stmt = $this->pdo->prepare("
+                  INSERT INTO vpn_servers 
+                  (user_id, name, host, port, username, password, container_name, vpn_port, vpn_subnet, 
+                   server_public_key, server_private_key, preshared_key, awg_params, status)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'deploying')
+              ");
+              $stmt->execute([
+                  $s['user_id'], $s['name'], $s['host'], $s['port'], $s['username'], $s['password'],
+                  $s['container_name'], $s['vpn_port'], $s['vpn_subnet'],
+                  $s['server_public_key'], $s['server_private_key'] ?? null, $s['preshared_key'],
+                  is_array($s['awg_params']) ? json_encode($s['awg_params']) : $s['awg_params']
+              ]);
+              $serverId = (int)$this->pdo->lastInsertId();
+          }
+
+          // Import clients
+          $restoredClientsCount = 0;
+          foreach ($clients as $c) {
+              $stmt = $this->pdo->prepare("SELECT id FROM vpn_clients WHERE server_id = ? AND client_ip = ?");
+              $stmt->execute([$serverId, $c['client_ip']]);
+              if ($stmt->fetch()) continue; // skip duplicates
+
+              $ins = $this->pdo->prepare("
+                  INSERT INTO vpn_clients 
+                  (server_id, user_id, name, client_ip, public_key, private_key, preshared_key, config, status, expires_at)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'disabled', ?)
+              ");
+              $ins->execute([
+                  $serverId, $s['user_id'], $c['name'], $c['client_ip'],
+                  $c['public_key'], $c['private_key'], $c['preshared_key'],
+                  $c['config'], $c['expires_at']
+              ]);
+              $restoredClientsCount++;
+          }
+
+          return [
+              'success' => true,
+              'server_id' => $serverId,
+              'name' => $s['name'],
+              'clients_imported' => $restoredClientsCount
+          ];
+      }
   }
