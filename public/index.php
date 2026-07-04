@@ -25,6 +25,7 @@ require_once __DIR__ . '/../inc/PanelImporter.php';
 require_once __DIR__ . '/../inc/ServerMonitoring.php';
 require_once __DIR__ . '/../inc/GeoIP.php';
 require_once __DIR__ . '/../inc/ExtDB.php';
+require_once __DIR__ . '/../inc/BackupManager.php';
 
 // Load environment configuration
 Config::load(__DIR__ . '/../.env');
@@ -2532,6 +2533,87 @@ Router::post('/settings/delete-user/{id}', function ($params) {
     require_once __DIR__ . '/../controllers/SettingsController.php';
     $controller = new SettingsController();
     $controller->deleteUser($params['id']);
+});
+
+// Save Backup Config
+Router::post('/settings/backup-config', function () {
+    requireAdmin();
+    $pdo = DB::conn();
+    $enabled = isset($_POST['enabled']) ? true : false;
+    $botToken = trim($_POST['bot_token'] ?? '');
+    $chatId = trim($_POST['chat_id'] ?? '');
+    $schedule = $_POST['schedule'] ?? 'disabled';
+    $retentionDays = (int)($_POST['retention_days'] ?? 7);
+
+    $tgVal = json_encode(['enabled' => $enabled, 'bot_token' => $botToken, 'chat_id' => $chatId, 'schedule' => $schedule]);
+    $retVal = json_encode($retentionDays);
+
+    $stmt = $pdo->prepare("INSERT INTO settings (namespace, `key`, value) VALUES ('backup', 'telegram_settings', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)");
+    $stmt->execute([$tgVal]);
+
+    $stmt = $pdo->prepare("INSERT INTO settings (namespace, `key`, value) VALUES ('backup', 'retention_days', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)");
+    $stmt->execute([$retVal]);
+
+    $_SESSION['settings_success'] = 'Backup configuration saved successfully';
+    redirect('/settings#backups');
+});
+
+// Create Backup
+Router::post('/settings/backup-create', function () {
+    requireAdmin();
+    $target = $_POST['target'] ?? 'panel';
+    $user = Auth::user();
+
+    try {
+        $bm = new BackupManager();
+        if ($target === 'panel') {
+            $path = $bm->createPanelBackup($user['id']);
+            $bm->sendToTelegram($path);
+            $_SESSION['settings_success'] = 'Full panel backup successfully created';
+        } else {
+            $serverId = (int)$target;
+            $server = new VpnServer($serverId);
+            $path = $server->createBackup($user['id']);
+            $_SESSION['settings_success'] = 'Server backup successfully created';
+        }
+    } catch (Exception $e) {
+        $_SESSION['settings_error'] = 'Backup failed: ' . $e->getMessage();
+    }
+    redirect('/settings#backups');
+});
+
+// Download Backup
+Router::get('/settings/backup-download/{id}', function ($params) {
+    requireAdmin();
+    $id = (int)$params['id'];
+    $pdo = DB::conn();
+
+    $stmt = $pdo->prepare("SELECT backup_path, backup_name FROM server_backups WHERE id = ?");
+    $stmt->execute([$id]);
+    $backup = $stmt->fetch();
+
+    if ($backup && file_exists($backup['backup_path'])) {
+        header('Content-Description: File Transfer');
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="' . basename($backup['backup_name']) . '"');
+        header('Expires: 0');
+        header('Cache-Control: must-revalidate');
+        header('Pragma: public');
+        header('Content-Length: ' . filesize($backup['backup_path']));
+        readfile($backup['backup_path']);
+        exit;
+    }
+    $_SESSION['settings_error'] = 'Backup file not found';
+    redirect('/settings#backups');
+});
+
+// Delete Backup
+Router::get('/settings/backup-delete/{id}', function ($params) {
+    requireAdmin();
+    $id = (int)$params['id'];
+    VpnServer::deleteBackup($id);
+    $_SESSION['settings_success'] = 'Backup deleted successfully';
+    redirect('/settings#backups');
 });
 
 

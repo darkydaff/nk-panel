@@ -14,10 +14,31 @@ class SettingsController {
         $users = $this->getAllUsers();
         $apiKey = $this->getApiKey('openrouter');
         
+        $stmtBackup = $this->pdo->prepare("SELECT `key`, value FROM settings WHERE namespace = 'backup'");
+        $stmtBackup->execute();
+        $backupRows = $stmtBackup->fetchAll(PDO::FETCH_ASSOC);
+        $backupSettings = ['enabled' => false, 'bot_token' => '', 'chat_id' => '', 'schedule' => 'disabled', 'retention_days' => 7];
+        foreach ($backupRows as $r) {
+            if ($r['key'] === 'telegram_settings') {
+                $backupSettings = array_merge($backupSettings, json_decode($r['value'], true));
+            }
+            if ($r['key'] === 'retention_days') {
+                $backupSettings['retention_days'] = (int)json_decode($r['value'], true);
+            }
+        }
+
+        $stmtLog = $this->pdo->query("SELECT id, backup_name, backup_size, backup_type, status, error_message, created_at, backup_scope FROM server_backups ORDER BY created_at DESC LIMIT 50");
+        $backups = $stmtLog->fetchAll(PDO::FETCH_ASSOC);
+
+        $serversList = VpnServer::listAll();
+
         $data = [
             'translation_stats' => $stats,
             'users' => $users,
-            'openrouter_key' => $apiKey
+            'openrouter_key' => $apiKey,
+            'backup_settings' => $backupSettings,
+            'backups' => $backups,
+            'servers' => $serversList
         ];
         
         // Check for session messages

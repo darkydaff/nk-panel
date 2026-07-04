@@ -42,6 +42,9 @@
         <button onclick="showTab('users')" id="tab-users" class="tab-btn px-4 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap">
             <i class="fas fa-users mr-2"></i>{{ t('settings.users') }}
         </button>
+        <button onclick="showTab('backups')" id="tab-backups" class="tab-btn px-4 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap">
+            <i class="fas fa-database mr-2"></i>Backups
+        </button>
         {% endif %}
     </div>
 
@@ -177,6 +180,152 @@
                         {% endfor %}
                     </tbody>
                 </table>
+        <!-- Backups Tab Content -->
+        <div id="content-backups" class="hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <!-- Configuration Card -->
+                <div class="lg:col-span-1 panel overflow-hidden border-slate-800/60 bg-slate-900/60 backdrop-blur">
+                    <div class="px-5 py-4 border-b border-slate-700 bg-slate-800/30">
+                        <h2 class="text-base font-semibold text-white flex items-center">
+                            <i class="fas fa-cog mr-2 text-accent"></i>Backup Settings
+                        </h2>
+                    </div>
+                    <div class="p-5">
+                        <form method="POST" action="/settings/backup-config">
+                            <div class="space-y-4">
+                                <label class="flex items-center text-sm font-medium text-slate-300 cursor-pointer">
+                                    <input type="checkbox" name="enabled" value="1" {% if backup_settings.enabled %}checked{% endif %} class="rounded bg-slate-800 border-slate-700 mr-2 text-accent focus:ring-0">
+                                    Enable Telegram Offsite
+                                </label>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-400 mb-2">Bot Token</label>
+                                    <input type="password" name="bot_token" value="{{ backup_settings.bot_token }}" class="input-field w-full px-3 py-2 text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-400 mb-2">Chat ID</label>
+                                    <input type="text" name="chat_id" value="{{ backup_settings.chat_id }}" class="input-field w-full px-3 py-2 text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-400 mb-2">Backup Schedule</label>
+                                    <select name="schedule" class="input-field w-full px-3 py-2 text-sm bg-slate-800">
+                                        <option value="disabled" {% if backup_settings.schedule == 'disabled' %}selected{% endif %}>Disabled</option>
+                                        <option value="daily" {% if backup_settings.schedule == 'daily' %}selected{% endif %}>Daily</option>
+                                        <option value="weekly" {% if backup_settings.schedule == 'weekly' %}selected{% endif %}>Weekly</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-400 mb-2">Local Retention (Days)</label>
+                                    <input type="number" name="retention_days" value="{{ backup_settings.retention_days|default(7) }}" class="input-field w-full px-3 py-2 text-sm">
+                                </div>
+                                <button type="submit" class="btn-primary w-full py-2.5 text-sm">
+                                    <i class="fas fa-save mr-2"></i>Save Config
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Create & Drag Restore Zone -->
+                <div class="lg:col-span-2 panel overflow-hidden border-slate-800/60 bg-slate-900/60 backdrop-blur">
+                    <div class="px-5 py-4 border-b border-slate-700 bg-slate-800/30">
+                        <h2 class="text-base font-semibold text-white flex items-center">
+                            <i class="fas fa-upload mr-2 text-accent"></i>Manual Backup & Restore
+                        </h2>
+                    </div>
+                    <div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Manual trigger -->
+                        <form method="POST" action="/settings/backup-create">
+                            <div class="space-y-4">
+                                <h3 class="text-sm font-semibold text-slate-200">Create Backup</h3>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-400 mb-2">Backup Target</label>
+                                    <select name="target" class="input-field w-full px-3 py-2 text-sm bg-slate-800">
+                                        <option value="panel">Full Panel (ZIP)</option>
+                                        {% for s in servers %}
+                                        <option value="{{ s.id }}">Server: {{ s.name }} (JSON)</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn-primary w-full py-2.5 text-sm mt-2">
+                                    <i class="fas fa-plus-circle mr-2"></i>Create Backup Now
+                                </button>
+                            </div>
+                        </form>
+
+                        <!-- Drag Drop Restore -->
+                        <div class="space-y-4">
+                            <h3 class="text-sm font-semibold text-slate-200">Restore Backup</h3>
+                            <div id="drop-zone" class="border-2 border-dashed border-slate-700 hover:border-accent rounded-lg p-6 flex flex-col items-center justify-center cursor-pointer transition-colors h-36 bg-slate-800/20">
+                                <i class="fas fa-file-archive text-2xl text-slate-500 mb-2"></i>
+                                <p class="text-xs text-slate-400 text-center">Drag & Drop zip/json backup file here</p>
+                                <p class="text-[10px] text-slate-500 text-center mt-1">Or click to select a file</p>
+                                <input type="file" id="restore-file-input" class="hidden" accept=".zip,.json">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History Log -->
+            <div class="panel overflow-hidden border-slate-800/60 bg-slate-900/60 backdrop-blur">
+                <div class="px-5 py-4 border-b border-slate-700 bg-slate-800/30">
+                    <h2 class="text-base font-semibold text-white flex items-center">
+                        <i class="fas fa-history mr-2 text-accent"></i>Backup History
+                    </h2>
+                </div>
+                <div class="table-wrapper">
+                    <table class="min-w-full">
+                        <thead>
+                            <tr class="bg-slate-800/50">
+                                <th class="px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Date & Time</th>
+                                <th class="px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Scope</th>
+                                <th class="px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Type</th>
+                                <th class="px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Size</th>
+                                <th class="px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Status</th>
+                                <th class="px-4 py-3 text-right text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-700">
+                            {% for b in backups %}
+                            <tr class="hover:bg-slate-800/30 transition-colors">
+                                <td class="px-4 py-3 text-xs text-white font-mono">{{ b.created_at }}</td>
+                                <td class="px-4 py-3 text-sm">
+                                    {% if b.backup_scope == 'panel' %}
+                                    <span class="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs px-2 py-0.5 rounded">Panel</span>
+                                    {% else %}
+                                    <span class="bg-slate-750 text-slate-300 text-xs px-2 py-0.5 rounded">Server</span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-4 py-3 text-xs text-slate-400 font-semibold">{{ b.backup_type|capitalize }}</td>
+                                <td class="px-4 py-3 text-xs text-slate-300 font-mono">{{ (b.backup_size / 1024) | number_format(1) }} KB</td>
+                                <td class="px-4 py-3 text-sm">
+                                    {% if b.status == 'completed' %}
+                                    <span class="text-emerald-400 text-xs flex items-center">
+                                        <i class="fas fa-check-circle mr-1.5 text-emerald-500"></i>Completed
+                                    </span>
+                                    {% else %}
+                                    <span class="text-red-400 text-xs flex items-center cursor-help" title="{{ b.error_message }}">
+                                        <i class="fas fa-exclamation-circle mr-1.5 text-red-500"></i>Failed
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-4 py-3 text-right space-x-1 whitespace-nowrap">
+                                    <a href="/settings/backup-download/{{ b.id }}" class="px-2 py-1 rounded bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 transition-colors text-xs inline-block">
+                                        <i class="fas fa-download"></i>
+                                    </a>
+                                    <a href="/settings/backup-delete/{{ b.id }}" onclick="return confirm('Delete backup?')" class="px-2 py-1 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-colors text-xs inline-block">
+                                        <i class="fas fa-trash"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="px-4 py-6 text-center text-sm text-slate-500">No backups found.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
