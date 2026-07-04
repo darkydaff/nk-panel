@@ -162,16 +162,38 @@ class SettingsController {
             echo 'Forbidden';
             return;
         }
-        
-        if ($userId == $user['id']) {
-            $_SESSION['settings_error'] = 'Cannot delete yourself';
+
+        $userId = (int)$userId;
+
+        if ($userId === (int)$user['id']) {
+            $_SESSION['settings_error'] = 'Cannot delete your own account';
             header('Location: /settings#users');
             exit;
         }
-        
-        $stmt = $this->pdo->prepare("DELETE FROM users WHERE id = ?");
+
+        // Block deletion if this user owns servers — deleting would cascade-delete all their servers and clients
+        $stmtServers = $this->pdo->prepare('SELECT COUNT(*) FROM vpn_servers WHERE user_id = ?');
+        $stmtServers->execute([$userId]);
+        $serverCount = (int)$stmtServers->fetchColumn();
+
+        $stmtClients = $this->pdo->prepare('SELECT COUNT(*) FROM vpn_clients WHERE user_id = ?');
+        $stmtClients->execute([$userId]);
+        $clientCount = (int)$stmtClients->fetchColumn();
+
+        if ($serverCount > 0 || $clientCount > 0) {
+            $parts = [];
+            if ($serverCount > 0) $parts[] = "{$serverCount} server(s)";
+            if ($clientCount > 0) $parts[] = "{$clientCount} client config(s)";
+            $what = implode(' and ', $parts);
+            $_SESSION['settings_error'] = "Cannot delete this user — they own {$what}. "
+                . "Delete or reassign those resources first.";
+            header('Location: /settings#users');
+            exit;
+        }
+
+        $stmt = $this->pdo->prepare('DELETE FROM users WHERE id = ?');
         $stmt->execute([$userId]);
-        
+
         $_SESSION['settings_success'] = 'User deleted successfully';
         header('Location: /settings#users');
         exit;
