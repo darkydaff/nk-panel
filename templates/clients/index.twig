@@ -207,18 +207,29 @@
                 </div>
             </div>
 
+            {# Last Active #}
+            <div class="mb-4 flex items-center justify-between text-xs text-slate-400 bg-slate-950/40 border border-slate-800/80 px-3 py-2 rounded-lg font-mono">
+                <span class="text-slate-500 text-[10px] uppercase font-sans font-semibold tracking-wider">Last Active</span>
+                <span class="{{ client.LastActiveClass }} text-[10px] px-2 py-0.5 rounded font-sans font-semibold">{{ client.LastActiveText }}</span>
+            </div>
+
             {# Config chips #}
             {% if client.configs is not empty %}
             <div class="flex flex-wrap gap-1.5 mb-4">
                 {% for cfg in client.configs|slice(0, 5) %}
                 <a href="/clients/{{ cfg.id }}"
+                   title="Last active: {{ cfg.last_active_text }}"
                    class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800/80 hover:bg-slate-700 text-xs text-slate-300 hover:text-white border border-slate-700/60 hover:border-slate-600 transition-all">
                     <i class="fas fa-server text-[9px] text-slate-500"></i>
                     <span class="font-mono truncate max-w-[100px]">{{ cfg.name }}</span>
-                    {% if cfg.status == 'active' %}
-                        <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0"></span>
+                    {% if cfg.status != 'active' %}
+                        <span class="w-1.5 h-1.5 rounded-full bg-slate-600 shrink-0" title="Disabled"></span>
+                    {% elseif cfg.last_active_class == 'badge-active' %}
+                        <span class="w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.6)] shrink-0"></span>
+                    {% elseif cfg.last_active_class == 'badge-warning' %}
+                        <span class="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
                     {% else %}
-                        <span class="w-1.5 h-1.5 rounded-full bg-slate-600 shrink-0"></span>
+                        <span class="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></span>
                     {% endif %}
                 </a>
                 {% endfor %}
@@ -333,9 +344,9 @@
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
                     {% if cfg.status == 'active' %}
-                    <span class="badge-active text-xs px-2 py-0.5 rounded">Active</span>
+                        <span class="{{ cfg.last_active_class }} text-xs px-2 py-0.5 rounded font-medium">{{ cfg.last_active_text }}</span>
                     {% else %}
-                    <span class="badge-error text-xs px-2 py-0.5 rounded">{{ cfg.status }}</span>
+                        <span class="badge-error text-xs px-2 py-0.5 rounded font-medium">{{ cfg.status|capitalize }}</span>
                     {% endif %}
                     <a href="/clients/{{ cfg.id }}" class="btn-secondary px-3 py-1.5 text-xs">
                         <i class="fas fa-eye mr-1"></i>View

@@ -135,6 +135,53 @@ function requireAdmin(): void {
     }
 }
 
+// Helper function to calculate relative active status
+function getRelativeActiveStatus(?string $lastHandshake): array {
+    if (empty($lastHandshake) || $lastHandshake === '0000-00-00 00:00:00' || $lastHandshake === '1970-01-01 00:00:00') {
+        return [
+            'text' => 'Never',
+            'class' => 'badge-error'
+        ];
+    }
+    
+    $timestamp = strtotime($lastHandshake);
+    if (!$timestamp) {
+        return [
+            'text' => 'Never',
+            'class' => 'badge-error'
+        ];
+    }
+    
+    $diffSeconds = time() - $timestamp;
+    
+    if ($diffSeconds < 300) {
+        return [
+            'text' => 'Active now',
+            'class' => 'badge-active'
+        ];
+    } elseif ($diffSeconds < 86400) {
+        $hours = floor($diffSeconds / 3600);
+        if ($hours < 1) {
+            $mins = floor($diffSeconds / 60);
+            $text = ($mins <= 1) ? '1m ago' : $mins . 'm ago';
+        } else {
+            $text = $hours . 'h ago';
+        }
+        return [
+            'text' => $text,
+            'class' => 'badge-warning'
+        ];
+    } else {
+        $days = floor($diffSeconds / 86400);
+        $text = ($days <= 1) ? '1d ago' : $days . 'd ago';
+        return [
+            'text' => $text,
+            'class' => 'badge-error'
+        ];
+    }
+}
+
+
 // Helper function to get authenticated user (JWT or session)
 function getAuthUser(): ?array {
     // Try JWT first
@@ -760,7 +807,7 @@ Router::get('/clients', function () {
         foreach ($rawCodes as $row) {
             $code = $row['Code'];
             $stmt = $pdo->prepare(
-                'SELECT c.id, c.name, c.status, s.name AS server_name
+                'SELECT c.id, c.name, c.status, c.last_handshake, s.name AS server_name
                  FROM vpn_clients c
                  JOIN vpn_servers s ON s.id = c.server_id
                  WHERE c.ext_client_code = ?
@@ -768,6 +815,32 @@ Router::get('/clients', function () {
             );
             $stmt->execute([$code]);
             $configs = $stmt->fetchAll();
+
+            // Calculate relative active status for each configuration
+            $processedConfigs = [];
+            $latestHandshake = null;
+            foreach ($configs as $cfg) {
+                $statusInfo = getRelativeActiveStatus($cfg['last_handshake'] ?? null);
+                $cfg['last_active_text'] = $statusInfo['text'];
+                $cfg['last_active_class'] = $statusInfo['class'];
+                $processedConfigs[] = $cfg;
+
+                if (!empty($cfg['last_handshake'])) {
+                    $ts = strtotime($cfg['last_handshake']);
+                    if ($ts && ($latestHandshake === null || $ts > $latestHandshake)) {
+                        $latestHandshake = $ts;
+                    }
+                }
+            }
+
+            if ($latestHandshake) {
+                $clientLastActive = getRelativeActiveStatus(date('Y-m-d H:i:s', $latestHandshake));
+            } else {
+                $clientLastActive = [
+                    'text' => 'Never',
+                    'class' => 'badge-error'
+                ];
+            }
 
             // Calculate subscription expiry ONLY if Func is WORK
             $expiryDate = null;
@@ -785,16 +858,18 @@ Router::get('/clients', function () {
             }
 
             $clients[] = [
-                'Code'         => $code,
-                'Name'         => $row['name'] ?? null,
-                'Func'         => $row['func'] ?? null,
-                'Router'       => $row['router'] ?? null,
-                'ExpiryDate'   => $expiryDate,
-                'DaysLeft'     => $daysLeft,
-                'BytesSent'    => (int)($row['bytes_sent'] ?? 0),
-                'BytesReceived'=> (int)($row['bytes_received'] ?? 0),
-                'configs'      => $configs,
-                'config_count' => count($configs),
+                'Code'            => $code,
+                'Name'            => $row['name'] ?? null,
+                'Func'            => $row['func'] ?? null,
+                'Router'          => $row['router'] ?? null,
+                'ExpiryDate'      => $expiryDate,
+                'DaysLeft'        => $daysLeft,
+                'BytesSent'       => (int)($row['bytes_sent'] ?? 0),
+                'BytesReceived'   => (int)($row['bytes_received'] ?? 0),
+                'configs'         => $processedConfigs,
+                'config_count'    => count($configs),
+                'LastActiveText'  => $clientLastActive['text'],
+                'LastActiveClass' => $clientLastActive['class'],
             ];
         }
     } catch (Throwable $e) {
@@ -807,14 +882,21 @@ Router::get('/clients', function () {
         try {
             $pdo = DB::conn();
             $stmt = $pdo->prepare(
-                'SELECT c.id, c.name, c.status, s.name AS server_name
+                'SELECT c.id, c.name, c.status, c.last_handshake, s.name AS server_name
                  FROM vpn_clients c
                  JOIN vpn_servers s ON s.id = c.server_id
                  WHERE c.ext_client_code = ?
                  ORDER BY c.created_at DESC'
             );
             $stmt->execute([$codeFilter]);
-            $codeConfigs = $stmt->fetchAll();
+            $rawConfigs = $stmt->fetchAll();
+            $codeConfigs = [];
+            foreach ($rawConfigs as $cfg) {
+                $statusInfo = getRelativeActiveStatus($cfg['last_handshake'] ?? null);
+                $cfg['last_active_text'] = $statusInfo['text'];
+                $cfg['last_active_class'] = $statusInfo['class'];
+                $codeConfigs[] = $cfg;
+            }
         } catch (Throwable $e) {
             // ignore
         }
