@@ -54,8 +54,11 @@ try {
         $path = $bm->createPanelBackup(0, 'automatic');
         echo "Backup zip created: {$path}\n";
         
-        if ($bm->sendToTelegram($path)) {
+        $errorReason = '';
+        if ($bm->sendToTelegram($path, $errorReason)) {
             echo "Backup successfully uploaded to Telegram.\n";
+        } else {
+            echo "Telegram upload failed: " . (!empty($errorReason) ? $errorReason : "Disabled or not configured") . "\n";
         }
         
         $pruned = $bm->pruneLocalBackups();

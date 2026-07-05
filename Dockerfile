@@ -46,16 +46,15 @@ RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html/public
 
 # Setup cron jobs
-RUN echo "0 * * * * www-data cd /var/www/html && /usr/local/bin/php bin/check_expired_clients.php >> /var/log/cron.log 2>&1" > /etc/cron.d/amnezia-cron \
+RUN touch /var/log/cron.log /var/log/metrics_monitor.log /var/log/metrics_collector.log \
+    && chown www-data:www-data /var/log/cron.log /var/log/metrics_monitor.log /var/log/metrics_collector.log \
+    && chmod 666 /var/log/cron.log /var/log/metrics_monitor.log /var/log/metrics_collector.log \
+    && echo "0 * * * * www-data cd /var/www/html && /usr/local/bin/php bin/check_expired_clients.php >> /var/log/cron.log 2>&1" > /etc/cron.d/amnezia-cron \
     && echo "0 * * * * www-data cd /var/www/html && /usr/local/bin/php bin/check_traffic_limits.php >> /var/log/cron.log 2>&1" >> /etc/cron.d/amnezia-cron \
     && echo "0 * * * * www-data cd /var/www/html && /usr/local/bin/php bin/sync_external_clients.php >> /var/log/cron.log 2>&1" >> /etc/cron.d/amnezia-cron \
     && echo "30 * * * * www-data cd /var/www/html && /usr/local/bin/php bin/backup.php >> /var/log/cron.log 2>&1" >> /etc/cron.d/amnezia-cron \
     && echo "*/3 * * * * root /bin/bash /var/www/html/bin/monitor_metrics.sh >> /var/log/metrics_monitor.log 2>&1" >> /etc/cron.d/amnezia-cron \
-    && chmod 0644 /etc/cron.d/amnezia-cron \
-    && crontab /etc/cron.d/amnezia-cron \
-    && touch /var/log/cron.log \
-    && touch /var/log/metrics_monitor.log \
-    && touch /var/log/metrics_collector.log
+    && chmod 0644 /etc/cron.d/amnezia-cron
 
 # Make monitor script executable
 RUN chmod +x /var/www/html/bin/monitor_metrics.sh
@@ -65,6 +64,10 @@ RUN echo '#!/bin/bash\n\
 mkdir -p /var/www/html/backups/panel /var/www/html/backups/servers\n\
 chown -R www-data:www-data /var/www/html/backups\n\
 chmod -R 777 /var/www/html/backups\n\
+# Ensure log files exist and are writable by www-data\n\
+touch /var/log/cron.log /var/log/metrics_monitor.log /var/log/metrics_collector.log\n\
+chown www-data:www-data /var/log/cron.log /var/log/metrics_monitor.log /var/log/metrics_collector.log\n\
+chmod 666 /var/log/cron.log /var/log/metrics_monitor.log /var/log/metrics_collector.log\n\
 # Ensure .env is writable by www-data\n\
 touch /var/www/html/.env\n\
 chown www-data:www-data /var/www/html/.env\n\
