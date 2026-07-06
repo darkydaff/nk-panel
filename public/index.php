@@ -1785,6 +1785,7 @@ Router::get('/api/dashboard/metrics', function () {
     $seconds = $bucketMinutes * 60;
     
     $pdo = DB::conn();
+    $since = date('Y-m-d H:i:s', time() - (int)($hours * 3600));
     
     try {
         if ($serverId) {
@@ -1805,12 +1806,12 @@ Router::get('/api/dashboard/metrics', function () {
                     SUM(cm.speed_down_kbps) / COUNT(DISTINCT cm.collected_at) as speed_down
                 FROM client_metrics cm
                 JOIN vpn_clients c ON cm.client_id = c.id
-                WHERE c.server_id = ? AND cm.collected_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+                WHERE c.server_id = ? AND cm.collected_at >= ?
                 GROUP BY FLOOR(UNIX_TIMESTAMP(cm.collected_at) / ?)
                 ORDER BY time_bucket ASC
             ";
             $stmt = $pdo->prepare($query);
-            $stmt->execute([$seconds, $seconds, $serverId, $hours, $seconds]);
+            $stmt->execute([$seconds, $seconds, $serverId, $since, $seconds]);
         } else {
             // Global aggregate for user
             $query = "
@@ -1820,12 +1821,12 @@ Router::get('/api/dashboard/metrics', function () {
                     SUM(cm.speed_down_kbps) / COUNT(DISTINCT cm.collected_at) as speed_down
                 FROM client_metrics cm
                 JOIN vpn_clients c ON cm.client_id = c.id
-                WHERE c.user_id = ? AND cm.collected_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+                WHERE c.user_id = ? AND cm.collected_at >= ?
                 GROUP BY FLOOR(UNIX_TIMESTAMP(cm.collected_at) / ?)
                 ORDER BY time_bucket ASC
             ";
             $stmt = $pdo->prepare($query);
-            $stmt->execute([$seconds, $seconds, $user['id'], $hours, $seconds]);
+            $stmt->execute([$seconds, $seconds, $user['id'], $since, $seconds]);
         }
         
         $results = $stmt->fetchAll(PDO::FETCH_ASSOC);

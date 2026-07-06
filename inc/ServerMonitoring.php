@@ -188,6 +188,7 @@ class ServerMonitoring
             $bucketMinutes = 60;
         }
         $seconds = $bucketMinutes * 60;
+        $since = date('Y-m-d H:i:s', time() - (int)($hours * 3600));
         
         $stmt = $db->prepare("
             SELECT 
@@ -197,12 +198,12 @@ class ServerMonitoring
                 FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(collected_at) / ?) * ?) as collected_at
             FROM client_metrics
             WHERE client_id = ?
-            AND collected_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+            AND collected_at >= ?
             GROUP BY FLOOR(UNIX_TIMESTAMP(collected_at) / ?)
             ORDER BY collected_at ASC
         ");
         
-        $stmt->execute([$seconds, $seconds, $clientId, $hours, $seconds]);
+        $stmt->execute([$seconds, $seconds, $clientId, $since, $seconds]);
         
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
