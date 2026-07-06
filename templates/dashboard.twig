@@ -358,18 +358,39 @@ function initChart() {
     
     // Setup gradients
     const uploadGradient = ctx.createLinearGradient(0, 0, 0, 240);
-    uploadGradient.addColorStop(0, 'rgba(16, 185, 129, 0.15)');
+    uploadGradient.addColorStop(0, 'rgba(16, 185, 129, 0.12)');
     uploadGradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
     
     const downloadGradient = ctx.createLinearGradient(0, 0, 0, 240);
-    downloadGradient.addColorStop(0, 'rgba(99, 102, 241, 0.15)');
+    downloadGradient.addColorStop(0, 'rgba(99, 102, 241, 0.12)');
     downloadGradient.addColorStop(1, 'rgba(99, 102, 241, 0.0)');
     
-    const gridColor = 'rgba(255, 255, 255, 0.04)';
+    const gridColor = 'rgba(255, 255, 255, 0.03)';
     const textColor = 'rgba(255, 255, 255, 0.4)';
     
     trafficChart = new Chart(ctx, {
         type: 'line',
+        plugins: [{
+            id: 'hoverLine',
+            afterDraw: (chart) => {
+                if (chart.tooltip?._active?.length) {
+                    const activePoint = chart.tooltip._active[0];
+                    const ctx = chart.ctx;
+                    const x = activePoint.element.x;
+                    const topY = chart.scales.y.top;
+                    const bottomY = chart.scales.y.bottom;
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.moveTo(x, topY);
+                    ctx.lineTo(x, bottomY);
+                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+                    ctx.setLineDash([4, 4]);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
+        }],
         data: {
             labels: liveLabels,
             datasets: [
@@ -380,7 +401,7 @@ function initChart() {
                     borderWidth: 2,
                     backgroundColor: downloadGradient,
                     fill: true,
-                    tension: 0.4,
+                    tension: 0.35,
                     pointRadius: 0,
                     pointHoverRadius: 4,
                     pointHitRadius: 10
@@ -392,7 +413,7 @@ function initChart() {
                     borderWidth: 2,
                     backgroundColor: uploadGradient,
                     fill: true,
-                    tension: 0.4,
+                    tension: 0.35,
                     pointRadius: 0,
                     pointHoverRadius: 4,
                     pointHitRadius: 10
@@ -402,40 +423,47 @@ function initChart() {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
             plugins: {
                 legend: {
                     display: true,
                     position: 'top',
+                    align: 'end',
                     labels: {
                         color: textColor,
+                        boxWidth: 8,
+                        boxHeight: 8,
+                        usePointStyle: true,
+                        pointStyle: 'circle',
                         font: { family: 'Inter', size: 11, weight: '500' },
-                        boxWidth: 12,
-                        boxHeight: 12,
-                        padding: 15
+                        padding: 20
                     }
                 },
                 tooltip: {
                     mode: 'index',
                     intersect: false,
-                    backgroundColor: '#0f172a',
-                    borderColor: '#334155',
+                    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                    borderColor: 'rgba(255, 255, 255, 0.08)',
                     borderWidth: 1,
                     titleColor: '#ffffff',
-                    bodyColor: '#e2e8f0',
+                    bodyColor: '#cbd5e1',
                     titleFont: { family: 'Inter', size: 12, weight: '600' },
                     bodyFont: { family: 'Inter', size: 11 },
-                    padding: 10,
+                    padding: 12,
                     cornerRadius: 8,
+                    usePointStyle: true,
                     callbacks: {
                         label: function(context) {
                             let label = context.dataset.label || '';
-                            if (label) {
-                                label += ': ';
+                            const val = context.parsed.y !== null ? context.parsed.y.toFixed(2) + ' Mbps' : '0.00 Mbps';
+                            if (label.includes('Download')) {
+                                return ' ↓ ' + label + ': ' + val;
+                            } else {
+                                return ' ↑ ' + label + ': ' + val;
                             }
-                            if (context.parsed.y !== null) {
-                                label += context.parsed.y.toFixed(2) + ' Mbps';
-                            }
-                            return label;
                         }
                     }
                 }
@@ -445,16 +473,23 @@ function initChart() {
                     grid: { display: false },
                     ticks: {
                         color: textColor,
-                        font: { family: 'Inter', size: 10 }
+                        font: { family: 'Inter', size: 10 },
+                        maxRotation: 0,
+                        autoSkip: true,
+                        maxTicksLimit: 8
                     }
                 },
                 y: {
-                    grid: { color: gridColor },
+                    grid: { 
+                        color: gridColor,
+                        borderDash: [5, 5],
+                        drawBorder: false
+                    },
                     ticks: {
                         color: textColor,
                         font: { family: 'Inter', size: 10 },
                         callback: function(value) {
-                            return value + ' Mbps';
+                            return value.toFixed(1) + ' Mbps';
                         }
                     },
                     suggestedMin: 0,
@@ -504,7 +539,7 @@ async function loadHistoricalData() {
         const downloadData = [];
         
         res.metrics.forEach(row => {
-            const date = new Date(row.time_bucket.replace(' ', 'T') + 'Z');
+            const date = new Date(row.time_bucket.includes('T') ? row.time_bucket : row.time_bucket.replace(' ', 'T') + 'Z');
             const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             labels.push(timeStr);
             

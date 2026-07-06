@@ -405,15 +405,36 @@ async function loadSpeedChart(hours = 24) {
         } else {
             // Setup gradients
             const uploadGradient = ctx.createLinearGradient(0, 0, 0, 200);
-            uploadGradient.addColorStop(0, 'rgba(16, 185, 129, 0.15)');
+            uploadGradient.addColorStop(0, 'rgba(16, 185, 129, 0.12)');
             uploadGradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
             
             const downloadGradient = ctx.createLinearGradient(0, 0, 0, 200);
-            downloadGradient.addColorStop(0, 'rgba(99, 102, 241, 0.15)');
+            downloadGradient.addColorStop(0, 'rgba(99, 102, 241, 0.12)');
             downloadGradient.addColorStop(1, 'rgba(99, 102, 241, 0.0)');
             
             speedChart = new Chart(ctx, {
                 type: 'line',
+                plugins: [{
+                    id: 'hoverLine',
+                    afterDraw: (chart) => {
+                        if (chart.tooltip?._active?.length) {
+                            const activePoint = chart.tooltip._active[0];
+                            const ctx = chart.ctx;
+                            const x = activePoint.element.x;
+                            const topY = chart.scales.y.top;
+                            const bottomY = chart.scales.y.bottom;
+                            ctx.save();
+                            ctx.beginPath();
+                            ctx.moveTo(x, topY);
+                            ctx.lineTo(x, bottomY);
+                            ctx.lineWidth = 1;
+                            ctx.strokeStyle = colors.grid || 'rgba(255, 255, 255, 0.08)';
+                            ctx.setLineDash([4, 4]);
+                            ctx.stroke();
+                            ctx.restore();
+                        }
+                    }
+                }],
                 data: {
                     labels: labels,
                     datasets: [
@@ -424,7 +445,7 @@ async function loadSpeedChart(hours = 24) {
                             borderWidth: 2,
                             backgroundColor: downloadGradient,
                             fill: true,
-                            tension: 0.4,
+                            tension: 0.35,
                             pointRadius: 0,
                             pointHoverRadius: 4,
                             pointHitRadius: 10
@@ -436,7 +457,7 @@ async function loadSpeedChart(hours = 24) {
                             borderWidth: 2,
                             backgroundColor: uploadGradient,
                             fill: true,
-                            tension: 0.4,
+                            tension: 0.35,
                             pointRadius: 0,
                             pointHoverRadius: 4,
                             pointHitRadius: 10
@@ -446,38 +467,47 @@ async function loadSpeedChart(hours = 24) {
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
                     plugins: {
                         legend: {
                             display: true,
                             position: 'top',
+                            align: 'end',
                             labels: {
                                 color: colors.text,
+                                boxWidth: 8,
+                                boxHeight: 8,
+                                usePointStyle: true,
+                                pointStyle: 'circle',
                                 font: { family: 'Inter', size: 10, weight: '500' },
-                                boxWidth: 10,
-                                boxHeight: 10,
-                                padding: 10
+                                padding: 15
                             }
                         },
                         tooltip: {
                             mode: 'index',
                             intersect: false,
-                            backgroundColor: colors.tooltipBg,
-                            borderColor: colors.tooltipBorder,
+                            backgroundColor: colors.tooltipBg || 'rgba(15, 23, 42, 0.95)',
+                            borderColor: colors.tooltipBorder || 'rgba(255, 255, 255, 0.08)',
                             borderWidth: 1,
                             titleColor: '#ffffff',
-                            bodyColor: '#e2e8f0',
+                            bodyColor: '#cbd5e1',
                             titleFont: { family: 'Inter', size: 11, weight: '600' },
                             bodyFont: { family: 'Inter', size: 10 },
-                            padding: 8,
-                            cornerRadius: 6,
+                            padding: 10,
+                            cornerRadius: 8,
+                            usePointStyle: true,
                             callbacks: {
                                 label: function(context) {
                                     let label = context.dataset.label || '';
-                                    if (label) label += ': ';
-                                    if (context.parsed.y !== null) {
-                                        label += context.parsed.y.toFixed(2) + ' Mbps';
+                                    const val = context.parsed.y !== null ? context.parsed.y.toFixed(2) + ' Mbps' : '0.00 Mbps';
+                                    if (label.includes('Download')) {
+                                        return ' ↓ ' + label + ': ' + val;
+                                    } else {
+                                        return ' ↑ ' + label + ': ' + val;
                                     }
-                                    return label;
                                 }
                             }
                         }
@@ -488,11 +518,17 @@ async function loadSpeedChart(hours = 24) {
                             ticks: {
                                 color: colors.text,
                                 font: { family: 'Inter', size: 9 },
+                                maxRotation: 0,
+                                autoSkip: true,
                                 maxTicksLimit: 8
                             }
                         },
                         y: {
-                            grid: { color: colors.grid },
+                            grid: { 
+                                color: colors.grid,
+                                borderDash: [5, 5],
+                                drawBorder: false
+                            },
                             ticks: {
                                 color: colors.text,
                                 font: { family: 'Inter', size: 9 },
