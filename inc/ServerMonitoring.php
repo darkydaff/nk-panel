@@ -193,8 +193,8 @@ class ServerMonitoring
         $stmt = $db->prepare("
             SELECT 
                 client_id,
-                AVG(speed_up_kbps) as speed_up_kbps,
-                AVG(speed_down_kbps) as speed_down_kbps,
+                MAX(speed_up_kbps) as speed_up_kbps,
+                MAX(speed_down_kbps) as speed_down_kbps,
                 FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(collected_at) / ?) * ?) as time_bucket
             FROM client_metrics
             WHERE client_id = ?

@@ -1801,12 +1801,19 @@ Router::get('/api/dashboard/metrics', function () {
             
             $query = "
                 SELECT 
-                    FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(cm.collected_at) / ?) * ?) as time_bucket,
-                    SUM(cm.speed_up_kbps) / COUNT(DISTINCT cm.collected_at) as speed_up,
-                    SUM(cm.speed_down_kbps) / COUNT(DISTINCT cm.collected_at) as speed_down
-                FROM client_metrics cm
-                JOIN vpn_clients c ON cm.client_id = c.id
-                WHERE c.server_id = ? AND cm.collected_at >= ?
+                    FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(t.collected_at) / ?) * ?) as time_bucket,
+                    MAX(t.total_speed_up) as speed_up,
+                    MAX(t.total_speed_down) as speed_down
+                FROM (
+                    SELECT 
+                        cm.collected_at,
+                        SUM(cm.speed_up_kbps) as total_speed_up,
+                        SUM(cm.speed_down_kbps) as total_speed_down
+                    FROM client_metrics cm
+                    JOIN vpn_clients c ON cm.client_id = c.id
+                    WHERE c.server_id = ? AND cm.collected_at >= ?
+                    GROUP BY cm.collected_at
+                ) t
                 GROUP BY time_bucket
                 ORDER BY time_bucket ASC
             ";
@@ -1817,12 +1824,19 @@ Router::get('/api/dashboard/metrics', function () {
             if ($user['role'] === 'admin') {
                 $query = "
                     SELECT 
-                        FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(cm.collected_at) / ?) * ?) as time_bucket,
-                        SUM(cm.speed_up_kbps) / COUNT(DISTINCT cm.collected_at) as speed_up,
-                        SUM(cm.speed_down_kbps) / COUNT(DISTINCT cm.collected_at) as speed_down
-                    FROM client_metrics cm
-                    JOIN vpn_clients c ON cm.client_id = c.id
-                    WHERE cm.collected_at >= ?
+                        FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(t.collected_at) / ?) * ?) as time_bucket,
+                        MAX(t.total_speed_up) as speed_up,
+                        MAX(t.total_speed_down) as speed_down
+                    FROM (
+                        SELECT 
+                            cm.collected_at,
+                            SUM(cm.speed_up_kbps) as total_speed_up,
+                            SUM(cm.speed_down_kbps) as total_speed_down
+                        FROM client_metrics cm
+                        JOIN vpn_clients c ON cm.client_id = c.id
+                        WHERE cm.collected_at >= ?
+                        GROUP BY cm.collected_at
+                    ) t
                     GROUP BY time_bucket
                     ORDER BY time_bucket ASC
                 ";
@@ -1831,12 +1845,19 @@ Router::get('/api/dashboard/metrics', function () {
             } else {
                 $query = "
                     SELECT 
-                        FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(cm.collected_at) / ?) * ?) as time_bucket,
-                        SUM(cm.speed_up_kbps) / COUNT(DISTINCT cm.collected_at) as speed_up,
-                        SUM(cm.speed_down_kbps) / COUNT(DISTINCT cm.collected_at) as speed_down
-                    FROM client_metrics cm
-                    JOIN vpn_clients c ON cm.client_id = c.id
-                    WHERE c.user_id = ? AND cm.collected_at >= ?
+                        FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(t.collected_at) / ?) * ?) as time_bucket,
+                        MAX(t.total_speed_up) as speed_up,
+                        MAX(t.total_speed_down) as speed_down
+                    FROM (
+                        SELECT 
+                            cm.collected_at,
+                            SUM(cm.speed_up_kbps) as total_speed_up,
+                            SUM(cm.speed_down_kbps) as total_speed_down
+                        FROM client_metrics cm
+                        JOIN vpn_clients c ON cm.client_id = c.id
+                        WHERE c.user_id = ? AND cm.collected_at >= ?
+                        GROUP BY cm.collected_at
+                    ) t
                     GROUP BY time_bucket
                     ORDER BY time_bucket ASC
                 ";
