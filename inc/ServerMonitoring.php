@@ -199,7 +199,7 @@ class ServerMonitoring
             FROM client_metrics
             WHERE client_id = ?
             AND collected_at >= ?
-            GROUP BY time_bucket
+            GROUP BY client_id, time_bucket
             ORDER BY time_bucket ASC
         ");
         
