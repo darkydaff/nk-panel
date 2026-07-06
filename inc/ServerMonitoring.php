@@ -195,15 +195,15 @@ class ServerMonitoring
                 client_id,
                 AVG(speed_up_kbps) as speed_up_kbps,
                 AVG(speed_down_kbps) as speed_down_kbps,
-                FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(collected_at) / ?) * ?) as collected_at
+                FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(collected_at) / ?) * ?) as time_bucket
             FROM client_metrics
             WHERE client_id = ?
             AND collected_at >= ?
-            GROUP BY FLOOR(UNIX_TIMESTAMP(collected_at) / ?)
-            ORDER BY collected_at ASC
+            GROUP BY time_bucket
+            ORDER BY time_bucket ASC
         ");
         
-        $stmt->execute([$seconds, $seconds, $clientId, $since, $seconds]);
+        $stmt->execute([$seconds, $seconds, $clientId, $since]);
         
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }

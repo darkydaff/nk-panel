@@ -1807,11 +1807,11 @@ Router::get('/api/dashboard/metrics', function () {
                 FROM client_metrics cm
                 JOIN vpn_clients c ON cm.client_id = c.id
                 WHERE c.server_id = ? AND cm.collected_at >= ?
-                GROUP BY FLOOR(UNIX_TIMESTAMP(cm.collected_at) / ?)
+                GROUP BY time_bucket
                 ORDER BY time_bucket ASC
             ";
             $stmt = $pdo->prepare($query);
-            $stmt->execute([$seconds, $seconds, $serverId, $since, $seconds]);
+            $stmt->execute([$seconds, $seconds, $serverId, $since]);
         } else {
             // Global aggregate for user
             $query = "
@@ -1822,11 +1822,11 @@ Router::get('/api/dashboard/metrics', function () {
                 FROM client_metrics cm
                 JOIN vpn_clients c ON cm.client_id = c.id
                 WHERE c.user_id = ? AND cm.collected_at >= ?
-                GROUP BY FLOOR(UNIX_TIMESTAMP(cm.collected_at) / ?)
+                GROUP BY time_bucket
                 ORDER BY time_bucket ASC
             ";
             $stmt = $pdo->prepare($query);
-            $stmt->execute([$seconds, $seconds, $user['id'], $since, $seconds]);
+            $stmt->execute([$seconds, $seconds, $user['id'], $since]);
         }
         
         $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2372,8 +2372,9 @@ Router::get('/api/clients/{id}/metrics', function ($params) {
         
         $metrics = ServerMonitoring::getClientMetrics($clientId, $hours);
         foreach ($metrics as &$m) {
-            if (isset($m['collected_at'])) {
-                $m['collected_at'] = str_replace(' ', 'T', $m['collected_at']) . 'Z';
+            if (isset($m['time_bucket'])) {
+                $m['collected_at'] = str_replace(' ', 'T', $m['time_bucket']) . 'Z';
+                unset($m['time_bucket']);
             }
         }
         
