@@ -684,8 +684,8 @@ class VpnClient {
             $speedUp = 0;
             $speedDown = 0;
             if ($prev && $timeDiff > 0) {
-                $speedUp = round(($deltaReceived * 8) / $timeDiff / 1000, 2);
-                $speedDown = round(($deltaSent * 8) / $timeDiff / 1000, 2);
+                $speedUp = round(($deltaSent * 8) / $timeDiff / 1000, 2);
+                $speedDown = round(($deltaReceived * 8) / $timeDiff / 1000, 2);
             }
 
             // Save raw metrics to client_metrics

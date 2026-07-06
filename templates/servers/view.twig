@@ -39,7 +39,7 @@
         </div>
         <div class="flex gap-2">
             <button onclick="installAgent({{ server.id }})" id="installAgentBtn" class="px-4 py-2 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 transition-colors text-sm">
-                <i class="fas fa-satellite-dish mr-2"></i>Install Agent
+                <i class="fas fa-satellite-dish mr-2"></i><span id="installAgentBtnText">{% if agent_online %}Reinstall Agent{% else %}Install Agent{% endif %}</span>
             </button>
             <button type="button" onclick="openDeleteServerModal({{ server.id }}, '{{ server.name|e('js') }}')" class="px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-colors text-sm">
                 <i class="fas fa-trash-alt mr-2"></i>Delete
@@ -697,19 +697,22 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
             if (!data.success) return;
 
-            // Update Agent Badge
+            // Update Agent Badge & Button
             const agentStatusBadge = document.getElementById('agentStatusBadge');
             const agentStatusDot = document.getElementById('agentStatusDot');
             const agentStatusText = document.getElementById('agentStatusText');
+            const installAgentBtnText = document.getElementById('installAgentBtnText');
             if (agentStatusBadge && agentStatusDot && agentStatusText) {
                 if (data.agent_online) {
                     agentStatusBadge.className = 'text-xs px-2 py-1 rounded-md flex items-center bg-emerald-500/10 text-emerald-400 border border-emerald-500/30';
                     agentStatusDot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5';
                     agentStatusText.textContent = 'Agent Online';
+                    if (installAgentBtnText) installAgentBtnText.textContent = 'Reinstall Agent';
                 } else {
                     agentStatusBadge.className = 'text-xs px-2 py-1 rounded-md flex items-center bg-amber-500/10 text-amber-400 border border-amber-500/30';
                     agentStatusDot.className = 'w-1.5 h-1.5 rounded-full bg-amber-400 mr-1.5';
                     agentStatusText.textContent = 'Agent Offline';
+                    if (installAgentBtnText) installAgentBtnText.textContent = 'Install Agent';
                 }
             }
 

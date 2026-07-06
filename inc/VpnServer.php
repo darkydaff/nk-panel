@@ -1262,7 +1262,7 @@ while true; do
                 if [ -n "\$clients_json" ]; then
                     clients_json="\${clients_json},"
                 fi
-                clients_json="\${clients_json}{\\"public_key\\":\\"\${pub_key}\\",\\"endpoint\\":\\"\${endpoint}\\",\\"bytes_sent\\":\${tx},\\"bytes_received\\":\${rx},\\"last_handshake\\":\${handshake}}"
+                clients_json="\${clients_json}{\\"public_key\\":\\"\${pub_key}\\",\\"endpoint\\":\\"\${endpoint}\\",\\"bytes_sent\\":\${rx},\\"bytes_received\\":\${tx},\\"last_handshake\\":\${handshake}}"
             fi
         done <<< "\$dump_output"
     fi

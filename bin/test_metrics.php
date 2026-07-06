@@ -124,8 +124,8 @@ try {
                             $deltaReceived = $rawBytesDiffReceived;
                         }
                         
-                        $speedUp = round(($deltaReceived * 8) / $timeDiff / 1000, 2);
-                        $speedDown = round(($deltaSent * 8) / $timeDiff / 1000, 2);
+                        $speedUp = round(($deltaSent * 8) / $timeDiff / 1000, 2);
+                        $speedDown = round(($deltaReceived * 8) / $timeDiff / 1000, 2);
                     }
                 }
                 
@@ -199,8 +199,8 @@ try {
     echo "Client DB state after second report:\n";
     echo "  Total Uploaded (bytes_sent): " . ($clientRow['bytes_sent'] / 1024 / 1024) . " MB (Expected: 101MB)\n";
     echo "  Total Downloaded (bytes_received): " . ($clientRow['bytes_received'] / 1024 / 1024) . " MB (Expected: 202MB)\n";
-    echo "  Speed up (downloaded by client = diff sent * 8 / time): {$clientRow['speed_up_kbps']} Kbps\n";
-    echo "  Speed down (uploaded by client = diff received * 8 / time): {$clientRow['speed_down_kbps']} Kbps\n";
+    echo "  Speed up (uploaded by client = diff sent * 8 / time): {$clientRow['speed_up_kbps']} Kbps\n";
+    echo "  Speed down (downloaded by client = diff received * 8 / time): {$clientRow['speed_down_kbps']} Kbps\n";
     
     // Simulate a server reboot/stats reset (raw bytes drop back to 0, then go up to 5MB and 10MB)
     echo "\nSimulating server reboot/stats reset (raw stats reset to 0, currently 5MB sent, 10MB received):\n";

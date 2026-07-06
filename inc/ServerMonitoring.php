@@ -64,8 +64,8 @@ class ServerMonitoring
         
         $endpoint = $parts[0];
         $lastHandshake = (int)$parts[1];
-        $bytesReceived = $parts[2];
-        $bytesSent = $parts[3];
+        $bytesSent = (int)$parts[2];       // transfer_rx - client sent (upload)
+        $bytesReceived = (int)$parts[3];   // transfer_tx - client received (download)
         
         // Get previous metrics (30 seconds ago)
         $stmt = $db->prepare("
@@ -85,19 +85,22 @@ class ServerMonitoring
             $timeDiff = time() - strtotime($previous['collected_at']);
             if ($timeDiff > 0) {
                 // Calculate speed in Kbps
-                $bytesDiffSent = (int)$bytesSent - (int)$previous['bytes_sent'];
-                $bytesDiffReceived = (int)$bytesReceived - (int)$previous['bytes_received'];
+                $rawBytesDiffSent = $bytesSent - (int)$previous['bytes_sent'];
+                $rawBytesDiffReceived = $bytesReceived - (int)$previous['bytes_received'];
                 
-                // speedUp = Client Upload = Received by Server (BytesDiffReceived)
-                // speedDown = Client Download = Transmitted by Server (BytesDiffSent)
-                $speedUp = round(($bytesDiffReceived * 8) / $timeDiff / 1000, 2);
-                $speedDown = round(($bytesDiffSent * 8) / $timeDiff / 1000, 2);
+                $deltaSent = $rawBytesDiffSent >= 0 ? $rawBytesDiffSent : $bytesSent;
+                $deltaReceived = $rawBytesDiffReceived >= 0 ? $rawBytesDiffReceived : $bytesReceived;
+                
+                // speedUp = Client Upload = deltaSent
+                // speedDown = Client Download = deltaReceived
+                $speedUp = round(($deltaSent * 8) / $timeDiff / 1000, 2);
+                $speedDown = round(($deltaReceived * 8) / $timeDiff / 1000, 2);
             }
         }
         
         return [
-            'bytes_sent' => (int)$bytesSent,
-            'bytes_received' => (int)$bytesReceived,
+            'bytes_sent' => $bytesSent,
+            'bytes_received' => $bytesReceived,
             'speed_up_kbps' => $speedUp,
             'speed_down_kbps' => $speedDown,
             'last_handshake' => $lastHandshake,

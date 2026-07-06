@@ -1463,10 +1463,10 @@ Router::post('/api/servers/report-metrics', function () {
                                 $deltaReceived = $rawBytesDiffReceived;
                             }
                             
-                            // speedUp = Client Upload = Received by Server (rawBytesDiffReceived)
-                            // speedDown = Client Download = Transmitted by Server (rawBytesDiffSent)
-                            $speedUp = round(($deltaReceived * 8) / $timeDiff / 1000, 2);
-                            $speedDown = round(($deltaSent * 8) / $timeDiff / 1000, 2);
+                            // speedUp = Client Upload = Sent by Client (deltaSent)
+                            // speedDown = Client Download = Received by Client (deltaReceived)
+                            $speedUp = round(($deltaSent * 8) / $timeDiff / 1000, 2);
+                            $speedDown = round(($deltaReceived * 8) / $timeDiff / 1000, 2);
                         }
                     }
                     
