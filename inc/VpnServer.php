@@ -1178,6 +1178,25 @@ public static function getMimicryPresets(): array
         // Install curl on remote host if missing
         $this->executeCommand("apt-get update && apt-get install -y curl || true", true);
 
+        // Reset DB metrics for clients of this server to prevent transitional speed spikes
+        $pdo = DB::conn();
+        $pdo->prepare("
+            DELETE FROM client_metrics 
+            WHERE client_id IN (SELECT id FROM vpn_clients WHERE server_id = ?)
+        ")->execute([$this->serverId]);
+        
+        $pdo->prepare("
+            UPDATE vpn_clients 
+            SET speed_up_kbps = 0.00, speed_down_kbps = 0.00 
+            WHERE server_id = ?
+        ")->execute([$this->serverId]);
+
+        // Stop and remove old monitoring agent completely before installing the new one
+        $this->executeCommand("systemctl stop nk-monitor.service || true", true);
+        $this->executeCommand("systemctl disable nk-monitor.service || true", true);
+        $this->executeCommand("rm -f /etc/systemd/system/nk-monitor.service /opt/amnezia/nk-monitor.sh || true", true);
+        $this->executeCommand("systemctl daemon-reload || true", true);
+
         // Generate script content
         $scriptContent = $this->generateMonitorScript($token, $panelUrl, $containerName);
 
