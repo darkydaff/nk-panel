@@ -1320,6 +1320,107 @@ Router::post('/clients/{id}/sync-stats', function ($params) {
     }
 });
 
+// Reset traffic stats for client
+Router::post('/clients/{id}/reset-traffic', function ($params) {
+    requireAuth();
+    $clientId = (int)$params['id'];
+    
+    try {
+        $client = new VpnClient($clientId);
+        $clientData = $client->getData();
+        
+        // Check ownership
+        $user = Auth::user();
+        if ($clientData['user_id'] != $user['id'] && !Auth::isAdmin()) {
+            http_response_code(403);
+            echo 'Forbidden';
+            return;
+        }
+        
+        $pdo = DB::conn();
+        $pdo->beginTransaction();
+        
+        // 1. Reset client config traffic in vpn_clients
+        $stmt = $pdo->prepare('UPDATE vpn_clients SET bytes_sent = 0, bytes_received = 0 WHERE id = ?');
+        $stmt->execute([$clientId]);
+        
+        // 2. Clear speed raw metrics in client_metrics
+        $stmt = $pdo->prepare('DELETE FROM client_metrics WHERE client_id = ?');
+        $stmt->execute([$clientId]);
+        
+        // 3. Reset aggregate traffic in ext_clients to SUM of its linked configs
+        if (!empty($clientData['ext_client_code'])) {
+            $stmtExt = $pdo->prepare('
+                UPDATE ext_clients ec
+                SET 
+                    ec.bytes_sent = IFNULL((SELECT SUM(vc.bytes_sent) FROM vpn_clients vc WHERE vc.ext_client_code = ec.code), 0),
+                    ec.bytes_received = IFNULL((SELECT SUM(vc.bytes_received) FROM vpn_clients vc WHERE vc.ext_client_code = ec.code), 0)
+                WHERE ec.code = ?
+            ');
+            $stmtExt->execute([$clientData['ext_client_code']]);
+        }
+        
+        $pdo->commit();
+        redirect('/clients/' . $clientId . '?success=Traffic+stats+reset');
+    } catch (Exception $e) {
+        if (isset($pdo) && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        redirect('/clients/' . $clientId . '?error=' . urlencode($e->getMessage()));
+    }
+});
+
+// Reset all clients traffic stats for server
+Router::post('/servers/{id}/reset-all-traffic', function ($params) {
+    requireAuth();
+    $serverId = (int)$params['id'];
+    
+    try {
+        $server = new VpnServer($serverId);
+        $serverData = $server->getData();
+        
+        // Check ownership
+        $user = Auth::user();
+        if ($serverData['user_id'] != $user['id'] && !Auth::isAdmin()) {
+            http_response_code(403);
+            echo 'Forbidden';
+            return;
+        }
+        
+        $pdo = DB::conn();
+        $pdo->beginTransaction();
+        
+        // 1. Reset client config traffic in vpn_clients for all clients on this server
+        $stmt = $pdo->prepare('UPDATE vpn_clients SET bytes_sent = 0, bytes_received = 0 WHERE server_id = ?');
+        $stmt->execute([$serverId]);
+        
+        // 2. Clear speed raw metrics in client_metrics for all clients on this server
+        $stmt = $pdo->prepare('
+            DELETE FROM client_metrics 
+            WHERE client_id IN (SELECT id FROM vpn_clients WHERE server_id = ?)
+        ');
+        $stmt->execute([$serverId]);
+        
+        // 3. Reset aggregate traffic in ext_clients to SUM of linked configs
+        $stmtExt = $pdo->prepare('
+            UPDATE ext_clients ec
+            SET 
+                ec.bytes_sent = IFNULL((SELECT SUM(vc.bytes_sent) FROM vpn_clients vc WHERE vc.ext_client_code = ec.code), 0),
+                ec.bytes_received = IFNULL((SELECT SUM(vc.bytes_received) FROM vpn_clients vc WHERE vc.ext_client_code = ec.code), 0)
+            WHERE ec.code IN (SELECT DISTINCT ext_client_code FROM vpn_clients WHERE server_id = ? AND ext_client_code IS NOT NULL AND ext_client_code != "")
+        ');
+        $stmtExt->execute([$serverId]);
+        
+        $pdo->commit();
+        redirect('/servers/' . $serverId . '?success=All+client+traffic+stats+reset');
+    } catch (Exception $e) {
+        if (isset($pdo) && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        redirect('/servers/' . $serverId . '?error=' . urlencode($e->getMessage()));
+    }
+});
+
 // Sync all stats for server
 Router::post('/servers/{id}/sync-stats', function ($params) {
     requireAuth();
@@ -1666,6 +1767,23 @@ Router::get('/api/dashboard/metrics', function () {
     $hours = isset($_GET['hours']) ? max(1, min(168, (float)$_GET['hours'])) : 24;
     $serverId = isset($_GET['server_id']) && $_GET['server_id'] !== '' ? (int)$_GET['server_id'] : null;
     
+    // Determine interval in minutes (N) based on hours
+    $bucketMinutes = 5;
+    if ($hours <= 2) {
+        $bucketMinutes = 1;
+    } elseif ($hours <= 12) {
+        $bucketMinutes = 2;
+    } elseif ($hours <= 24) {
+        $bucketMinutes = 5;
+    } elseif ($hours <= 48) {
+        $bucketMinutes = 10;
+    } elseif ($hours <= 168) {
+        $bucketMinutes = 30;
+    } else {
+        $bucketMinutes = 60;
+    }
+    $seconds = $bucketMinutes * 60;
+    
     $pdo = DB::conn();
     
     try {
@@ -1682,32 +1800,32 @@ Router::get('/api/dashboard/metrics', function () {
             
             $query = "
                 SELECT 
-                    DATE_FORMAT(cm.collected_at, '%Y-%m-%d %H:%i:00') as time_bucket,
-                    SUM(cm.speed_up_kbps) as speed_up,
-                    SUM(cm.speed_down_kbps) as speed_down
+                    FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(cm.collected_at) / ?) * ?) as time_bucket,
+                    SUM(cm.speed_up_kbps) / COUNT(DISTINCT cm.collected_at) as speed_up,
+                    SUM(cm.speed_down_kbps) / COUNT(DISTINCT cm.collected_at) as speed_down
                 FROM client_metrics cm
                 JOIN vpn_clients c ON cm.client_id = c.id
                 WHERE c.server_id = ? AND cm.collected_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)
-                GROUP BY time_bucket
+                GROUP BY FLOOR(UNIX_TIMESTAMP(cm.collected_at) / ?)
                 ORDER BY time_bucket ASC
             ";
             $stmt = $pdo->prepare($query);
-            $stmt->execute([$serverId, $hours]);
+            $stmt->execute([$seconds, $seconds, $serverId, $hours, $seconds]);
         } else {
             // Global aggregate for user
             $query = "
                 SELECT 
-                    DATE_FORMAT(cm.collected_at, '%Y-%m-%d %H:%i:00') as time_bucket,
-                    SUM(cm.speed_up_kbps) as speed_up,
-                    SUM(cm.speed_down_kbps) as speed_down
+                    FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(cm.collected_at) / ?) * ?) as time_bucket,
+                    SUM(cm.speed_up_kbps) / COUNT(DISTINCT cm.collected_at) as speed_up,
+                    SUM(cm.speed_down_kbps) / COUNT(DISTINCT cm.collected_at) as speed_down
                 FROM client_metrics cm
                 JOIN vpn_clients c ON cm.client_id = c.id
                 WHERE c.user_id = ? AND cm.collected_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)
-                GROUP BY time_bucket
+                GROUP BY FLOOR(UNIX_TIMESTAMP(cm.collected_at) / ?)
                 ORDER BY time_bucket ASC
             ";
             $stmt = $pdo->prepare($query);
-            $stmt->execute([$user['id'], $hours]);
+            $stmt->execute([$seconds, $seconds, $user['id'], $hours, $seconds]);
         }
         
         $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -1716,6 +1834,9 @@ Router::get('/api/dashboard/metrics', function () {
         foreach ($results as &$row) {
             $row['speed_up'] = (float)$row['speed_up'];
             $row['speed_down'] = (float)$row['speed_down'];
+            if (isset($row['time_bucket'])) {
+                $row['time_bucket'] = str_replace(' ', 'T', $row['time_bucket']) . 'Z';
+            }
         }
         
         echo json_encode([
@@ -2249,6 +2370,11 @@ Router::get('/api/clients/{id}/metrics', function ($params) {
         }
         
         $metrics = ServerMonitoring::getClientMetrics($clientId, $hours);
+        foreach ($metrics as &$m) {
+            if (isset($m['collected_at'])) {
+                $m['collected_at'] = str_replace(' ', 'T', $m['collected_at']) . 'Z';
+            }
+        }
         
         echo json_encode(['success' => true, 'metrics' => $metrics]);
     } catch (Exception $e) {

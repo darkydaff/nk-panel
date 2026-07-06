@@ -168,19 +168,41 @@ class ServerMonitoring
     /**
      * Get client metrics for last 24 hours
      */
-    public static function getClientMetrics(int $clientId, int $hours = 24): array
+    public static function getClientMetrics(int $clientId, float $hours = 24): array
     {
         $db = DB::conn();
         
+        // Determine interval in minutes (N) based on hours
+        $bucketMinutes = 5;
+        if ($hours <= 2) {
+            $bucketMinutes = 1;
+        } elseif ($hours <= 12) {
+            $bucketMinutes = 2;
+        } elseif ($hours <= 24) {
+            $bucketMinutes = 5;
+        } elseif ($hours <= 48) {
+            $bucketMinutes = 10;
+        } elseif ($hours <= 168) {
+            $bucketMinutes = 30;
+        } else {
+            $bucketMinutes = 60;
+        }
+        $seconds = $bucketMinutes * 60;
+        
         $stmt = $db->prepare("
-            SELECT *
+            SELECT 
+                client_id,
+                AVG(speed_up_kbps) as speed_up_kbps,
+                AVG(speed_down_kbps) as speed_down_kbps,
+                FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(collected_at) / ?) * ?) as collected_at
             FROM client_metrics
             WHERE client_id = ?
             AND collected_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+            GROUP BY FLOOR(UNIX_TIMESTAMP(collected_at) / ?)
             ORDER BY collected_at ASC
         ");
         
-        $stmt->execute([$clientId, $hours]);
+        $stmt->execute([$seconds, $seconds, $clientId, $hours, $seconds]);
         
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }

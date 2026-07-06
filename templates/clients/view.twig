@@ -235,6 +235,12 @@
                     </form>
                     {% endif %}
 
+                    <form method="POST" action="/clients/{{ client.id }}/reset-traffic" onsubmit="return confirm('Are you sure you want to reset traffic statistics for this client to 0?')">
+                        <button type="submit" class="w-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg py-2.5 text-sm transition-colors font-medium">
+                            <i class="fas fa-undo mr-2"></i>Reset Traffic Stats
+                        </button>
+                    </form>
+
                     <form method="POST" action="/clients/{{ client.id }}/delete" onsubmit="return confirm('Delete this client permanently?')">
                         <button type="submit" class="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg py-2.5 text-sm transition-colors font-medium">
                             <i class="fas fa-trash-alt mr-2"></i>Delete Client
@@ -380,7 +386,7 @@ async function loadSpeedChart(hours = 24) {
         const downloadData = [];
         
         data.metrics.forEach(m => {
-            const time = new Date(m.collected_at);
+            const time = new Date(m.collected_at.includes('T') ? m.collected_at : m.collected_at.replace(' ', 'T') + 'Z');
             const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             labels.push(timeStr);
             // Convert Kbps to Mbps
