@@ -36,6 +36,17 @@ try {
         $isUtf8 = mb_check_encoding($pass, 'UTF-8');
         echo "  Is UTF-8: " . ($isUtf8 ? "YES" : "NO") . "\n";
         
+        // Attempt authentication directly to debug
+        try {
+            $adapter = new KeeneticRouter($r['domain'], $r['password'], $r['login']);
+            $adapter->setTimeout(3);
+            echo "  Attempting auth...\n";
+            $ok = $adapter->authenticate();
+            echo "  [OK] Auth successful!\n";
+        } catch (Exception $e) {
+            echo "  [FAIL] " . $e->getMessage() . "\n";
+        }
+        
         echo "---------------------------------\n";
     }
 } catch (Throwable $e) {

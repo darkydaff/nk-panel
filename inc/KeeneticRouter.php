@@ -32,7 +32,7 @@ class KeeneticRouter {
     public function request(string $path, string $method = 'GET', $body = null, bool $isRetry = false): array {
         $url = $this->domain;
         if (!str_starts_with($url, 'http://') && !str_starts_with($url, 'https://')) {
-            $url = 'http://' . $url;
+            $url = 'https://' . $url;
         }
         $url = rtrim($url, '/') . '/' . ltrim($path, '/');
 
@@ -52,6 +52,7 @@ class KeeneticRouter {
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_POSTREDIR, 7);
 
         if ($body !== null) {
             $jsonBody = is_string($body) ? $body : json_encode($body);
@@ -100,7 +101,7 @@ class KeeneticRouter {
     public function authenticate(): bool {
         $url = $this->domain;
         if (!str_starts_with($url, 'http://') && !str_starts_with($url, 'https://')) {
-            $url = 'http://' . $url;
+            $url = 'https://' . $url;
         }
         $url = rtrim($url, '/') . '/auth';
 
@@ -137,7 +138,13 @@ class KeeneticRouter {
         curl_close($ch);
 
         $realm = $headers['x-ndm-realm'] ?? null;
+        if ($realm !== null) {
+            $realm = trim($realm, '"\' ');
+        }
         $challenge = $headers['x-ndm-challenge'] ?? null;
+        if ($challenge !== null) {
+            $challenge = trim($challenge, '"\' ');
+        }
 
         if (!$realm || !$challenge) {
             throw new Exception("Router authentication headers missing (Realm/Challenge). Is RCI/HTTP proxy enabled on the router?");
@@ -166,6 +173,7 @@ class KeeneticRouter {
         curl_setopt($ch2, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch2, CURLOPT_SSL_VERIFYHOST, false);
         curl_setopt($ch2, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch2, CURLOPT_POSTREDIR, 7);
         curl_setopt($ch2, CURLOPT_HTTPHEADER, $postHeaders);
         curl_setopt($ch2, CURLOPT_POSTFIELDS, json_encode([
             'login' => $this->login,
