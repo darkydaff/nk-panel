@@ -963,21 +963,23 @@ Router::post('/api/ext-clients/sync', function () {
         $pgPdo = ExtDB::conn();
         $table = Config::get('EXT_PG_CLIENTS_TABLE', 'Clients');
 
-        $stmt = $pgPdo->query("SELECT \"Code\", \"Name\", \"Start_Date\", \"Sub\", \"Func\", \"Router\" FROM \"{$table}\" WHERE \"Code\" IS NOT NULL");
+        $stmt = $pgPdo->query("SELECT \"Code\", \"Name\", \"Start_Date\", \"Sub\", \"Func\", \"Router\", \"Domain\", \"Pass\" FROM \"{$table}\" WHERE \"Code\" IS NOT NULL");
         $rawClients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $myPdo = DB::conn();
         $myPdo->beginTransaction();
         if (!empty($rawClients)) {
             $insertStmt = $myPdo->prepare('
-                INSERT INTO ext_clients (code, name, start_date, sub, func, router) 
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO ext_clients (code, name, start_date, sub, func, router, domain, pass) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE 
                     name = VALUES(name), 
                     start_date = VALUES(start_date), 
                     sub = VALUES(sub), 
                     func = VALUES(func), 
-                    router = VALUES(router)
+                    router = VALUES(router),
+                    domain = VALUES(domain),
+                    pass = VALUES(pass)
             ');
             $syncedCount = 0;
             $activeCodes = [];
@@ -991,8 +993,10 @@ Router::post('/api/ext-clients/sync', function () {
                 $sub = isset($row['Sub']) ? (int)$row['Sub'] : null;
                 $func = isset($row['Func']) ? trim($row['Func']) : null;
                 $router = isset($row['Router']) ? trim($row['Router']) : null;
+                $domain = isset($row['Domain']) ? trim($row['Domain']) : null;
+                $pass = isset($row['Pass']) ? trim($row['Pass']) : null;
 
-                $insertStmt->execute([$code, $name, $startDate, $sub, $func, $router]);
+                $insertStmt->execute([$code, $name, $startDate, $sub, $func, $router, $domain, $pass]);
                 $syncedCount++;
             }
             
@@ -1015,6 +1019,15 @@ Router::post('/api/ext-clients/sync', function () {
             VpnClient::autoLinkAll();
         } catch (Throwable $e) {
             error_log('Automatic client linking failed during manual sync: ' . $e->getMessage());
+        }
+
+        // Run router synchronization
+        try {
+            require_once __DIR__ . '/../inc/KeeneticRouter.php';
+            require_once __DIR__ . '/../inc/RouterManager.php';
+            RouterManager::syncRoutersFromExtClients();
+        } catch (Throwable $e) {
+            error_log('Automatic router synchronization failed during manual sync: ' . $e->getMessage());
         }
 
         // Store last sync timestamp
