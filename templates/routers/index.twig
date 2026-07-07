@@ -52,7 +52,7 @@
                     </tr>
                     {% else %}
                         {% for r in routers %}
-                        <tr class="hover:bg-slate-800/20 transition-colors group">
+                        <tr data-router-id="{{ r.id }}" class="hover:bg-slate-800/20 transition-colors group">
                             <!-- Client Info -->
                             <td class="px-5 py-4">
                                 <div class="flex flex-col">
@@ -63,8 +63,8 @@
                             <!-- Router Info -->
                             <td class="px-5 py-4">
                                 <div class="flex flex-col">
-                                    <span class="text-xs text-white">{{ r.router_model|default('Keenetic (Generic)') }}</span>
-                                    <span class="text-[10px] text-slate-500 font-mono mt-0.5">OS: {{ r.firmware_version|default('Unknown') }}</span>
+                                    <span class="text-xs text-white router-model-text">{{ r.router_model|default('Keenetic (Generic)') }}</span>
+                                    <span class="text-[10px] text-slate-500 font-mono mt-0.5">OS: <span class="router-os-text">{{ r.firmware_version|default('Unknown') }}</span></span>
                                 </div>
                             </td>
                             <!-- Domain -->
@@ -80,7 +80,7 @@
                                 {% endif %}
                             </td>
                             <!-- Status -->
-                            <td class="px-5 py-4 text-center">
+                            <td class="px-5 py-4 text-center router-status-cell">
                                 {% if r.status == 'connected' %}
                                     <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">Connected</span>
                                 {% elseif r.status == 'offline' %}
@@ -94,8 +94,8 @@
                             <!-- Sync Times -->
                             <td class="px-5 py-4 text-xs font-mono text-slate-400">
                                 <div class="flex flex-col gap-0.5">
-                                    <span title="Last push timestamp">P: {{ r.last_push_at|default('Never') }}</span>
-                                    <span title="Last check timestamp">C: {{ r.last_check_at|default('Never') }}</span>
+                                    <span title="Last push timestamp">P: <span>{{ r.last_push_at|default('Never') }}</span></span>
+                                    <span title="Last check timestamp">C: <span class="router-check-time-text">{{ r.last_check_at|default('Never') }}</span></span>
                                 </div>
                             </td>
                             <!-- Actions -->
@@ -106,6 +106,9 @@
                                     </button>
                                     <button onclick="checkStatus({{ r.id }})" class="w-8 h-8 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 hover:text-cyan-300 border border-cyan-500/20 hover:border-cyan-500/40 flex items-center justify-center transition-all" title="Check status">
                                         <i class="fas fa-sync-alt text-xs"></i>
+                                    </button>
+                                    <button onclick="editCredentials({{ r.id }}, '{{ r.domain|e('js') }}', '{{ r.login|default('admin')|e('js') }}')" class="w-8 h-8 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 border border-amber-500/20 hover:border-amber-500/40 flex items-center justify-center transition-all" title="Edit credentials">
+                                        <i class="fas fa-key text-xs"></i>
                                     </button>
                                     {% if r.wg_interface_id %}
                                     <button onclick="removeWg({{ r.id }})" class="w-8 h-8 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/20 hover:border-rose-500/40 flex items-center justify-center transition-all" title="Remove interface">
@@ -162,25 +165,83 @@ function triggerCheckAll() {
     btn.disabled = true;
     icon.className = 'fas fa-spinner fa-spin mr-1.5';
     
-    fetch('/api/routers/check-all', {
-        method: 'POST'
-    })
-    .then(r => r.json().then(data => ({ status: r.status, body: data })))
-    .then(res => {
-        if (res.status === 200 && res.body.success) {
-            alert('Batch status check completed!');
-            window.location.reload();
-        } else {
-            alert('Batch status check failed: ' + (res.body.error || 'Unknown error'));
-            btn.disabled = false;
-            icon.className = 'fas fa-wifi';
-        }
-    })
-    .catch(err => {
-        alert('Network error: ' + err.message);
+    const rows = document.querySelectorAll('tr[data-router-id]');
+    const tasks = Array.from(rows).map(row => {
+        return {
+            id: row.getAttribute('data-router-id'),
+            row: row
+        };
+    });
+    
+    if (tasks.length === 0) {
         btn.disabled = false;
         icon.className = 'fas fa-wifi';
-    });
+        return;
+    }
+    
+    const concurrency = 6;
+    let active = 0;
+    let completed = 0;
+    const total = tasks.length;
+    
+    function runNext() {
+        if (tasks.length === 0) {
+            if (active === 0) {
+                btn.disabled = false;
+                icon.className = 'fas fa-wifi';
+                alert('Checked ' + total + ' routers successfully!');
+            }
+            return;
+        }
+        
+        const task = tasks.shift();
+        active++;
+        
+        const statusCell = task.row.querySelector('.router-status-cell');
+        statusCell.innerHTML = '<span class="inline-flex items-center gap-1 text-xs text-cyan-400 font-medium"><i class="fas fa-spinner fa-spin"></i> Checking...</span>';
+        
+        fetch('/api/routers/' + task.id + '/check', {
+            method: 'POST'
+        })
+        .then(r => r.json().then(data => ({ status: r.status, body: data })))
+        .then(res => {
+            if (res.status === 200 && res.body.success) {
+                task.row.querySelector('.router-model-text').textContent = res.body.router_model || 'Keenetic';
+                task.row.querySelector('.router-os-text').textContent = res.body.firmware_version || 'Unknown';
+                
+                let badge = '';
+                if (res.body.status === 'connected') {
+                    badge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">Connected</span>';
+                } else if (res.body.status === 'offline') {
+                    badge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wider" title="' + (res.body.error || 'Offline') + '">Offline</span>';
+                } else if (res.body.status === 'error') {
+                    badge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 uppercase tracking-wider" title="' + (res.body.error || 'Error') + '">Error</span>';
+                } else {
+                    badge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700 uppercase tracking-wider">Pending</span>';
+                }
+                statusCell.innerHTML = badge;
+                
+                const now = new Date();
+                const pad = (n) => String(n).padStart(2, '0');
+                const timeStr = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+                task.row.querySelector('.router-check-time-text').textContent = timeStr;
+            } else {
+                statusCell.innerHTML = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 uppercase tracking-wider" title="' + (res.body.error || 'Check failed') + '">Error</span>';
+            }
+        })
+        .catch(err => {
+            statusCell.innerHTML = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 uppercase tracking-wider" title="Network error">Error</span>';
+        })
+        .finally(() => {
+            active--;
+            completed++;
+            runNext();
+        });
+    }
+    
+    for (let i = 0; i < Math.min(concurrency, tasks.length); i++) {
+        runNext();
+    }
 }
 
 function triggerPushAll() {
@@ -190,28 +251,73 @@ function triggerPushAll() {
     const icon = document.getElementById('pushAllIcon');
     if (btn.disabled) return;
     
+    const rows = document.querySelectorAll('tr[data-router-id]');
+    const tasks = Array.from(rows).filter(row => {
+        const statusText = row.querySelector('.router-status-cell').textContent.trim();
+        return statusText === 'Pending';
+    }).map(row => {
+        return {
+            id: row.getAttribute('data-router-id'),
+            row: row
+        };
+    });
+    
+    if (tasks.length === 0) {
+        alert('No pending routers found.');
+        return;
+    }
+    
     btn.disabled = true;
     icon.className = 'fas fa-spinner fa-spin mr-1.5';
     
-    fetch('/api/routers/push-all', {
-        method: 'POST'
-    })
-    .then(r => r.json().then(data => ({ status: r.status, body: data })))
-    .then(res => {
-        if (res.status === 200 && res.body.success) {
-            alert('Batch push operations completed!');
-            window.location.reload();
-        } else {
-            alert('Batch push failed: ' + (res.body.error || 'Unknown error'));
-            btn.disabled = false;
-            icon.className = 'fas fa-upload';
+    const concurrency = 4; // Concurrency limit for configuration pushes
+    let active = 0;
+    let completed = 0;
+    const total = tasks.length;
+    
+    function runNext() {
+        if (tasks.length === 0) {
+            if (active === 0) {
+                btn.disabled = false;
+                icon.className = 'fas fa-upload';
+                alert('Finished configuration push to ' + total + ' routers. Reloading page...');
+                window.location.reload();
+            }
+            return;
         }
-    })
-    .catch(err => {
-        alert('Network error: ' + err.message);
-        btn.disabled = false;
-        icon.className = 'fas fa-upload';
-    });
+        
+        const task = tasks.shift();
+        active++;
+        
+        const statusCell = task.row.querySelector('.router-status-cell');
+        statusCell.innerHTML = '<span class="inline-flex items-center gap-1 text-xs text-indigo-400 font-medium"><i class="fas fa-spinner fa-spin"></i> Pushing...</span>';
+        
+        fetch('/api/routers/' + task.id + '/push', {
+            method: 'POST'
+        })
+        .then(r => r.json().then(data => ({ status: r.status, body: data })))
+        .then(res => {
+            if (res.status === 200 && res.body.success) {
+                statusCell.innerHTML = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">Connected</span>';
+                task.row.querySelector('.router-model-text').textContent = res.body.router_model || 'Keenetic';
+                task.row.querySelector('.router-os-text').textContent = res.body.firmware_version || 'Unknown';
+            } else {
+                statusCell.innerHTML = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 uppercase tracking-wider" title="' + (res.body.error || 'Push failed') + '">Error</span>';
+            }
+        })
+        .catch(err => {
+            statusCell.innerHTML = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 uppercase tracking-wider" title="Network error">Error</span>';
+        })
+        .finally(() => {
+            active--;
+            completed++;
+            runNext();
+        });
+    }
+    
+    for (let i = 0; i < Math.min(concurrency, tasks.length); i++) {
+        runNext();
+    }
 }
 
 // Individual Actions
@@ -251,22 +357,45 @@ function checkStatus(routerId) {
     icon.className = 'fas fa-spinner fa-spin text-cyan-400';
     btn.disabled = true;
 
+    const row = btn.closest('tr[data-router-id]');
+
     fetch('/api/routers/' + routerId + '/check', {
         method: 'POST'
     })
     .then(r => r.json().then(data => ({ status: r.status, body: data })))
     .then(res => {
         if (res.status === 200 && res.body.success) {
-            alert('Status check completed!\nStatus: ' + res.body.status + '\nModel: ' + res.body.router_model + (res.body.error ? '\nError: ' + res.body.error : ''));
-            window.location.reload();
+            if (row) {
+                row.querySelector('.router-model-text').textContent = res.body.router_model || 'Keenetic';
+                row.querySelector('.router-os-text').textContent = res.body.firmware_version || 'Unknown';
+                
+                let badge = '';
+                if (res.body.status === 'connected') {
+                    badge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">Connected</span>';
+                } else if (res.body.status === 'offline') {
+                    badge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wider" title="' + (res.body.error || 'Offline') + '">Offline</span>';
+                } else if (res.body.status === 'error') {
+                    badge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 uppercase tracking-wider" title="' + (res.body.error || 'Error') + '">Error</span>';
+                } else {
+                    badge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700 uppercase tracking-wider">Pending</span>';
+                }
+                row.querySelector('.router-status-cell').innerHTML = badge;
+                
+                const now = new Date();
+                const pad = (n) => String(n).padStart(2, '0');
+                const timeStr = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+                row.querySelector('.router-check-time-text').textContent = timeStr;
+            } else {
+                window.location.reload();
+            }
         } else {
             alert('Check failed: ' + (res.body.error || 'Unknown error'));
-            icon.className = oldClass;
-            btn.disabled = false;
         }
     })
     .catch(err => {
         alert('Network error: ' + err.message);
+    })
+    .finally(() => {
         icon.className = oldClass;
         btn.disabled = false;
     });
@@ -300,5 +429,108 @@ function removeWg(routerId) {
         btn.disabled = false;
     });
 }
+
+function editCredentials(routerId, domain, login) {
+    document.getElementById('credRouterId').value = routerId;
+    document.getElementById('credDomain').value = domain;
+    document.getElementById('credLogin').value = login;
+    document.getElementById('credPassword').value = '';
+    document.getElementById('credentialsModal').classList.remove('hidden');
+}
+
+function closeCredentialsModal() {
+    document.getElementById('credentialsModal').classList.add('hidden');
+}
+
+function submitCredentials(e) {
+    e.preventDefault();
+    const routerId = document.getElementById('credRouterId').value;
+    const domain = document.getElementById('credDomain').value;
+    const login = document.getElementById('credLogin').value;
+    const password = document.getElementById('credPassword').value;
+    const btn = document.getElementById('credSubmitBtn');
+    
+    btn.disabled = true;
+    const oldHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Saving...';
+    
+    fetch('/api/routers/' + routerId + '/credentials', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            domain: domain,
+            login: login,
+            password: password
+        })
+    })
+    .then(r => r.json().then(data => ({ status: r.status, body: data })))
+    .then(res => {
+        if (res.status === 200 && res.body.success) {
+            alert('Credentials updated successfully!');
+            window.location.reload();
+        } else {
+            alert('Failed to update credentials: ' + (res.body.error || 'Unknown error'));
+            btn.disabled = false;
+            btn.innerHTML = oldHtml;
+        }
+    })
+    .catch(err => {
+        alert('Network error: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = oldHtml;
+    });
+}
 </script>
+
+{# ─── Edit Credentials Modal ─── #}
+<div id="credentialsModal"
+     class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm hidden"
+     onclick="if(event.target===this) closeCredentialsModal()">
+    <div class="panel p-6 w-full max-w-md border-slate-700/60 bg-slate-900/95 backdrop-blur shadow-2xl">
+        <div class="flex items-center justify-between mb-5">
+            <h3 class="font-semibold text-white flex items-center gap-2">
+                <i class="fas fa-key text-amber-400"></i>
+                Edit Router Credentials
+            </h3>
+            <button onclick="closeCredentialsModal()" class="text-slate-500 hover:text-white transition-colors p-1">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <form method="POST" id="credentialsForm" onsubmit="submitCredentials(event)">
+            <input type="hidden" id="credRouterId">
+
+            <div class="mb-4">
+                <label class="block text-xs text-slate-400 mb-1.5 uppercase tracking-wide">Domain / IP</label>
+                <input type="text" id="credDomain" required
+                       class="input-field w-full px-4 py-2.5 text-sm rounded-lg"
+                       placeholder="e.g. router.netcraze.link or 192.168.1.1">
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-xs text-slate-400 mb-1.5 uppercase tracking-wide">Login Username</label>
+                <input type="text" id="credLogin" required
+                       class="input-field w-full px-4 py-2.5 text-sm rounded-lg"
+                       placeholder="admin">
+            </div>
+
+            <div class="mb-5">
+                <label class="block text-xs text-slate-400 mb-1.5 uppercase tracking-wide">Password</label>
+                <input type="password" id="credPassword"
+                       class="input-field w-full px-4 py-2.5 text-sm rounded-lg"
+                       placeholder="•••••••• (leave blank to keep current)">
+            </div>
+
+            <div class="flex gap-2">
+                <button type="button" onclick="closeCredentialsModal()"
+                        class="btn-secondary flex-1 py-2.5 text-sm">Cancel</button>
+                <button type="submit" class="btn-primary flex-1 py-2.5 text-sm" id="credSubmitBtn">
+                    <i class="fas fa-save mr-2"></i>Save Settings
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}

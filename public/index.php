@@ -3294,6 +3294,56 @@ Router::post('/api/routers/{id}/check', function ($params) {
     }
 });
 
+// API: Update router credentials
+Router::post('/api/routers/{id}/credentials', function ($params) {
+    header('Content-Type: application/json');
+    requireAdmin();
+    
+    $id = (int)$params['id'];
+    
+    $data = json_decode(file_get_contents('php://input'), true);
+    $domain = trim($data['domain'] ?? '');
+    $login = trim($data['login'] ?? 'admin');
+    $password = $data['password'] ?? '';
+    
+    if (empty($domain)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Domain/IP is required.']);
+        return;
+    }
+    
+    try {
+        $pdo = DB::conn();
+        
+        $stmt = $pdo->prepare("SELECT password FROM routers WHERE id = ?");
+        $stmt->execute([$id]);
+        $existing = $stmt->fetch();
+        
+        if (!$existing) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Router not found.']);
+            return;
+        }
+        
+        // If password is blank, retain the old password
+        if ($password === '') {
+            $password = $existing['password'];
+        }
+        
+        $stmtUpdate = $pdo->prepare("
+            UPDATE routers 
+            SET domain = ?, login = ?, password = ?, status = 'pending', error_message = NULL 
+            WHERE id = ?
+        ");
+        $stmtUpdate->execute([$domain, $login, $password, $id]);
+        
+        echo json_encode(['success' => true]);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+});
+
 // API: Remove interface from router
 Router::post('/api/routers/{id}/remove-wg', function ($params) {
     header('Content-Type: application/json');
@@ -3379,6 +3429,7 @@ Router::get('/api/routers/{id}/interfaces', function ($params) {
         
         $login = $router['login'] ?: 'admin';
         $adapter = new KeeneticRouter($router['domain'], $router['password'], $login);
+        $adapter->setTimeout(5);
         $interfaces = $adapter->getInterfaces();
         echo json_encode(['interfaces' => $interfaces]);
     } catch (Exception $e) {

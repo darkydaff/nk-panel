@@ -9,11 +9,21 @@ class KeeneticRouter {
     private string $login;
     private ?string $cookie = null;
     private array $lastHeaders = [];
+    private int $timeout = 15;
+    private int $authTimeout = 10;
 
     public function __construct(string $domain, string $password, string $login = 'admin') {
         $this->domain = trim($domain);
         $this->password = $password;
         $this->login = trim($login);
+    }
+
+    /**
+     * Set connection timeouts
+     */
+    public function setTimeout(int $seconds): void {
+        $this->timeout = $seconds;
+        $this->authTimeout = max(3, $seconds);
     }
 
     /**
@@ -38,7 +48,7 @@ class KeeneticRouter {
 
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $this->timeout);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
@@ -97,7 +107,7 @@ class KeeneticRouter {
         // 1. Get challenge
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $this->authTimeout);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
@@ -152,7 +162,7 @@ class KeeneticRouter {
         $ch2 = curl_init($url);
         curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch2, CURLOPT_POST, true);
-        curl_setopt($ch2, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch2, CURLOPT_TIMEOUT, $this->authTimeout);
         curl_setopt($ch2, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch2, CURLOPT_SSL_VERIFYHOST, false);
         curl_setopt($ch2, CURLOPT_FOLLOWLOCATION, true);

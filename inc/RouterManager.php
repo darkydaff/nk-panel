@@ -101,6 +101,7 @@ class RouterManager {
             // 3. Connect to the router
             $login = $router['login'] ?: 'admin';
             $adapter = new KeeneticRouter($router['domain'], $router['password'], $login);
+            $adapter->setTimeout(5);
             
             // Test connection first
             $connTest = $adapter->testConnection();
@@ -184,6 +185,7 @@ class RouterManager {
         try {
             $login = $router['login'] ?: 'admin';
             $adapter = new KeeneticRouter($router['domain'], $router['password'], $login);
+            $adapter->setTimeout(3);
             
             $connTest = $adapter->testConnection();
             if (!$connTest['success']) {
@@ -290,6 +292,7 @@ class RouterManager {
         try {
             $login = $router['login'] ?: 'admin';
             $adapter = new KeeneticRouter($router['domain'], $router['password'], $login);
+            $adapter->setTimeout(5);
             $adapter->authenticate();
             
             // Delete interface
