@@ -41,6 +41,7 @@ class KeeneticRouter {
         curl_setopt($ch, CURLOPT_TIMEOUT, 15);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
 
         if ($body !== null) {
             $jsonBody = is_string($body) ? $body : json_encode($body);
@@ -99,6 +100,7 @@ class KeeneticRouter {
         curl_setopt($ch, CURLOPT_TIMEOUT, 10);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
 
         $headers = [];
         curl_setopt($ch, CURLOPT_HEADERFUNCTION, function($curl, $headerLine) use (&$headers) {
@@ -134,6 +136,7 @@ class KeeneticRouter {
         curl_setopt($ch2, CURLOPT_TIMEOUT, 10);
         curl_setopt($ch2, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch2, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch2, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch2, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
         curl_setopt($ch2, CURLOPT_POSTFIELDS, json_encode([
             'login' => $this->login,
