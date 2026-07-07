@@ -205,10 +205,27 @@ class KeeneticRouter {
                 return ['success' => false, 'error' => 'Invalid router response'];
             }
             $sys = $res['body'];
+            
+            $model = $sys['model'] ?? 'Keenetic';
+            if (isset($sys['description']) && trim($sys['description']) !== '') {
+                $model = trim($sys['description']);
+            }
+            
+            $version = 'Unknown';
+            if (isset($sys['release']) && trim($sys['release']) !== '') {
+                $version = trim($sys['release']);
+            } elseif (isset($sys['version']) && trim($sys['version']) !== '') {
+                $version = trim($sys['version']);
+            } elseif (isset($sys['firmware']) && trim($sys['firmware']) !== '') {
+                $version = trim($sys['firmware']);
+            } elseif (isset($sys['ndms']) && trim($sys['ndms']) !== '') {
+                $version = trim($sys['ndms']);
+            }
+
             return [
                 'success' => true,
-                'router_model' => $sys['model'] ?? 'Keenetic',
-                'firmware_version' => $sys['release'] ?? ($sys['version'] ?? 'Unknown'),
+                'router_model' => $model,
+                'firmware_version' => $version,
             ];
         } catch (Throwable $e) {
             return ['success' => false, 'error' => $e->getMessage()];
