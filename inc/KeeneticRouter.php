@@ -109,7 +109,15 @@ class KeeneticRouter {
             if (count($parts) === 2) {
                 $key = strtolower(trim($parts[0]));
                 $val = trim($parts[1]);
-                $headers[$key] = $val;
+                if ($key === 'set-cookie') {
+                    if (isset($headers['set-cookie'])) {
+                        $headers['set-cookie'] .= '; ' . $val;
+                    } else {
+                        $headers['set-cookie'] = $val;
+                    }
+                } else {
+                    $headers[$key] = $val;
+                }
             }
             return $len;
         });
@@ -125,11 +133,22 @@ class KeeneticRouter {
             throw new Exception("Router authentication headers missing (Realm/Challenge). Is RCI/HTTP proxy enabled on the router?");
         }
 
+        $initialCookie = null;
+        if (isset($headers['set-cookie'])) {
+            $cookieParts = explode(';', $headers['set-cookie']);
+            $initialCookie = trim($cookieParts[0]);
+        }
+
         // 2. Compute response hashes
         $md5 = md5($this->login . ':' . $realm . ':' . $this->password);
         $sha = hash('sha256', $challenge . $md5);
 
         // 3. Post auth request
+        $postHeaders = ['Content-Type: application/json'];
+        if ($initialCookie) {
+            $postHeaders[] = 'Cookie: ' . $initialCookie;
+        }
+
         $ch2 = curl_init($url);
         curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch2, CURLOPT_POST, true);
@@ -137,7 +156,7 @@ class KeeneticRouter {
         curl_setopt($ch2, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch2, CURLOPT_SSL_VERIFYHOST, false);
         curl_setopt($ch2, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch2, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        curl_setopt($ch2, CURLOPT_HTTPHEADER, $postHeaders);
         curl_setopt($ch2, CURLOPT_POSTFIELDS, json_encode([
             'login' => $this->login,
             'password' => $sha
