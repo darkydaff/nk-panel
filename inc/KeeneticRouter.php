@@ -187,6 +187,9 @@ class KeeneticRouter {
             $cookiePart = explode(';', $authHeaders['set-cookie'])[0];
             $this->cookie = $cookiePart;
             return true;
+        } elseif ($initialCookie) {
+            $this->cookie = $initialCookie;
+            return true;
         }
 
         throw new Exception("Failed to retrieve session cookie from router.");
