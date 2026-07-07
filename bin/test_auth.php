@@ -26,6 +26,9 @@ try {
     }
     
     echo "Retrieving system info...\n";
+    $rawSys = $router->request('rci/show/system');
+    echo "Raw response:\n";
+    print_r($rawSys);
     $connInfo = $router->testConnection();
     if ($connInfo['success']) {
         echo "Router Model: " . $connInfo['router_model'] . "\n";
