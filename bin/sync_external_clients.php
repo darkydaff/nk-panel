@@ -25,7 +25,7 @@ try {
         throw new Exception("External PostgreSQL database is unreachable.");
     }
 
-    $stmt = $pgPdo->query("SELECT \"Code\", \"Name\", \"Start_Date\", \"Sub\", \"Func\", \"Router\" FROM \"{$table}\" WHERE \"Code\" IS NOT NULL");
+    $stmt = $pgPdo->query("SELECT \"Code\", \"Name\", \"Start_Date\", \"Sub\", \"Func\", \"Router\", \"Domain\", \"Pass\" FROM \"{$table}\" WHERE \"Code\" IS NOT NULL");
     $rawClients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     echo $logPrefix . "Fetched " . count($rawClients) . " records from external PostgreSQL.\n";
@@ -39,14 +39,16 @@ try {
     // Batch insert/update new codes (non-destructive to preserve traffic)
     if (!empty($rawClients)) {
         $insertStmt = $myPdo->prepare('
-            INSERT INTO ext_clients (code, name, start_date, sub, func, router) 
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO ext_clients (code, name, start_date, sub, func, router, domain, pass) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE 
                 name = VALUES(name), 
                 start_date = VALUES(start_date), 
                 sub = VALUES(sub), 
                 func = VALUES(func), 
-                router = VALUES(router)
+                router = VALUES(router),
+                domain = VALUES(domain),
+                pass = VALUES(pass)
         ');
         $syncedCount = 0;
         $activeCodes = [];
@@ -62,8 +64,10 @@ try {
             $sub = isset($row['Sub']) ? (int)$row['Sub'] : null;
             $func = isset($row['Func']) ? trim($row['Func']) : null;
             $router = isset($row['Router']) ? trim($row['Router']) : null;
+            $domain = isset($row['Domain']) ? trim($row['Domain']) : null;
+            $pass = isset($row['Pass']) ? trim($row['Pass']) : null;
 
-            $insertStmt->execute([$code, $name, $startDate, $sub, $func, $router]);
+            $insertStmt->execute([$code, $name, $startDate, $sub, $func, $router, $domain, $pass]);
             $syncedCount++;
         }
         
@@ -89,6 +93,16 @@ try {
         echo $logPrefix . "Automatically linked {$linkedCount} configurations to client codes.\n";
     } catch (Throwable $e) {
         echo $logPrefix . "WARNING: Failed to auto-link clients: " . $e->getMessage() . "\n";
+    }
+
+    // Run router synchronization
+    try {
+        require_once __DIR__ . '/../inc/KeeneticRouter.php';
+        require_once __DIR__ . '/../inc/RouterManager.php';
+        $syncedRouters = RouterManager::syncRoutersFromExtClients();
+        echo $logPrefix . "Automatically synchronized {$syncedRouters} router connections from external clients.\n";
+    } catch (Throwable $e) {
+        echo $logPrefix . "WARNING: Failed to sync router connections: " . $e->getMessage() . "\n";
     }
 
     // Store last sync timestamp

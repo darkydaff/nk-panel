@@ -184,6 +184,38 @@ class DB {
           $pdo->exec($sql);
         }
       }
+
+      // Check if routers table exists
+      try {
+        $pdo->query("SELECT 1 FROM routers LIMIT 1");
+        $hasRoutersTable = true;
+      } catch (Throwable $e) {
+        $hasRoutersTable = false;
+      }
+
+      if (!$hasRoutersTable) {
+        $sqlPath = __DIR__ . '/../migrations/028_create_routers_table.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
+
+      // Check if domain column exists in ext_clients
+      try {
+        $stmtExtCols4 = $pdo->query("SHOW COLUMNS FROM ext_clients LIKE 'domain'");
+        $hasDomainCol = $stmtExtCols4->rowCount() > 0;
+      } catch (Throwable $e) {
+        $hasDomainCol = false;
+      }
+
+      if (!$hasDomainCol) {
+        $sqlPath = __DIR__ . '/../migrations/029_add_domain_pass_to_ext_clients.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
     } catch (Throwable $e) {
       error_log("Database self-healing migration failed: " . $e->getMessage());
     }

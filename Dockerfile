@@ -53,6 +53,7 @@ RUN touch /var/log/cron.log /var/log/metrics_monitor.log /var/log/metrics_collec
     && echo "0 * * * * www-data cd /var/www/html && /usr/local/bin/php bin/check_traffic_limits.php >> /var/log/cron.log 2>&1" >> /etc/cron.d/amnezia-cron \
     && echo "0 * * * * www-data cd /var/www/html && /usr/local/bin/php bin/sync_external_clients.php >> /var/log/cron.log 2>&1" >> /etc/cron.d/amnezia-cron \
     && echo "30 * * * * www-data cd /var/www/html && /usr/local/bin/php bin/backup.php >> /var/log/cron.log 2>&1" >> /etc/cron.d/amnezia-cron \
+    && echo "*/15 * * * * www-data cd /var/www/html && /usr/local/bin/php bin/check_routers.php >> /var/log/cron.log 2>&1" >> /etc/cron.d/amnezia-cron \
     && echo "*/3 * * * * root /bin/bash /var/www/html/bin/monitor_metrics.sh >> /var/log/metrics_monitor.log 2>&1" >> /etc/cron.d/amnezia-cron \
     && chmod 0644 /etc/cron.d/amnezia-cron
 

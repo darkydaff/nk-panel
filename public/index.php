@@ -784,9 +784,11 @@ Router::get('/clients', function () {
 
             // Fetch list
             $selectSql = "
-                SELECT DISTINCT ec.code AS \"Code\", ec.name, ec.start_date, ec.sub, ec.func, ec.router, ec.bytes_sent, ec.bytes_received
+                SELECT DISTINCT ec.code AS \"Code\", ec.name, ec.start_date, ec.sub, ec.func, ec.router, ec.bytes_sent, ec.bytes_received,
+                       r.id AS router_id, r.domain AS router_domain, r.status AS router_status, r.error_message AS router_error
                 FROM ext_clients ec
                 LEFT JOIN vpn_clients vc ON vc.ext_client_code = ec.code
+                LEFT JOIN routers r ON r.ext_client_code = ec.code
                 {$whereSql}
                 ORDER BY {$orderBy}
                 LIMIT ? OFFSET ?
@@ -870,6 +872,10 @@ Router::get('/clients', function () {
                 'config_count'    => count($configs),
                 'LastActiveText'  => $clientLastActive['text'],
                 'LastActiveClass' => $clientLastActive['class'],
+                'router_id'       => $row['router_id'] ?? null,
+                'router_domain'   => $row['router_domain'] ?? null,
+                'router_status'   => $row['router_status'] ?? null,
+                'router_error'    => $row['router_error'] ?? null,
             ];
         }
     } catch (Throwable $e) {
@@ -1086,6 +1092,13 @@ Router::get('/clients/{id}', function ($params) {
             }
         }
         
+        $router = null;
+        if (!empty($clientData['ext_client_code'])) {
+            $stmtRouter = $pdo->prepare('SELECT * FROM routers WHERE ext_client_code = ? LIMIT 1');
+            $stmtRouter->execute([$clientData['ext_client_code']]);
+            $router = $stmtRouter->fetch() ?: null;
+        }
+        
         $pdo = DB::conn();
         $stmtAllExt = $pdo->query('SELECT code, name FROM ext_clients ORDER BY code ASC');
         $allExtClients = $stmtAllExt->fetchAll(PDO::FETCH_ASSOC);
@@ -1095,6 +1108,7 @@ Router::get('/clients/{id}', function ($params) {
             'stats' => $stats,
             'server' => $serverData,
             'ext_client' => $extClient,
+            'router' => $router,
             'all_ext_clients' => $allExtClients
         ]);
     } catch (Exception $e) {
@@ -3176,6 +3190,184 @@ Router::get('/api/translations/export/{lang}', function ($params) {
         $json = Translator::exportToJson($lang);
         header('Content-Disposition: attachment; filename="translations_' . $lang . '.json"');
         echo $json;
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+});
+
+/**
+ * ROUTER INTEGRATION ROUTES (Keenetic/AmneziaWG)
+ */
+
+// Router Management page
+Router::get('/routers', function () {
+    requireAdmin();
+    
+    $pdo = DB::conn();
+    $stmt = $pdo->query("
+        SELECT r.*, ec.name AS client_name, s.name AS server_name 
+        FROM routers r
+        LEFT JOIN ext_clients ec ON r.ext_client_code = ec.code
+        LEFT JOIN vpn_servers s ON r.server_id = s.id
+        ORDER BY r.created_at DESC
+    ");
+    $routers = $stmt->fetchAll();
+    
+    View::render('routers/index.twig', [
+        'routers' => $routers
+    ]);
+});
+
+// API: List all routers
+Router::get('/api/routers', function () {
+    header('Content-Type: application/json');
+    requireAdmin();
+    
+    $pdo = DB::conn();
+    $stmt = $pdo->query("SELECT * FROM routers ORDER BY created_at DESC");
+    echo json_encode(['routers' => $stmt->fetchAll()]);
+});
+
+// API: Sync routers from ext_clients
+Router::post('/api/routers/sync', function () {
+    header('Content-Type: application/json');
+    requireAdmin();
+    
+    try {
+        require_once __DIR__ . '/../inc/KeeneticRouter.php';
+        require_once __DIR__ . '/../inc/RouterManager.php';
+        $synced = RouterManager::syncRoutersFromExtClients();
+        echo json_encode(['success' => true, 'synced' => $synced]);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+});
+
+// API: Push config to router
+Router::post('/api/routers/{id}/push', function ($params) {
+    header('Content-Type: application/json');
+    requireAdmin();
+    
+    $id = (int)$params['id'];
+    
+    try {
+        require_once __DIR__ . '/../inc/KeeneticRouter.php';
+        require_once __DIR__ . '/../inc/RouterManager.php';
+        $result = RouterManager::pushConfigToRouter($id);
+        echo json_encode($result);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+});
+
+// API: Check router status
+Router::post('/api/routers/{id}/check', function ($params) {
+    header('Content-Type: application/json');
+    requireAdmin();
+    
+    $id = (int)$params['id'];
+    
+    try {
+        require_once __DIR__ . '/../inc/KeeneticRouter.php';
+        require_once __DIR__ . '/../inc/RouterManager.php';
+        $result = RouterManager::checkRouterStatus($id);
+        echo json_encode($result);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+});
+
+// API: Remove interface from router
+Router::post('/api/routers/{id}/remove-wg', function ($params) {
+    header('Content-Type: application/json');
+    requireAdmin();
+    
+    $id = (int)$params['id'];
+    
+    try {
+        require_once __DIR__ . '/../inc/KeeneticRouter.php';
+        require_once __DIR__ . '/../inc/RouterManager.php';
+        $result = RouterManager::removeFromRouter($id);
+        echo json_encode(['success' => $result]);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+});
+
+// API: Check status for all routers
+Router::post('/api/routers/check-all', function () {
+    header('Content-Type: application/json');
+    requireAdmin();
+    
+    try {
+        require_once __DIR__ . '/../inc/KeeneticRouter.php';
+        require_once __DIR__ . '/../inc/RouterManager.php';
+        $results = RouterManager::checkAllRouters();
+        echo json_encode(['success' => true, 'results' => $results]);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+});
+
+// API: Push to all pending routers
+Router::post('/api/routers/push-all', function () {
+    header('Content-Type: application/json');
+    requireAdmin();
+    
+    try {
+        require_once __DIR__ . '/../inc/KeeneticRouter.php';
+        require_once __DIR__ . '/../inc/RouterManager.php';
+        
+        $pdo = DB::conn();
+        $stmt = $pdo->query("SELECT id FROM routers WHERE status IN ('pending', 'error', 'offline')");
+        $ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        
+        $results = [];
+        foreach ($ids as $id) {
+            try {
+                $results[$id] = RouterManager::pushConfigToRouter((int)$id);
+            } catch (Exception $e) {
+                $results[$id] = ['success' => false, 'error' => $e->getMessage()];
+            }
+        }
+        
+        echo json_encode(['success' => true, 'results' => $results]);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+});
+
+// API: Fetch interfaces on router
+Router::get('/api/routers/{id}/interfaces', function ($params) {
+    header('Content-Type: application/json');
+    requireAdmin();
+    
+    $id = (int)$params['id'];
+    
+    try {
+        require_once __DIR__ . '/../inc/KeeneticRouter.php';
+        $pdo = DB::conn();
+        $stmt = $pdo->prepare("SELECT * FROM routers WHERE id = ?");
+        $stmt->execute([$id]);
+        $router = $stmt->fetch();
+        
+        if (!$router) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Router not found']);
+            return;
+        }
+        
+        $login = $router['login'] ?: 'admin';
+        $adapter = new KeeneticRouter($router['domain'], $router['password'], $login);
+        $interfaces = $adapter->getInterfaces();
+        echo json_encode(['interfaces' => $interfaces]);
     } catch (Exception $e) {
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);

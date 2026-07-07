@@ -1,0 +1,304 @@
+{% extends 'layout.twig' %}
+
+{% block title %}Router Management - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header Block -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div>
+            <h2 class="text-xl md:text-2xl font-bold text-white tracking-tight flex items-center">
+                <i class="fas fa-network-wired text-indigo-400 mr-2.5"></i>Keenetic Router Management
+            </h2>
+            <p class="text-xs text-slate-500 mt-1">Manage AmneziaWG connections on clients' Keenetic routers and run bulk status updates</p>
+        </div>
+        
+        <!-- Header Actions -->
+        <div class="flex flex-wrap gap-2">
+            <button onclick="triggerSync()" id="syncBtn" class="bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg px-4 py-2 text-xs font-semibold flex items-center gap-1.5 transition-all">
+                <i class="fas fa-sync" id="syncIcon"></i>Sync from External DB
+            </button>
+            <button onclick="triggerCheckAll()" id="checkAllBtn" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg px-4 py-2 text-xs font-semibold flex items-center gap-1.5 transition-all">
+                <i class="fas fa-wifi" id="checkAllIcon"></i>Check All Connections
+            </button>
+            <button onclick="triggerPushAll()" id="pushAllBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg px-4 py-2 text-xs font-semibold flex items-center gap-1.5 transition-all">
+                <i class="fas fa-upload" id="pushAllIcon"></i>Push All Pending
+            </button>
+        </div>
+    </div>
+
+    <!-- Routers List Table -->
+    <div class="panel p-0 border-slate-800 bg-slate-900 shadow-xl rounded-xl overflow-hidden mb-6">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm text-slate-300 border-collapse">
+                <thead>
+                    <tr class="bg-slate-950/40 text-slate-500 text-[10px] uppercase font-semibold tracking-wider border-b border-slate-800/80">
+                        <th class="px-5 py-4">Client Code & Name</th>
+                        <th class="px-5 py-4">Router Info</th>
+                        <th class="px-5 py-4">Domain / IP</th>
+                        <th class="px-5 py-4">Interface</th>
+                        <th class="px-5 py-4 text-center">Status</th>
+                        <th class="px-5 py-4">Last Sync / Check</th>
+                        <th class="px-5 py-4 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800/60 font-medium">
+                    {% if routers is empty %}
+                    <tr>
+                        <td colspan="7" class="px-5 py-8 text-center text-slate-500 italic">
+                            <i class="fas fa-network-wired text-2xl mb-2 opacity-30 block"></i>
+                            No routers synced yet. Press "Sync from External DB" to synchronize credentials from external PostgreSQL cache.
+                        </td>
+                    </tr>
+                    {% else %}
+                        {% for r in routers %}
+                        <tr class="hover:bg-slate-800/20 transition-colors group">
+                            <!-- Client Info -->
+                            <td class="px-5 py-4">
+                                <div class="flex flex-col">
+                                    <a href="/clients?code={{ r.ext_client_code|url_encode }}" class="font-mono text-indigo-400 hover:text-indigo-300 hover:underline text-xs tracking-wide">{{ r.ext_client_code }}</a>
+                                    <span class="text-xs text-slate-400 mt-0.5">{{ r.client_name|default('No Name') }}</span>
+                                </div>
+                            </td>
+                            <!-- Router Info -->
+                            <td class="px-5 py-4">
+                                <div class="flex flex-col">
+                                    <span class="text-xs text-white">{{ r.router_model|default('Keenetic (Generic)') }}</span>
+                                    <span class="text-[10px] text-slate-500 font-mono mt-0.5">OS: {{ r.firmware_version|default('Unknown') }}</span>
+                                </div>
+                            </td>
+                            <!-- Domain -->
+                            <td class="px-5 py-4">
+                                <a href="http://{{ r.domain }}" target="_blank" class="text-xs font-mono text-slate-300 hover:text-white underline truncate max-w-[180px] block" title="{{ r.domain }}">{{ r.domain }}</a>
+                            </td>
+                            <!-- Interface -->
+                            <td class="px-5 py-4">
+                                {% if r.wg_interface_id %}
+                                    <span class="font-mono text-xs text-cyan-400">{{ r.wg_interface_id }}</span>
+                                {% else %}
+                                    <span class="text-slate-650 text-xs italic">Not Pushed</span>
+                                {% endif %}
+                            </td>
+                            <!-- Status -->
+                            <td class="px-5 py-4 text-center">
+                                {% if r.status == 'connected' %}
+                                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">Connected</span>
+                                {% elseif r.status == 'offline' %}
+                                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wider" title="{{ r.error_message }}">Offline</span>
+                                {% elseif r.status == 'error' %}
+                                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 uppercase tracking-wider" title="{{ r.error_message }}">Error</span>
+                                {% else %}
+                                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700 uppercase tracking-wider">Pending</span>
+                                {% endif %}
+                            </td>
+                            <!-- Sync Times -->
+                            <td class="px-5 py-4 text-xs font-mono text-slate-400">
+                                <div class="flex flex-col gap-0.5">
+                                    <span title="Last push timestamp">P: {{ r.last_push_at|default('Never') }}</span>
+                                    <span title="Last check timestamp">C: {{ r.last_check_at|default('Never') }}</span>
+                                </div>
+                            </td>
+                            <!-- Actions -->
+                            <td class="px-5 py-4 text-right">
+                                <div class="flex items-center justify-end gap-1.5">
+                                    <button onclick="pushConfig({{ r.id }})" class="w-8 h-8 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300 border border-indigo-500/20 hover:border-indigo-500/40 flex items-center justify-center transition-all" title="Push configuration">
+                                        <i class="fas fa-upload text-xs"></i>
+                                    </button>
+                                    <button onclick="checkStatus({{ r.id }})" class="w-8 h-8 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 hover:text-cyan-300 border border-cyan-500/20 hover:border-cyan-500/40 flex items-center justify-center transition-all" title="Check status">
+                                        <i class="fas fa-sync-alt text-xs"></i>
+                                    </button>
+                                    {% if r.wg_interface_id %}
+                                    <button onclick="removeWg({{ r.id }})" class="w-8 h-8 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/20 hover:border-rose-500/40 flex items-center justify-center transition-all" title="Remove interface">
+                                        <i class="fas fa-trash-alt text-xs"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+// Bulk Actions
+function triggerSync() {
+    const btn = document.getElementById('syncBtn');
+    const icon = document.getElementById('syncIcon');
+    if (btn.disabled) return;
+    
+    btn.disabled = true;
+    icon.className = 'fas fa-spinner fa-spin mr-1.5';
+    
+    fetch('/api/routers/sync', {
+        method: 'POST'
+    })
+    .then(r => r.json().then(data => ({ status: r.status, body: data })))
+    .then(res => {
+        if (res.status === 200 && res.body.success) {
+            alert('Synchronization successful!\nSynced/updated ' + res.body.synced + ' router records.');
+            window.location.reload();
+        } else {
+            alert('Synchronization failed: ' + (res.body.error || 'Unknown error'));
+            btn.disabled = false;
+            icon.className = 'fas fa-sync';
+        }
+    })
+    .catch(err => {
+        alert('Network error: ' + err.message);
+        btn.disabled = false;
+        icon.className = 'fas fa-sync';
+    });
+}
+
+function triggerCheckAll() {
+    const btn = document.getElementById('checkAllBtn');
+    const icon = document.getElementById('checkAllIcon');
+    if (btn.disabled) return;
+    
+    btn.disabled = true;
+    icon.className = 'fas fa-spinner fa-spin mr-1.5';
+    
+    fetch('/api/routers/check-all', {
+        method: 'POST'
+    })
+    .then(r => r.json().then(data => ({ status: r.status, body: data })))
+    .then(res => {
+        if (res.status === 200 && res.body.success) {
+            alert('Batch status check completed!');
+            window.location.reload();
+        } else {
+            alert('Batch status check failed: ' + (res.body.error || 'Unknown error'));
+            btn.disabled = false;
+            icon.className = 'fas fa-wifi';
+        }
+    })
+    .catch(err => {
+        alert('Network error: ' + err.message);
+        btn.disabled = false;
+        icon.className = 'fas fa-wifi';
+    });
+}
+
+function triggerPushAll() {
+    if (!confirm('Are you sure you want to push configurations to all pending routers? This might take a few moments.')) return;
+    
+    const btn = document.getElementById('pushAllBtn');
+    const icon = document.getElementById('pushAllIcon');
+    if (btn.disabled) return;
+    
+    btn.disabled = true;
+    icon.className = 'fas fa-spinner fa-spin mr-1.5';
+    
+    fetch('/api/routers/push-all', {
+        method: 'POST'
+    })
+    .then(r => r.json().then(data => ({ status: r.status, body: data })))
+    .then(res => {
+        if (res.status === 200 && res.body.success) {
+            alert('Batch push operations completed!');
+            window.location.reload();
+        } else {
+            alert('Batch push failed: ' + (res.body.error || 'Unknown error'));
+            btn.disabled = false;
+            icon.className = 'fas fa-upload';
+        }
+    })
+    .catch(err => {
+        alert('Network error: ' + err.message);
+        btn.disabled = false;
+        icon.className = 'fas fa-upload';
+    });
+}
+
+// Individual Actions
+function pushConfig(routerId) {
+    if (!confirm('Push configuration to this router?')) return;
+    const btn = event.currentTarget;
+    const icon = btn.querySelector('i');
+    const oldClass = icon.className;
+    icon.className = 'fas fa-spinner fa-spin text-indigo-400';
+    btn.disabled = true;
+
+    fetch('/api/routers/' + routerId + '/push', {
+        method: 'POST'
+    })
+    .then(r => r.json().then(data => ({ status: r.status, body: data })))
+    .then(res => {
+        if (res.status === 200 && res.body.success) {
+            alert('Config pushed successfully!\nModel: ' + res.body.router_model + '\nInterface: ' + res.body.interface_id);
+            window.location.reload();
+        } else {
+            alert('Push failed: ' + (res.body.error || 'Unknown error'));
+            icon.className = oldClass;
+            btn.disabled = false;
+        }
+    })
+    .catch(err => {
+        alert('Network error: ' + err.message);
+        icon.className = oldClass;
+        btn.disabled = false;
+    });
+}
+
+function checkStatus(routerId) {
+    const btn = event.currentTarget;
+    const icon = btn.querySelector('i');
+    const oldClass = icon.className;
+    icon.className = 'fas fa-spinner fa-spin text-cyan-400';
+    btn.disabled = true;
+
+    fetch('/api/routers/' + routerId + '/check', {
+        method: 'POST'
+    })
+    .then(r => r.json().then(data => ({ status: r.status, body: data })))
+    .then(res => {
+        if (res.status === 200 && res.body.success) {
+            alert('Status check completed!\nStatus: ' + res.body.status + '\nModel: ' + res.body.router_model + (res.body.error ? '\nError: ' + res.body.error : ''));
+            window.location.reload();
+        } else {
+            alert('Check failed: ' + (res.body.error || 'Unknown error'));
+            icon.className = oldClass;
+            btn.disabled = false;
+        }
+    })
+    .catch(err => {
+        alert('Network error: ' + err.message);
+        icon.className = oldClass;
+        btn.disabled = false;
+    });
+}
+
+function removeWg(routerId) {
+    if (!confirm('Are you sure you want to remove the WireGuard interface from the router? This will delete the interface and NAT settings on the router.')) return;
+    const btn = event.currentTarget;
+    const icon = btn.querySelector('i');
+    const oldClass = icon.className;
+    icon.className = 'fas fa-spinner fa-spin text-rose-400';
+    btn.disabled = true;
+
+    fetch('/api/routers/' + routerId + '/remove-wg', {
+        method: 'POST'
+    })
+    .then(r => r.json().then(data => ({ status: r.status, body: data })))
+    .then(res => {
+        if (res.status === 200 && res.body.success) {
+            alert('Interface removed successfully!');
+            window.location.reload();
+        } else {
+            alert('Removal failed: ' + (res.body.error || 'Unknown error'));
+            icon.className = oldClass;
+            btn.disabled = false;
+        }
+    })
+    .catch(err => {
+        alert('Network error: ' + err.message);
+        icon.className = oldClass;
+        btn.disabled = false;
+    });
+}
+</script>
+{% endblock %}
