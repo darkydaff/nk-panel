@@ -160,7 +160,7 @@ class KeeneticRouter {
         curl_close($ch2);
 
         if ($code !== 200) {
-            throw new Exception("Authentication failed with status code " . $code);
+            throw new Exception("Authentication failed with status code " . $code . ". Response: " . $res . "\nRealm: " . $realm . "\nChallenge: " . $challenge);
         }
 
         // 4. Capture session cookie
