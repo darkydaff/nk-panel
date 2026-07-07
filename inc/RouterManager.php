@@ -263,7 +263,7 @@ class RouterManager {
      */
     public static function checkAllRouters(): array {
         $pdo = DB::conn();
-        $stmt = $pdo->query("SELECT id FROM routers WHERE status != 'pending'");
+        $stmt = $pdo->query("SELECT id FROM routers");
         $routerIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
         
         $results = [];
