@@ -358,7 +358,7 @@ class KeeneticRouter {
         // In Keenetic, we configure these properties.
         $this->request("rci/interface/{$interfaceId}", 'POST', [
             'description' => $description,
-            'security-level' => 'private',
+            'security-level' => 'public',
             'up' => true
         ]);
 
