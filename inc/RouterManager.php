@@ -146,8 +146,6 @@ class RouterManager {
                 UPDATE routers 
                 SET vpn_client_id = ?, 
                     server_id = ?, 
-                    router_model = ?, 
-                    firmware_version = ?, 
                     wg_interface_id = ?, 
                     wg_interface_name = ?, 
                     pushed_awg_params = ?, 
@@ -161,8 +159,6 @@ class RouterManager {
             $stmtSuccess->execute([
                 $vpnClient['id'],
                 $vpnClient['server_id'],
-                $connTest['router_model'],
-                $connTest['firmware_version'],
                 $interfaceId,
                 $description,
                 json_encode($obfuscationResult['applied']),
@@ -172,8 +168,8 @@ class RouterManager {
             return [
                 'success' => true,
                 'interface_id' => $interfaceId,
-                'router_model' => $connTest['router_model'],
-                'firmware_version' => $connTest['firmware_version'],
+                'router_model' => $router['router_model'] ?: 'Keenetic',
+                'firmware_version' => $router['firmware_version'] ?: 'Unknown',
                 'obfuscation' => $obfuscationResult
             ];
             
@@ -249,16 +245,12 @@ class RouterManager {
             // Update database
             $stmtUpdate = $pdo->prepare("
                 UPDATE routers 
-                SET router_model = ?, 
-                    firmware_version = ?, 
-                    status = ?, 
+                SET status = ?, 
                     error_message = ?, 
                     last_check_at = NOW() 
                 WHERE id = ?
             ");
             $stmtUpdate->execute([
-                $connTest['router_model'],
-                $connTest['firmware_version'],
                 $status,
                 $errorMsg,
                 $routerId
@@ -267,8 +259,8 @@ class RouterManager {
             return [
                 'success' => true,
                 'status' => $status,
-                'router_model' => $connTest['router_model'],
-                'firmware_version' => $connTest['firmware_version'],
+                'router_model' => $router['router_model'] ?: 'Keenetic',
+                'firmware_version' => $router['firmware_version'] ?: 'Unknown',
                 'error' => $errorMsg
             ];
             

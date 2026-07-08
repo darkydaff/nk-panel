@@ -62,10 +62,7 @@
                             </td>
                             <!-- Router Info -->
                             <td class="px-5 py-4">
-                                <div class="flex flex-col">
-                                    <span class="text-xs text-white router-model-text">{{ r.router_model|default('Keenetic (Generic)') }}</span>
-                                    <span class="text-[10px] text-slate-500 font-mono mt-0.5">OS: <span class="router-os-text">{{ r.firmware_version|default('Unknown') }}</span></span>
-                                </div>
+                                <span class="text-xs text-white router-model-text">{{ r.router_model|default('Keenetic (Generic)') }}</span>
                             </td>
                             <!-- Domain -->
                             <td class="px-5 py-4">
@@ -206,8 +203,6 @@ function triggerCheckAll() {
         .then(r => r.json().then(data => ({ status: r.status, body: data })))
         .then(res => {
             if (res.status === 200 && res.body.success) {
-                task.row.querySelector('.router-model-text').textContent = res.body.router_model || 'Keenetic';
-                task.row.querySelector('.router-os-text').textContent = res.body.firmware_version || 'Unknown';
                 
                 let badge = '';
                 if (res.body.status === 'connected') {
@@ -299,8 +294,6 @@ function triggerPushAll() {
         .then(res => {
             if (res.status === 200 && res.body.success) {
                 statusCell.innerHTML = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wider">Connected</span>';
-                task.row.querySelector('.router-model-text').textContent = res.body.router_model || 'Keenetic';
-                task.row.querySelector('.router-os-text').textContent = res.body.firmware_version || 'Unknown';
             } else {
                 statusCell.innerHTML = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 uppercase tracking-wider" title="' + (res.body.error || 'Push failed') + '">Error</span>';
             }
@@ -476,8 +469,6 @@ function checkStatus(routerId) {
     .then(res => {
         if (res.status === 200 && res.body.success) {
             if (row) {
-                row.querySelector('.router-model-text').textContent = res.body.router_model || 'Keenetic';
-                row.querySelector('.router-os-text').textContent = res.body.firmware_version || 'Unknown';
                 
                 let badge = '';
                 if (res.body.status === 'connected') {
