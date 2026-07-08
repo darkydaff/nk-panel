@@ -32,3 +32,11 @@ echo "Interface config GET Result:\n" . json_encode($res1['body'], JSON_PRETTY_P
 echo "Querying show interface Wireguard0...\n";
 $res2 = $adapter->request("rci/show/interface/Wireguard0");
 echo "Show Interface GET Result:\n" . json_encode($res2['body'], JSON_PRETTY_PRINT) . "\n";
+
+echo "Querying ip policy config...\n";
+$res3 = $adapter->request("rci/ip/policy");
+echo "IP Policy config GET Result:\n" . json_encode($res3['body'], JSON_PRETTY_PRINT) . "\n";
+
+echo "Querying show ip policy status...\n";
+$res4 = $adapter->request("rci/show/ip/policy");
+echo "Show IP Policy GET Result:\n" . json_encode($res4['body'], JSON_PRETTY_PRINT) . "\n";
