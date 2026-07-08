@@ -66,7 +66,7 @@
                             </td>
                             <!-- Domain -->
                             <td class="px-5 py-4">
-                                <a href="http://{{ r.domain }}" target="_blank" class="text-xs font-mono text-slate-300 hover:text-white underline truncate max-w-[180px] block" title="{{ r.domain }}">{{ r.domain }}</a>
+                                <a href="{% if '://' in r.domain %}{{ r.domain }}{% else %}http://{{ r.domain }}{% endif %}" target="_blank" class="text-xs font-mono text-slate-300 hover:text-white underline truncate max-w-[180px] block" title="{{ r.domain }}">{{ r.domain }}</a>
                             </td>
                             <!-- Interface -->
                             <td class="px-5 py-4">
