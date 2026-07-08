@@ -452,12 +452,14 @@ class KeeneticRouter {
         }
 
         // Remove existing peer to avoid duplicate / collision (no wireguard peer <key>)
-        $this->request("rci/interface/{$interfaceId}/wireguard/peer/{$pubKey}", 'POST', [
+        $this->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', [
+            'public-key' => $pubKey,
             'no' => true
         ]);
 
         // Configure peer settings
         $peerConfig = [
+            'public-key' => $pubKey,
             'endpoint' => $endpoint,
             'keepalive-interval' => $keepalive,
             'allow-ips' => $allowedIpsList
@@ -487,7 +489,7 @@ class KeeneticRouter {
         }
 
         // Add / Configure the peer (wireguard peer <key> + options)
-        $this->request("rci/interface/{$interfaceId}/wireguard/peer/{$pubKey}", 'POST', $peerConfig);
+        $this->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', $peerConfig);
 
         // 5. Configure DNS
         if (!empty($parsed['interface']['DNS'])) {
