@@ -185,15 +185,13 @@ try {
     }
 
     echo "\nRequest 7: Remove existing peer\n";
-    $res7 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', [
-        'public-key' => $pubKey,
+    $res7 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer/{$pubKey}", 'POST', [
         'no' => true
     ]);
     echo "Result Code: " . $res7['code'] . "\nBody: " . json_encode($res7['body']) . "\n";
 
     // Configure peer
     $peerConfig = [
-        'public-key' => $pubKey,
         'endpoint' => $endpoint,
         'keepalive-interval' => $keepalive,
         'allow-ips' => $allowedIpsList
@@ -219,7 +217,7 @@ try {
     }
 
     echo "\nRequest 8: Configure peer details\n";
-    $res8 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', $peerConfig);
+    $res8 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer/{$pubKey}", 'POST', $peerConfig);
     echo "Result Code: " . $res8['code'] . "\nBody: " . json_encode($res8['body']) . "\n";
 
     // DNS
@@ -242,7 +240,9 @@ try {
     $res10 = $adapter->request("rci/ip/policy", 'POST', [
         'name' => 'Policy0',
         'permit' => [
-            'global' => $interfaceId
+            'global' => [
+                $interfaceId => true
+            ]
         ]
     ]);
     echo "Result Code: " . $res10['code'] . "\nBody: " . json_encode($res10['body']) . "\n";
