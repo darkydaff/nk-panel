@@ -110,11 +110,21 @@ class RouterManager {
             }
             
             // 4. Import configuration
-            $description = "NKPanel-" . $router['ext_client_code'];
+            $parsedConf = KeeneticRouter::parseWgConfig($configContent);
+            
+            $clientCode = $router['ext_client_code'];
+            if ($clientCode[0] !== '#') {
+                $clientCode = '#' . $clientCode;
+            }
+            $peerName = $parsedConf['peer']['Name'] ?? '';
+            $description = $clientCode;
+            if (!empty($peerName)) {
+                $description .= " - " . $peerName;
+            }
+            
             $interfaceId = $adapter->importWgConfig($configContent, $description, $router['wg_interface_id']);
             
             // 5. Query applied obfuscation parameters
-            $parsedConf = KeeneticRouter::parseWgConfig($configContent);
             $obfuscationResult = $adapter->applyObfuscation($interfaceId, $parsedConf['interface']);
             
             // 6. Update database record on success

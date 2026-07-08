@@ -266,11 +266,26 @@ class KeeneticRouter {
      */
     public function findWgInterface(?string $description): ?array {
         if (empty($description)) return null;
+
+        // Extract client code digits if possible (e.g. #0999 -> 0999)
+        $clientCode = '';
+        if (preg_match('/#?(\d+)/', $description, $m)) {
+            $clientCode = $m[1];
+        }
+
         $interfaces = $this->getInterfaces();
         foreach ($interfaces as $name => $info) {
-            if (str_starts_with($name, 'Wireguard') && isset($info['description']) && $info['description'] === $description) {
-                $info['id'] = $name;
-                return $info;
+            if (str_starts_with($name, 'Wireguard') && isset($info['description'])) {
+                $desc = $info['description'];
+                if ($desc === $description) {
+                    $info['id'] = $name;
+                    return $info;
+                }
+                // Fallback: match by client code digits to cleanly transition existing interfaces
+                if (!empty($clientCode) && str_contains($desc, $clientCode)) {
+                    $info['id'] = $name;
+                    return $info;
+                }
             }
         }
         return null;

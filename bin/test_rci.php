@@ -76,12 +76,21 @@ try {
     $configContent = $vpnClient['config'];
     echo "\nFound VPN Client config (length: " . strlen($configContent) . " bytes).\n";
     
-    $description = "NKPanel-" . $router['ext_client_code'];
+    $parsed = KeeneticRouter::parseWgConfig($configContent);
+    
+    $clientCode = $router['ext_client_code'];
+    if ($clientCode[0] !== '#') {
+        $clientCode = '#' . $clientCode;
+    }
+    $peerName = $parsed['peer']['Name'] ?? '';
+    $description = $clientCode;
+    if (!empty($peerName)) {
+        $description .= " - " . $peerName;
+    }
     
     // We override request() temporarily to print everything!
     echo "\n--- STARTING IMPORT AND CONFIG LOGGING ---\n";
     
-    $parsed = KeeneticRouter::parseWgConfig($configContent);
     $interfaceId = $router['wg_interface_id'];
     if (!$interfaceId) {
         $existing = $adapter->findWgInterface($description);
