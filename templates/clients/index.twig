@@ -213,29 +213,7 @@
                 <span class="{{ client.LastActiveClass }} text-[10px] px-2 py-0.5 rounded font-sans font-semibold">{{ client.LastActiveText }}</span>
             </div>
 
-            {# Router Status #}
-            <div class="mb-4 flex items-center justify-between text-xs text-slate-400 bg-slate-950/40 border border-slate-800/80 px-3 py-2 rounded-lg font-mono">
-                <span class="text-slate-500 text-[10px] uppercase font-sans font-semibold tracking-wider font-semibold">Router</span>
-                {% if client.router_id %}
-                    <div class="flex items-center gap-2">
-                        <a href="http://{{ client.router_domain }}" target="_blank" class="text-indigo-400 hover:text-indigo-300 underline text-[10px] truncate max-w-[100px]" title="Open router panel: {{ client.router_domain }}">{{ client.router_domain }}</a>
-                        <button onclick="event.preventDefault(); triggerRouterCheck({{ client.router_id }})" class="text-slate-500 hover:text-cyan-400 p-0.5 rounded hover:bg-slate-800 transition-colors" title="Check router status">
-                            <i class="fas fa-sync-alt text-[9px]"></i>
-                        </button>
-                        {% if client.router_status == 'connected' %}
-                            <span class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)] shrink-0" title="Connected"></span>
-                        {% elseif client.router_status == 'offline' %}
-                            <span class="w-2 h-2 rounded-full bg-amber-500 shrink-0" title="Offline: {{ client.router_error }}"></span>
-                        {% elseif client.router_status == 'error' %}
-                            <span class="w-2 h-2 rounded-full bg-rose-500 shrink-0" title="Error: {{ client.router_error }}"></span>
-                        {% else %}
-                            <span class="w-2 h-2 rounded-full bg-slate-500 shrink-0" title="Pending Push"></span>
-                        {% endif %}
-                    </div>
-                {% else %}
-                    <span class="text-slate-600 text-[10px]">None</span>
-                {% endif %}
-            </div>
+
 
             {# Config chips #}
             {% if client.configs is not empty %}
