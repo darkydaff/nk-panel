@@ -888,9 +888,10 @@ Router::get('/clients', function () {
         try {
             $pdo = DB::conn();
             $stmt = $pdo->prepare(
-                'SELECT c.id, c.name, c.status, c.last_handshake, s.name AS server_name
+                'SELECT c.id, c.name, c.status, c.last_handshake, s.name AS server_name, r.id AS router_id
                  FROM vpn_clients c
                  JOIN vpn_servers s ON s.id = c.server_id
+                 LEFT JOIN routers r ON r.ext_client_code = c.ext_client_code
                  WHERE c.ext_client_code = ?
                  ORDER BY c.created_at DESC'
             );
@@ -3437,6 +3438,38 @@ Router::get('/api/routers/{id}/interfaces', function ($params) {
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
     }
+});
+
+// API: Get configs for a router
+Router::get('/api/routers/{id}/configs', function ($params) {
+    header('Content-Type: application/json');
+    requireAdmin();
+    
+    $routerId = (int)$params['id'];
+    $pdo = DB::conn();
+    
+    // Get router client code
+    $stmt = $pdo->prepare("SELECT ext_client_code FROM routers WHERE id = ?");
+    $stmt->execute([$routerId]);
+    $router = $stmt->fetch();
+    if (!$router) {
+        http_response_code(404);
+        echo json_encode(['error' => 'Router not found']);
+        return;
+    }
+    
+    // Get active configurations
+    $stmtConfigs = $pdo->prepare("
+        SELECT c.id, c.name, s.name AS server_name 
+        FROM vpn_clients c
+        JOIN vpn_servers s ON c.server_id = s.id
+        WHERE c.ext_client_code = ? AND c.status = 'active'
+        ORDER BY c.created_at DESC
+    ");
+    $stmtConfigs->execute([$router['ext_client_code']]);
+    $configs = $stmtConfigs->fetchAll(PDO::FETCH_ASSOC);
+    
+    echo json_encode(['configs' => $configs]);
 });
 
 // Dispatch router

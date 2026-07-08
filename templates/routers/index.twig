@@ -321,15 +321,91 @@ function triggerPushAll() {
 }
 
 // Individual Actions
+// Individual Actions
 function pushConfig(routerId) {
-    if (!confirm('Push configuration to this router?')) return;
     const btn = event.currentTarget;
     const icon = btn.querySelector('i');
     const oldClass = icon.className;
+    
     icon.className = 'fas fa-spinner fa-spin text-indigo-400';
     btn.disabled = true;
 
-    fetch('/api/routers/' + routerId + '/push', {
+    fetch('/api/routers/' + routerId + '/configs')
+    .then(r => r.json())
+    .then(data => {
+        if (!data.configs || data.configs.length === 0) {
+            alert('No active VPN configurations found for this router\'s client code.');
+            icon.className = oldClass;
+            btn.disabled = false;
+            return;
+        }
+        
+        if (data.configs.length === 1) {
+            if (confirm('Push the configuration "' + data.configs[0].name + '" to this router?')) {
+                executePush(routerId, data.configs[0].id, btn, oldClass);
+            } else {
+                icon.className = oldClass;
+                btn.disabled = false;
+            }
+            return;
+        }
+        
+        // Multiple configs - show selector modal
+        icon.className = oldClass;
+        btn.disabled = false;
+        
+        document.getElementById('pushSelectorRouterId').value = routerId;
+        const listDiv = document.getElementById('pushSelectorList');
+        listDiv.innerHTML = '';
+        
+        data.configs.forEach(cfg => {
+            const selectBtn = document.createElement('button');
+            selectBtn.className = 'w-full text-left p-3 rounded-lg bg-slate-800/50 hover:bg-indigo-600/20 border border-slate-700/60 hover:border-indigo-500/40 text-slate-300 hover:text-white transition-all flex items-center justify-between';
+            selectBtn.onclick = () => {
+                closePushSelectorModal();
+                icon.className = 'fas fa-spinner fa-spin text-indigo-400';
+                btn.disabled = true;
+                executePush(routerId, cfg.id, btn, oldClass);
+            };
+            selectBtn.innerHTML = `
+                <div class="min-w-0">
+                    <div class="font-mono text-sm font-semibold">${cfg.name}</div>
+                    <div class="text-xs text-slate-500 mt-0.5">${cfg.server_name}</div>
+                </div>
+                <i class="fas fa-chevron-right text-slate-600"></i>
+            `;
+            listDiv.appendChild(selectBtn);
+        });
+        
+        document.getElementById('pushSelectorModal').classList.remove('hidden');
+    })
+    .catch(err => {
+        alert('Failed to load configs: ' + err.message);
+        icon.className = oldClass;
+        btn.disabled = false;
+    });
+}
+
+function closePushSelectorModal() {
+    document.getElementById('pushSelectorModal').classList.add('hidden');
+}
+
+function executePush(routerId, vpnClientId, btn, oldClass) {
+    const row = document.querySelector('tr[data-router-id="' + routerId + '"]');
+    let statusCell = null;
+    if (row) {
+        statusCell = row.querySelector('.router-status-cell');
+        if (statusCell) {
+            statusCell.innerHTML = '<span class="inline-flex items-center gap-1 text-xs text-indigo-400 font-medium"><i class="fas fa-spinner fa-spin"></i> Pushing...</span>';
+        }
+    }
+    
+    let url = '/api/routers/' + routerId + '/push';
+    if (vpnClientId) {
+        url += '?vpn_client_id=' + vpnClientId;
+    }
+    
+    fetch(url, {
         method: 'POST'
     })
     .then(r => r.json().then(data => ({ status: r.status, body: data })))
@@ -339,15 +415,28 @@ function pushConfig(routerId) {
             window.location.reload();
         } else {
             alert('Push failed: ' + (res.body.error || 'Unknown error'));
-            icon.className = oldClass;
-            btn.disabled = false;
+            if (btn && oldClass) {
+                const icon = btn.querySelector('i');
+                if (icon) icon.className = oldClass;
+                btn.disabled = false;
+            }
+            if (statusCell) {
+                statusCell.innerHTML = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 uppercase tracking-wider">Error</span>';
+            }
         }
     })
     .catch(err => {
         alert('Network error: ' + err.message);
-        icon.className = oldClass;
-        btn.disabled = false;
+        if (btn && oldClass) {
+            const icon = btn.querySelector('i');
+            if (icon) icon.className = oldClass;
+            btn.disabled = false;
+        }
+        if (statusCell) {
+            statusCell.innerHTML = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 uppercase tracking-wider">Error</span>';
+        }
     });
+}
 }
 
 function checkStatus(routerId) {
@@ -531,6 +620,35 @@ function submitCredentials(e) {
                 </button>
             </div>
         </form>
+    </div>
+</div>
+
+{# ─── Push Config Selector Modal ─── #}
+<div id="pushSelectorModal"
+     class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm hidden"
+     onclick="if(event.target===this) closePushSelectorModal()">
+    <div class="panel p-6 w-full max-w-md border-slate-700/60 bg-slate-900/95 backdrop-blur shadow-2xl">
+        <div class="flex items-center justify-between mb-5">
+            <h3 class="font-semibold text-white flex items-center gap-2">
+                <i class="fas fa-upload text-indigo-400"></i>
+                Select Config to Push
+            </h3>
+            <button onclick="closePushSelectorModal()" class="text-slate-500 hover:text-white transition-colors p-1">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <input type="hidden" id="pushSelectorRouterId">
+        
+        <div id="pushSelectorList" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+            <!-- Loaded dynamically via JS -->
+        </div>
+        
+        <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-800">
+            <button type="button" onclick="closePushSelectorModal()" class="btn-secondary px-4 py-2 text-xs font-semibold">
+                Cancel
+            </button>
+        </div>
     </div>
 </div>
 {% endblock %}
