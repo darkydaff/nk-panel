@@ -244,12 +244,9 @@ try {
     // Policy
     echo "\nRequest 10: Configure routing policy Policy0 permit global\n";
     $res10 = $adapter->request("rci/ip/policy", 'POST', [
-        'Policy0' => [
-            'permit' => [
-                [
-                    'interface' => $interfaceId
-                ]
-            ]
+        'name' => 'Policy0',
+        'permit' => [
+            'global' => $interfaceId
         ]
     ]);
     echo "Result Code: " . $res10['code'] . "\nBody: " . json_encode($res10['body']) . "\n";
