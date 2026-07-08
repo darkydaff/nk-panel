@@ -100,10 +100,12 @@ try {
     
     // Step 2: Create / configure interface
     echo "\nRequest 1: Configure description & security-level\n";
-    $res1 = $adapter->request("rci/interface/{$interfaceId}", 'POST', [
-        'description' => $description,
-        'security-level' => [
-            'public' => true
+    $res1 = $adapter->request("rci/interface", 'POST', [
+        $interfaceId => [
+            'description' => $description,
+            'security-level' => [
+                'public' => true
+            ]
         ]
     ]);
     echo "Result Code: " . $res1['code'] . "\nBody: " . json_encode($res1['body']) . "\n";
@@ -237,8 +239,7 @@ try {
 
     // Policy
     echo "\nRequest 10: Configure routing policy Policy0 permit global\n";
-    $res10 = $adapter->request("rci/ip/policy", 'POST', [
-        'name' => 'Policy0',
+    $res10 = $adapter->request("rci/ip/policy/Policy0", 'POST', [
         'permit' => [
             'global' => [
                 $interfaceId => true
