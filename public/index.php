@@ -3460,14 +3460,24 @@ Router::get('/api/routers/{id}/configs', function ($params) {
     
     // Get active configurations
     $stmtConfigs = $pdo->prepare("
-        SELECT c.id, c.name, s.name AS server_name 
+        SELECT c.id, c.name, c.client_ip, c.bytes_sent, c.bytes_received, c.last_handshake, s.name AS server_name 
         FROM vpn_clients c
         JOIN vpn_servers s ON c.server_id = s.id
         WHERE c.ext_client_code = ? AND c.status = 'active'
         ORDER BY c.created_at DESC
     ");
     $stmtConfigs->execute([$router['ext_client_code']]);
-    $configs = $stmtConfigs->fetchAll(PDO::FETCH_ASSOC);
+    $rawConfigs = $stmtConfigs->fetchAll(PDO::FETCH_ASSOC);
+    
+    $configs = [];
+    foreach ($rawConfigs as $cfg) {
+        $statusInfo = getRelativeActiveStatus($cfg['last_handshake'] ?? null);
+        $cfg['last_active_text'] = $statusInfo['text'];
+        $cfg['last_active_class'] = $statusInfo['class'];
+        $cfg['bytes_sent'] = (int)($cfg['bytes_sent'] ?? 0);
+        $cfg['bytes_received'] = (int)($cfg['bytes_received'] ?? 0);
+        $configs[] = $cfg;
+    }
     
     echo json_encode(['configs' => $configs]);
 });

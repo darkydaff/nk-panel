@@ -320,7 +320,14 @@ function triggerPushAll() {
     }
 }
 
-// Individual Actions
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
 // Individual Actions
 function pushConfig(routerId) {
     const btn = event.currentTarget;
@@ -360,19 +367,34 @@ function pushConfig(routerId) {
         
         data.configs.forEach(cfg => {
             const selectBtn = document.createElement('button');
-            selectBtn.className = 'w-full text-left p-3 rounded-lg bg-slate-800/50 hover:bg-indigo-600/20 border border-slate-700/60 hover:border-indigo-500/40 text-slate-300 hover:text-white transition-all flex items-center justify-between';
+            selectBtn.className = 'w-full text-left p-3.5 rounded-xl bg-slate-950/40 hover:bg-indigo-950/20 border border-slate-800 hover:border-indigo-500/30 text-slate-300 hover:text-white transition-all flex items-center justify-between gap-4 mb-2';
             selectBtn.onclick = () => {
                 closePushSelectorModal();
                 icon.className = 'fas fa-spinner fa-spin text-indigo-400';
                 btn.disabled = true;
                 executePush(routerId, cfg.id, btn, oldClass);
             };
+            
+            const totalTraffic = formatBytes(cfg.bytes_sent + cfg.bytes_received);
+            let activeBadge = `<span class="${cfg.last_active_class} text-[9px] px-1.5 py-0.5 rounded font-sans font-semibold">${cfg.last_active_text}</span>`;
+            
             selectBtn.innerHTML = `
-                <div class="min-w-0">
-                    <div class="font-mono text-sm font-semibold">${cfg.name}</div>
-                    <div class="text-xs text-slate-500 mt-0.5">${cfg.server_name}</div>
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2">
+                        <span class="font-mono text-sm font-semibold text-white">${cfg.name}</span>
+                        <span class="text-xs text-slate-500 font-mono">(${cfg.client_ip || 'No IP'})</span>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400 mt-1 font-sans">
+                        <span class="flex items-center gap-1"><i class="fas fa-server text-[10px] text-slate-600"></i> ${cfg.server_name}</span>
+                        <span class="text-slate-700">|</span>
+                        <span class="flex items-center gap-1"><i class="fas fa-chart-line text-[10px] text-slate-600"></i> ${totalTraffic}</span>
+                        <span class="text-slate-700">|</span>
+                        ${activeBadge}
+                    </div>
                 </div>
-                <i class="fas fa-chevron-right text-slate-600"></i>
+                <div class="shrink-0 w-7 h-7 rounded-full bg-slate-900/60 flex items-center justify-center border border-slate-800">
+                    <i class="fas fa-chevron-right text-xs text-slate-500"></i>
+                </div>
             `;
             listDiv.appendChild(selectBtn);
         });
