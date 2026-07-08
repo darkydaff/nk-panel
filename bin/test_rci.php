@@ -185,20 +185,22 @@ try {
     }
 
     echo "\nRequest 7: Remove existing peer\n";
-    $res7 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer/{$pubKey}", 'POST', [
-        'no' => true
+    $res7 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', [
+        $pubKey => [
+            'no' => true
+        ]
     ]);
     echo "Result Code: " . $res7['code'] . "\nBody: " . json_encode($res7['body']) . "\n";
 
     // Configure peer
-    $peerConfig = [
+    $peerParams = [
         'endpoint' => $endpoint,
         'keepalive-interval' => $keepalive,
         'allow-ips' => $allowedIpsList
     ];
     $peerDesc = $parsed['peer']['Name'] ?? '';
     if (!empty($peerDesc)) {
-        $peerConfig['description'] = $peerDesc;
+        $peerParams['description'] = $peerDesc;
     }
     $hasDefaultRoute = false;
     foreach ($allowedIpsList as $item) {
@@ -208,16 +210,20 @@ try {
         }
     }
     if ($hasDefaultRoute) {
-        $peerConfig['connect'] = [
+        $peerParams['connect'] = [
             'via' => 'ISP'
         ];
     }
     if (!empty($psk)) {
-        $peerConfig['preshared-key'] = $psk;
+        $peerParams['preshared-key'] = $psk;
     }
 
+    $peerConfig = [
+        $pubKey => $peerParams
+    ];
+
     echo "\nRequest 8: Configure peer details\n";
-    $res8 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer/{$pubKey}", 'POST', $peerConfig);
+    $res8 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', $peerConfig);
     echo "Result Code: " . $res8['code'] . "\nBody: " . json_encode($res8['body']) . "\n";
 
     // DNS
@@ -238,10 +244,11 @@ try {
     // Policy
     echo "\nRequest 10: Configure routing policy Policy0 permit global\n";
     $res10 = $adapter->request("rci/ip/policy", 'POST', [
-        'name' => 'Policy0',
-        'permit' => [
-            'global' => [
-                $interfaceId => true
+        'Policy0' => [
+            'permit' => [
+                'global' => [
+                    $interfaceId => true
+                ]
             ]
         ]
     ]);
