@@ -125,7 +125,7 @@ try {
     // NAT
     echo "\nRequest 3: Configure NAT\n";
     $res3 = $adapter->request("rci/ip/nat", 'POST', [
-        'name' => $interfaceId
+        $interfaceId => true
     ]);
     echo "Result Code: " . $res3['code'] . "\nBody: " . json_encode($res3['body']) . "\n";
 
@@ -139,7 +139,9 @@ try {
     
     echo "\nRequest 4: Configure IP global & mtu\n";
     $res4 = $adapter->request("rci/interface/{$interfaceId}/ip", 'POST', [
-        'global' => 100,
+        'global' => [
+            'priority' => 100
+        ],
         'mtu' => $mtu
     ]);
     echo "Result Code: " . $res4['code'] . "\nBody: " . json_encode($res4['body']) . "\n";
@@ -147,7 +149,9 @@ try {
     // Adjust MSS
     echo "\nRequest 5: Configure TCP adjust-mss\n";
     $res5 = $adapter->request("rci/interface/{$interfaceId}/ip/tcp", 'POST', [
-        'adjust-mss' => 'pmtu'
+        'adjust-mss' => [
+            'pmtu' => true
+        ]
     ]);
     echo "Result Code: " . $res5['code'] . "\nBody: " . json_encode($res5['body']) . "\n";
 
@@ -179,15 +183,13 @@ try {
     }
 
     echo "\nRequest 7: Remove existing peer\n";
-    $res7 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', [
-        'public-key' => $pubKey,
+    $res7 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer/{$pubKey}", 'POST', [
         'no' => true
     ]);
     echo "Result Code: " . $res7['code'] . "\nBody: " . json_encode($res7['body']) . "\n";
 
     // Configure peer
     $peerConfig = [
-        'public-key' => $pubKey,
         'endpoint' => $endpoint,
         'keepalive-interval' => $keepalive,
         'allow-ips' => $allowedIpsList
@@ -204,14 +206,18 @@ try {
         }
     }
     if ($hasDefaultRoute) {
-        $peerConfig['connect'] = ['via' => 'ISP'];
+        $peerConfig['connect'] = [
+            'via' => [
+                'ISP' => true
+            ]
+        ];
     }
     if (!empty($psk)) {
         $peerConfig['preshared-key'] = $psk;
     }
 
     echo "\nRequest 8: Configure peer details\n";
-    $res8 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', $peerConfig);
+    $res8 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer/{$pubKey}", 'POST', $peerConfig);
     echo "Result Code: " . $res8['code'] . "\nBody: " . json_encode($res8['body']) . "\n";
 
     // DNS
@@ -234,7 +240,9 @@ try {
     $res10 = $adapter->request("rci/ip/policy", 'POST', [
         'name' => 'Policy0',
         'permit' => [
-            'global' => $interfaceId
+            'global' => [
+                $interfaceId => true
+            ]
         ]
     ]);
     echo "Result Code: " . $res10['code'] . "\nBody: " . json_encode($res10['body']) . "\n";
