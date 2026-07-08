@@ -461,21 +461,25 @@ class KeeneticRouter {
 
         // Remove existing peer to avoid duplicate / collision (no wireguard peer <key>)
         $this->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', [
-            'public-key' => $pubKey,
+            'key' => $pubKey,
             'no' => true
         ]);
 
         // Configure peer settings
         $peerConfig = [
-            'public-key' => $pubKey,
-            'endpoint' => $endpoint,
-            'keepalive-interval' => $keepalive,
+            'key' => $pubKey,
+            'endpoint' => [
+                'address' => $endpoint
+            ],
+            'keepalive-interval' => [
+                'interval' => $keepalive
+            ],
             'allow-ips' => $allowedIpsList
         ];
 
         $peerDesc = $parsed['peer']['Name'] ?? '';
         if (!empty($peerDesc)) {
-            $peerConfig['description'] = $peerDesc;
+            $peerConfig['comment'] = $peerDesc;
         }
 
         $hasDefaultRoute = false;
@@ -519,9 +523,12 @@ class KeeneticRouter {
         // 6. Configure connection/routing policy (add to Policy0/Main)
         try {
             $this->request("rci/ip/policy", 'POST', [
-                'name' => 'Policy0',
-                'permit' => [
-                    'global' => $interfaceId
+                'Policy0' => [
+                    'permit' => [
+                        [
+                            'interface' => $interfaceId
+                        ]
+                    ]
                 ]
             ]);
         } catch (Throwable $policyEx) {
