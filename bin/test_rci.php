@@ -218,12 +218,50 @@ try {
         $peerParams['preshared-key'] = $psk;
     }
 
-    $peerConfig = [
-        $pubKey => $peerParams
-    ];
+    echo "\nRequest 8: Testing different peer configuration formats...\n";
 
-    echo "\nRequest 8: Configure peer details\n";
-    $res8 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', $peerConfig);
+    // Test Format 1: URL-encoded public key in path
+    $encodedPubKey = rawurlencode($pubKey);
+    echo "Format 1 (URL-encoded path: .../peer/{$encodedPubKey}):\n";
+    $res8_1 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer/{$encodedPubKey}", 'POST', $peerParams);
+    echo "  Result: " . $res8_1['code'] . " - " . json_encode($res8_1['body']) . "\n";
+
+    // Test Format 2: Single backslash escaped slash in JSON key
+    $escapedKey1 = str_replace('/', '\/', $pubKey);
+    echo "Format 2 (Single escaped slash: {$escapedKey1}):\n";
+    $res8_2 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', [
+        $escapedKey1 => $peerParams
+    ]);
+    echo "  Result: " . $res8_2['code'] . " - " . json_encode($res8_2['body']) . "\n";
+
+    // Test Format 3: Double backslash escaped slash in JSON key
+    $escapedKey2 = str_replace('/', '\\/', $pubKey);
+    echo "Format 3 (Double escaped slash: {$escapedKey2}):\n";
+    $res8_3 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', [
+        $escapedKey2 => $peerParams
+    ]);
+    echo "  Result: " . $res8_3['code'] . " - " . json_encode($res8_3['body']) . "\n";
+
+    // Test Format 4: Public key inside object POSTed to /peer
+    echo "Format 4 (public-key property inside object):\n";
+    $peerParamsWithKey = array_merge(['public-key' => $pubKey], $peerParams);
+    $res8_4 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', $peerParamsWithKey);
+    echo "  Result: " . $res8_4['code'] . " - " . json_encode($res8_4['body']) . "\n";
+
+    // Test Format 5: Nesting peer object under wireguard root
+    echo "Format 5 (Nesting under wireguard/peer):\n";
+    $res8_5 = $adapter->request("rci/interface/{$interfaceId}", 'POST', [
+        'wireguard' => [
+            'peer' => [
+                $pubKey => $peerParams
+            ]
+        ]
+    ]);
+    echo "  Result: " . $res8_5['code'] . " - " . json_encode($res8_5['body']) . "\n";
+
+    // Let's use the one that succeeds or log them all.
+    $res8 = $res8_1; // Placeholder
+
     echo "Result Code: " . $res8['code'] . "\nBody: " . json_encode($res8['body']) . "\n";
 
     // DNS
