@@ -308,7 +308,20 @@ class KeeneticRouter {
 
         foreach ($lines as $line) {
             $line = trim($line);
-            if ($line === '' || str_starts_with($line, '#') || str_starts_with($line, ';')) {
+            if ($line === '') {
+                continue;
+            }
+            if (str_starts_with($line, '#') || str_starts_with($line, ';')) {
+                // Parse Name = ... comments
+                $trimmedComment = trim(substr($line, 1));
+                if (preg_match('/^Name\s*=\s*(.*)$/i', $trimmedComment, $m)) {
+                    $val = trim($m[1]);
+                    if ($currentSection === 'interface') {
+                        $config['interface']['Name'] = $val;
+                    } elseif ($currentSection === 'peer') {
+                        $config['peer']['Name'] = $val;
+                    }
+                }
                 continue;
             }
             if (preg_match('/^\[(.*?)\]$/', $line, $m)) {
@@ -354,12 +367,10 @@ class KeeneticRouter {
             }
         }
 
-        // 2. Create/enable interface and configure description, security-level
-        // In Keenetic, we configure these properties.
+        // 2. Create interface and configure description, security-level
         $this->request("rci/interface/{$interfaceId}", 'POST', [
             'description' => $description,
-            'security-level' => 'public',
-            'up' => true
+            'security-level' => 'public'
         ]);
 
         // Configure IP address (parsed from Address)
@@ -379,14 +390,7 @@ class KeeneticRouter {
             'name' => $interfaceId
         ]);
 
-        // 3. Configure WireGuard settings
-        $privKey = $parsed['interface']['PrivateKey'] ?? '';
-        $port = 51820; // Default or randomly chosen
-        $endpoint = $parsed['peer']['Endpoint'] ?? '';
-        if (preg_match('/:(\d+)$/', $endpoint, $m)) {
-            $port = (int)$m[1];
-        }
-        
+        // Configure IP settings (global priority, mtu, tcp adjust-mss)
         $mtu = 1280;
         if (isset($parsed['interface']['MTU'])) {
             $mtu = (int)$parsed['interface']['MTU'];
@@ -394,24 +398,33 @@ class KeeneticRouter {
             $mtu = (int)$parsed['peer']['MTU'];
         }
 
-        // Try setting IP MTU and TCP MSS Adjust on the interface
         try {
-            $this->request("rci/interface/{$interfaceId}", 'POST', [
-                'ip' => [
-                    'mtu' => $mtu,
-                    'tcp' => [
-                        'adjust-mss' => 'pmtu'
-                    ]
-                ]
+            $this->request("rci/interface/{$interfaceId}/ip", 'POST', [
+                'global' => 100,
+                'mtu' => $mtu
             ]);
         } catch (Throwable $e) {
-            // Ignore if RCI commands for MTU/MSS are not supported
+            // Ignore
+        }
+
+        try {
+            $this->request("rci/interface/{$interfaceId}/ip/tcp", 'POST', [
+                'adjust-mss' => 'pmtu'
+            ]);
+        } catch (Throwable $e) {
+            // Ignore
+        }
+
+        // 3. Configure WireGuard settings
+        $privKey = $parsed['interface']['PrivateKey'] ?? '';
+        $port = 51820; // Default or randomly chosen
+        $endpoint = $parsed['peer']['Endpoint'] ?? '';
+        if (preg_match('/:(\d+)$/', $endpoint, $m)) {
+            $port = (int)$m[1];
         }
 
         $this->request("rci/interface/{$interfaceId}/wireguard", 'POST', [
-            'private-key' => $privKey,
-            'port' => $port,
-            'mtu' => $mtu
+            'private-key' => $privKey
         ]);
 
         // 4. Configure WireGuard Peer
@@ -438,21 +451,23 @@ class KeeneticRouter {
             ];
         }
 
-        // Remove existing peers on this interface first to prevent collision
-        $this->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', [
-            'public-key' => $pubKey,
+        // Remove existing peer to avoid duplicate / collision (no wireguard peer <key>)
+        $this->request("rci/interface/{$interfaceId}/wireguard/peer/{$pubKey}", 'POST', [
             'no' => true
         ]);
 
-        // Add the new peer config
+        // Configure peer settings
         $peerConfig = [
-            'public-key' => $pubKey,
             'endpoint' => $endpoint,
             'keepalive-interval' => $keepalive,
             'allow-ips' => $allowedIpsList
         ];
 
-        // Prevent routing loops by binding peer connection to WAN/ISP if we route default traffic
+        $peerDesc = $parsed['peer']['Name'] ?? '';
+        if (!empty($peerDesc)) {
+            $peerConfig['description'] = $peerDesc;
+        }
+
         $hasDefaultRoute = false;
         foreach ($allowedIpsList as $item) {
             if ($item['address'] === '0.0.0.0' && $item['mask'] === '0.0.0.0') {
@@ -460,7 +475,7 @@ class KeeneticRouter {
                 break;
             }
         }
-        
+
         if ($hasDefaultRoute) {
             $peerConfig['connect'] = [
                 'via' => 'ISP'
@@ -471,9 +486,10 @@ class KeeneticRouter {
             $peerConfig['preshared-key'] = $psk;
         }
 
-        $this->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', $peerConfig);
+        // Add / Configure the peer (wireguard peer <key> + options)
+        $this->request("rci/interface/{$interfaceId}/wireguard/peer/{$pubKey}", 'POST', $peerConfig);
 
-        // 5. Configure DNS servers if specified in config
+        // 5. Configure DNS
         if (!empty($parsed['interface']['DNS'])) {
             $dnsServers = array_map('trim', explode(',', $parsed['interface']['DNS']));
             foreach ($dnsServers as $dns) {
@@ -505,7 +521,12 @@ class KeeneticRouter {
         // 7. Apply ASC Obfuscation Parameters
         $this->applyObfuscation($interfaceId, $parsed['interface']);
 
-        // 8. Save Configuration
+        // 8. Bring interface UP
+        $this->request("rci/interface/{$interfaceId}", 'POST', [
+            'up' => true
+        ]);
+
+        // 9. Save Configuration
         $this->saveConfig();
 
         return $interfaceId;
