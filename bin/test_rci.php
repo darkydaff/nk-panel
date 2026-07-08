@@ -229,15 +229,18 @@ try {
     // DNS
     if (!empty($parsed['interface']['DNS'])) {
         $dnsServers = array_map('trim', explode(',', $parsed['interface']['DNS']));
+        $dnsList = [];
         foreach ($dnsServers as $dns) {
             if (filter_var($dns, FILTER_VALIDATE_IP)) {
-                echo "\nRequest 9: Configure DNS server $dns\n";
-                $res9 = $adapter->request("rci/ip/name-server", 'POST', [
-                    'address' => $dns,
-                    'on' => $interfaceId
-                ]);
-                echo "Result Code: " . $res9['code'] . "\nBody: " . json_encode($res9['body']) . "\n";
+                $dnsList[] = ['name-server' => $dns];
             }
+        }
+        if (!empty($dnsList)) {
+            echo "\nRequest 9: Configure DNS servers on interface\n";
+            $res9 = $adapter->request("rci/interface/{$interfaceId}/ip", 'POST', [
+                'name-server' => $dnsList
+            ]);
+            echo "Result Code: " . $res9['code'] . "\nBody: " . json_encode($res9['body']) . "\n";
         }
     }
 

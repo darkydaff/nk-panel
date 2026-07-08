@@ -506,16 +506,19 @@ class KeeneticRouter {
         // 5. Configure DNS
         if (!empty($parsed['interface']['DNS'])) {
             $dnsServers = array_map('trim', explode(',', $parsed['interface']['DNS']));
+            $dnsList = [];
             foreach ($dnsServers as $dns) {
                 if (filter_var($dns, FILTER_VALIDATE_IP)) {
-                    try {
-                        $this->request("rci/ip/name-server", 'POST', [
-                            'address' => $dns,
-                            'on' => $interfaceId
-                        ]);
-                    } catch (Throwable $dnsEx) {
-                        // Ignore
-                    }
+                    $dnsList[] = ['name-server' => $dns];
+                }
+            }
+            if (!empty($dnsList)) {
+                try {
+                    $this->request("rci/interface/{$interfaceId}/ip", 'POST', [
+                        'name-server' => $dnsList
+                    ]);
+                } catch (Throwable $dnsEx) {
+                    // Ignore
                 }
             }
         }
