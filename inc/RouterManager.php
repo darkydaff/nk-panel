@@ -61,7 +61,7 @@ class RouterManager {
     /**
      * Push VPN Client configuration to Keenetic Router
      */
-    public static function pushConfigToRouter(int $routerId): array {
+    public static function pushConfigToRouter(int $routerId, ?int $vpnClientId = null): array {
         $pdo = DB::conn();
         
         // 1. Get router details
@@ -78,19 +78,33 @@ class RouterManager {
             ->execute([$routerId]);
             
         try {
-            // 2. Find active VPN Client configuration linked to this code
-            $stmtClient = $pdo->prepare("
-                SELECT c.*, s.host AS server_host, s.vpn_port AS server_vpn_port 
-                FROM vpn_clients c
-                JOIN vpn_servers s ON c.server_id = s.id
-                WHERE c.ext_client_code = ? AND c.status = 'active'
-                ORDER BY c.created_at DESC LIMIT 1
-            ");
-            $stmtClient->execute([$router['ext_client_code']]);
+            // 2. Find VPN Client configuration to push
+            if ($vpnClientId) {
+                $stmtClient = $pdo->prepare("
+                    SELECT c.*, s.host AS server_host, s.vpn_port AS server_vpn_port 
+                    FROM vpn_clients c
+                    JOIN vpn_servers s ON c.server_id = s.id
+                    WHERE c.id = ? AND c.ext_client_code = ?
+                ");
+                $stmtClient->execute([$vpnClientId, $router['ext_client_code']]);
+            } else {
+                $stmtClient = $pdo->prepare("
+                    SELECT c.*, s.host AS server_host, s.vpn_port AS server_vpn_port 
+                    FROM vpn_clients c
+                    JOIN vpn_servers s ON c.server_id = s.id
+                    WHERE c.ext_client_code = ? AND c.status = 'active'
+                    ORDER BY c.created_at DESC LIMIT 1
+                ");
+                $stmtClient->execute([$router['ext_client_code']]);
+            }
             $vpnClient = $stmtClient->fetch();
             
             if (!$vpnClient) {
-                throw new Exception("No active VPN client configuration linked to client code: " . $router['ext_client_code']);
+                if ($vpnClientId) {
+                    throw new Exception("VPN Client configuration ID $vpnClientId not found or not linked to client code: " . $router['ext_client_code']);
+                } else {
+                    throw new Exception("No active VPN client configuration linked to client code: " . $router['ext_client_code']);
+                }
             }
             
             $configContent = $vpnClient['config'];

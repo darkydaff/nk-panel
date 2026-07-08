@@ -3264,11 +3264,12 @@ Router::post('/api/routers/{id}/push', function ($params) {
     requireAdmin();
     
     $id = (int)$params['id'];
+    $vpnClientId = isset($_GET['vpn_client_id']) ? (int)$_GET['vpn_client_id'] : (isset($_POST['vpn_client_id']) ? (int)$_POST['vpn_client_id'] : null);
     
     try {
         require_once __DIR__ . '/../inc/KeeneticRouter.php';
         require_once __DIR__ . '/../inc/RouterManager.php';
-        $result = RouterManager::pushConfigToRouter($id);
+        $result = RouterManager::pushConfigToRouter($id, $vpnClientId);
         echo json_encode($result);
     } catch (Exception $e) {
         http_response_code(500);

@@ -303,7 +303,7 @@
                 {% endif %}
 
                 <div class="flex flex-wrap gap-2 pt-2 border-t border-slate-800">
-                    <button onclick="triggerViewPush({{ router.id }})" id="viewPushBtn" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors">
+                    <button onclick="triggerViewPush({{ router.id }}, {{ client.id }})" id="viewPushBtn" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors">
                         <i class="fas fa-upload"></i>Push Config
                     </button>
                     <button onclick="triggerViewCheck({{ router.id }})" id="viewCheckBtn" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors">
@@ -664,7 +664,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Router action handlers
-function triggerViewPush(routerId) {
+function triggerViewPush(routerId, vpnClientId) {
     if (!confirm('Push configuration to the router? This will override any existing WireGuard/AmneziaWG settings on this interface.')) return;
     
     const btn = document.getElementById('viewPushBtn');
@@ -672,7 +672,12 @@ function triggerViewPush(routerId) {
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1.5"></i>Pushing...';
     
-    fetch('/api/routers/' + routerId + '/push', {
+    let url = '/api/routers/' + routerId + '/push';
+    if (vpnClientId) {
+        url += '?vpn_client_id=' + vpnClientId;
+    }
+    
+    fetch(url, {
         method: 'POST'
     })
     .then(r => r.json().then(data => ({ status: r.status, body: data })))
