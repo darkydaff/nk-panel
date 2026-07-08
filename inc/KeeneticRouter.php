@@ -522,14 +522,8 @@ class KeeneticRouter {
 
         // 6. Configure connection/routing policy (add to Policy0/Main)
         try {
-            $this->request("rci/ip/policy", 'POST', [
-                'Policy0' => [
-                    'permit' => [
-                        [
-                            'interface' => $interfaceId
-                        ]
-                    ]
-                ]
+            $this->request("rci/ip/policy/Policy0/permit", 'POST', [
+                'interface' => $interfaceId
             ]);
         } catch (Throwable $policyEx) {
             // Ignore
