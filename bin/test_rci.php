@@ -102,7 +102,9 @@ try {
     echo "\nRequest 1: Configure description & security-level\n";
     $res1 = $adapter->request("rci/interface/{$interfaceId}", 'POST', [
         'description' => $description,
-        'security-level' => 'public'
+        'security-level' => [
+            'public' => true
+        ]
     ]);
     echo "Result Code: " . $res1['code'] . "\nBody: " . json_encode($res1['body']) . "\n";
 

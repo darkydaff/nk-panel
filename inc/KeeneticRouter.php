@@ -370,7 +370,9 @@ class KeeneticRouter {
         // 2. Create interface and configure description, security-level
         $this->request("rci/interface/{$interfaceId}", 'POST', [
             'description' => $description,
-            'security-level' => 'public'
+            'security-level' => [
+                'public' => true
+            ]
         ]);
 
         // Configure IP address (parsed from Address)
@@ -661,7 +663,7 @@ class KeeneticRouter {
     /**
      * Convert integer subnet mask to dotted decimal
      */
-    private function maskIntToDotted(int $mask): string {
+    public function maskIntToDotted(int $mask): string {
         $dotted = long2ip(-1 << (32 - $mask));
         return $dotted ? $dotted : '255.255.255.255';
     }
