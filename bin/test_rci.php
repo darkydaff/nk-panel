@@ -246,7 +246,9 @@ try {
     $res10 = $adapter->request("rci/ip/policy", 'POST', [
         'Policy0' => [
             'permit' => [
-                'interface' => $interfaceId
+                [
+                    'interface' => $interfaceId
+                ]
             ]
         ]
     ]);

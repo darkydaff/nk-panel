@@ -525,7 +525,9 @@ class KeeneticRouter {
             $this->request("rci/ip/policy", 'POST', [
                 'Policy0' => [
                     'permit' => [
-                        'interface' => $interfaceId
+                        [
+                            'interface' => $interfaceId
+                        ]
                     ]
                 ]
             ]);
