@@ -386,7 +386,27 @@ class KeeneticRouter {
         if (preg_match('/:(\d+)$/', $endpoint, $m)) {
             $port = (int)$m[1];
         }
-        $mtu = isset($parsed['interface']['MTU']) ? (int)$parsed['interface']['MTU'] : 1280;
+        
+        $mtu = 1280;
+        if (isset($parsed['interface']['MTU'])) {
+            $mtu = (int)$parsed['interface']['MTU'];
+        } elseif (isset($parsed['peer']['MTU'])) {
+            $mtu = (int)$parsed['peer']['MTU'];
+        }
+
+        // Try setting IP MTU and TCP MSS Adjust on the interface
+        try {
+            $this->request("rci/interface/{$interfaceId}", 'POST', [
+                'ip' => [
+                    'mtu' => $mtu,
+                    'tcp' => [
+                        'adjust-mss' => 'pmtu'
+                    ]
+                ]
+            ]);
+        } catch (Throwable $e) {
+            // Ignore if RCI commands for MTU/MSS are not supported
+        }
 
         $this->request("rci/interface/{$interfaceId}/wireguard", 'POST', [
             'private-key' => $privKey,
@@ -397,9 +417,27 @@ class KeeneticRouter {
         // 4. Configure WireGuard Peer
         $pubKey = $parsed['peer']['PublicKey'] ?? '';
         $psk = $parsed['peer']['PresharedKey'] ?? '';
-        $endpointHost = preg_replace('/:\d+$/', '', $endpoint);
         $keepalive = isset($parsed['peer']['PersistentKeepalive']) ? (int)$parsed['peer']['PersistentKeepalive'] : 25;
         
+        // Parse AllowedIPs dynamically
+        $allowedIpsList = [];
+        $allowedIpsRaw = $parsed['peer']['AllowedIPs'] ?? '0.0.0.0/0';
+        $cidrs = explode(',', $allowedIpsRaw);
+        foreach ($cidrs as $cidr) {
+            $cidr = trim($cidr);
+            if (empty($cidr)) continue;
+            
+            $parts = explode('/', $cidr);
+            $ip = $parts[0];
+            $prefix = isset($parts[1]) ? (int)$parts[1] : 32;
+            $mask = $this->maskIntToDotted($prefix);
+            
+            $allowedIpsList[] = [
+                'address' => $ip,
+                'mask' => $mask
+            ];
+        }
+
         // Remove existing peers on this interface first to prevent collision
         $this->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', [
             'public-key' => $pubKey,
@@ -409,16 +447,25 @@ class KeeneticRouter {
         // Add the new peer config
         $peerConfig = [
             'public-key' => $pubKey,
-            'endpoint' => $endpointHost,
-            'port' => $port,
-            'keepalive' => $keepalive,
-            'allowed-ips' => [
-                [
-                    'address' => '0.0.0.0',
-                    'mask' => '0.0.0.0'
-                ]
-            ]
+            'endpoint' => $endpoint,
+            'keepalive-interval' => $keepalive,
+            'allow-ips' => $allowedIpsList
         ];
+
+        // Prevent routing loops by binding peer connection to WAN/ISP if we route default traffic
+        $hasDefaultRoute = false;
+        foreach ($allowedIpsList as $item) {
+            if ($item['address'] === '0.0.0.0' && $item['mask'] === '0.0.0.0') {
+                $hasDefaultRoute = true;
+                break;
+            }
+        }
+        
+        if ($hasDefaultRoute) {
+            $peerConfig['connect'] = [
+                'via' => 'ISP'
+            ];
+        }
 
         if (!empty($psk)) {
             $peerConfig['preshared-key'] = $psk;
@@ -426,10 +473,39 @@ class KeeneticRouter {
 
         $this->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', $peerConfig);
 
-        // 5. Apply ASC Obfuscation Parameters
+        // 5. Configure DNS servers if specified in config
+        if (!empty($parsed['interface']['DNS'])) {
+            $dnsServers = array_map('trim', explode(',', $parsed['interface']['DNS']));
+            foreach ($dnsServers as $dns) {
+                if (filter_var($dns, FILTER_VALIDATE_IP)) {
+                    try {
+                        $this->request("rci/ip/name-server", 'POST', [
+                            'address' => $dns,
+                            'on' => $interfaceId
+                        ]);
+                    } catch (Throwable $dnsEx) {
+                        // Ignore
+                    }
+                }
+            }
+        }
+
+        // 6. Configure connection/routing policy (add to Policy0/Main)
+        try {
+            $this->request("rci/ip/policy", 'POST', [
+                'name' => 'Policy0',
+                'permit' => [
+                    'global' => $interfaceId
+                ]
+            ]);
+        } catch (Throwable $policyEx) {
+            // Ignore
+        }
+
+        // 7. Apply ASC Obfuscation Parameters
         $this->applyObfuscation($interfaceId, $parsed['interface']);
 
-        // 6. Save Configuration
+        // 8. Save Configuration
         $this->saveConfig();
 
         return $interfaceId;
