@@ -29,19 +29,36 @@ class RouterManager {
             $model = $ec['router'] ?? null;
             
             // Check if router already exists
-            $stmtCheck = $pdo->prepare("SELECT id, domain, password FROM routers WHERE ext_client_code = ?");
+            $stmtCheck = $pdo->prepare("SELECT id, domain, password, router_model FROM routers WHERE ext_client_code = ?");
             $stmtCheck->execute([$code]);
             $existing = $stmtCheck->fetch();
             
             if ($existing) {
-                // If credentials changed, update them and reset status to pending
+                $needsUpdate = false;
+                $updateSqlParts = [];
+                $updateParams = [];
+                
                 if ($existing['domain'] !== $domain || $existing['password'] !== $pass) {
-                    $stmtUpdate = $pdo->prepare("
-                        UPDATE routers 
-                        SET domain = ?, password = ?, status = 'pending', error_message = NULL 
-                        WHERE id = ?
-                    ");
-                    $stmtUpdate->execute([$domain, $pass, $existing['id']]);
+                    $updateSqlParts[] = "domain = ?";
+                    $updateSqlParts[] = "password = ?";
+                    $updateSqlParts[] = "status = 'pending'";
+                    $updateSqlParts[] = "error_message = NULL";
+                    $updateParams[] = $domain;
+                    $updateParams[] = $pass;
+                    $needsUpdate = true;
+                }
+                
+                if ($existing['router_model'] !== $model) {
+                    $updateSqlParts[] = "router_model = ?";
+                    $updateParams[] = $model;
+                    $needsUpdate = true;
+                }
+                
+                if ($needsUpdate) {
+                    $updateParams[] = $existing['id'];
+                    $sql = "UPDATE routers SET " . implode(', ', $updateSqlParts) . " WHERE id = ?";
+                    $stmtUpdate = $pdo->prepare($sql);
+                    $stmtUpdate->execute($updateParams);
                     $syncedCount++;
                 }
             } else {
