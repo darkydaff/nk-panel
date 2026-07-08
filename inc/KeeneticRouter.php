@@ -368,10 +368,12 @@ class KeeneticRouter {
         }
 
         // 2. Create interface and configure description, security-level
-        $this->request("rci/interface/{$interfaceId}", 'POST', [
-            'description' => $description,
-            'security-level' => [
-                'public' => true
+        $this->request("rci/interface", 'POST', [
+            $interfaceId => [
+                'description' => $description,
+                'security-level' => [
+                    'public' => true
+                ]
             ]
         ]);
 
@@ -389,7 +391,7 @@ class KeeneticRouter {
 
         // Enable NAT (masquerade) on the interface
         $this->request("rci/ip/nat", 'POST', [
-            'name' => $interfaceId
+            'interface' => $interfaceId
         ]);
 
         // Configure IP settings (global priority, mtu, tcp adjust-mss)
@@ -402,7 +404,9 @@ class KeeneticRouter {
 
         try {
             $this->request("rci/interface/{$interfaceId}/ip", 'POST', [
-                'global' => 100,
+                'global' => [
+                    'priority' => 100
+                ],
                 'mtu' => $mtu
             ]);
         } catch (Throwable $e) {
@@ -411,7 +415,9 @@ class KeeneticRouter {
 
         try {
             $this->request("rci/interface/{$interfaceId}/ip/tcp", 'POST', [
-                'adjust-mss' => 'pmtu'
+                'adjust-mss' => [
+                    'pmtu' => true
+                ]
             ]);
         } catch (Throwable $e) {
             // Ignore

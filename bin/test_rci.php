@@ -127,7 +127,7 @@ try {
     // NAT
     echo "\nRequest 3: Configure NAT\n";
     $res3 = $adapter->request("rci/ip/nat", 'POST', [
-        $interfaceId => true
+        'interface' => $interfaceId
     ]);
     echo "Result Code: " . $res3['code'] . "\nBody: " . json_encode($res3['body']) . "\n";
 
@@ -185,13 +185,15 @@ try {
     }
 
     echo "\nRequest 7: Remove existing peer\n";
-    $res7 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer/{$pubKey}", 'POST', [
+    $res7 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', [
+        'public-key' => $pubKey,
         'no' => true
     ]);
     echo "Result Code: " . $res7['code'] . "\nBody: " . json_encode($res7['body']) . "\n";
 
     // Configure peer
     $peerConfig = [
+        'public-key' => $pubKey,
         'endpoint' => $endpoint,
         'keepalive-interval' => $keepalive,
         'allow-ips' => $allowedIpsList
@@ -209,9 +211,7 @@ try {
     }
     if ($hasDefaultRoute) {
         $peerConfig['connect'] = [
-            'via' => [
-                'ISP' => true
-            ]
+            'via' => 'ISP'
         ];
     }
     if (!empty($psk)) {
@@ -219,7 +219,7 @@ try {
     }
 
     echo "\nRequest 8: Configure peer details\n";
-    $res8 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer/{$pubKey}", 'POST', $peerConfig);
+    $res8 = $adapter->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', $peerConfig);
     echo "Result Code: " . $res8['code'] . "\nBody: " . json_encode($res8['body']) . "\n";
 
     // DNS
@@ -239,11 +239,10 @@ try {
 
     // Policy
     echo "\nRequest 10: Configure routing policy Policy0 permit global\n";
-    $res10 = $adapter->request("rci/ip/policy/Policy0", 'POST', [
+    $res10 = $adapter->request("rci/ip/policy", 'POST', [
+        'name' => 'Policy0',
         'permit' => [
-            'global' => [
-                $interfaceId => true
-            ]
+            'global' => $interfaceId
         ]
     ]);
     echo "Result Code: " . $res10['code'] . "\nBody: " . json_encode($res10['body']) . "\n";
