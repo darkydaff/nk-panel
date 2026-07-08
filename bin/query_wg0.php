@@ -1,13 +1,29 @@
 <?php
+require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../inc/Config.php';
+require_once __DIR__ . '/../inc/DB.php';
 require_once __DIR__ . '/../inc/KeeneticRouter.php';
 
-$router = [
-    'domain' => 'https://darkydaff.netcraze.link/',
-    'password' => 'w11q22e3',
-    'login' => 'admin'
-];
+Config::load(__DIR__ . '/../.env');
 
-$adapter = new KeeneticRouter($router['domain'], $router['password'], $router['login']);
+if ($argc < 2) {
+    echo "Usage: php bin/query_wg0.php <ext_client_code_or_router_id>\n";
+    exit(1);
+}
+
+$id = $argv[1];
+$pdo = DB::conn();
+$stmt = $pdo->prepare("SELECT * FROM routers WHERE id = ? OR ext_client_code = ?");
+$stmt->execute([$id, $id]);
+$router = $stmt->fetch();
+
+if (!$router) {
+    echo "Router not found in database.\n";
+    exit(1);
+}
+
+$login = $router['login'] ?: 'admin';
+$adapter = new KeeneticRouter($router['domain'], $router['password'], $login);
 
 echo "Querying interface Wireguard0...\n";
 $res1 = $adapter->request("rci/interface/Wireguard0");
