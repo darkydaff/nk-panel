@@ -52,20 +52,20 @@
             <div class="card-body p-5">
                 <form method="POST" action="/settings/change-password" class="max-w-md space-y-4">
                     <div class="form-control">
-                        <label class="label py-1"><span class="label-text font-medium">{{ t('settings.current_password') }}</span></label>
-                        <input type="password" name="current_password" required class="input input-bordered font-mono">
+                        <label class="label py-1"><span class="label-text text-xs font-medium">{{ t('settings.current_password') }}</span></label>
+                        <input type="password" name="current_password" required class="input input-bordered input-sm font-mono w-full">
                     </div>
                     <div class="form-control">
-                        <label class="label py-1"><span class="label-text font-medium">{{ t('settings.new_password') }}</span></label>
-                        <input type="password" name="new_password" required minlength="6" class="input input-bordered font-mono">
+                        <label class="label py-1"><span class="label-text text-xs font-medium">{{ t('settings.new_password') }}</span></label>
+                        <input type="password" name="new_password" required minlength="6" class="input input-bordered input-sm font-mono w-full">
                         <label class="label py-0.5"><span class="label-text-alt text-base-content/40">Minimum 6 characters</span></label>
                     </div>
                     <div class="form-control">
-                        <label class="label py-1"><span class="label-text font-medium">{{ t('settings.confirm_password') }}</span></label>
-                        <input type="password" name="confirm_password" required minlength="6" class="input input-bordered font-mono">
+                        <label class="label py-1"><span class="label-text text-xs font-medium">{{ t('settings.confirm_password') }}</span></label>
+                        <input type="password" name="confirm_password" required minlength="6" class="input input-bordered input-sm font-mono w-full">
                     </div>
                     <div class="pt-2">
-                        <button type="submit" class="btn btn-primary gap-2">
+                        <button type="submit" class="btn btn-primary btn-sm gap-2">
                             <i class="fas fa-save"></i>{{ t('settings.change_password') }}
                         </button>
                     </div>
@@ -86,27 +86,27 @@
                 <form method="POST" action="/settings/add-user">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
                         <div class="form-control">
-                            <label class="label py-1"><span class="label-text font-medium">{{ t('auth.name') }}</span></label>
-                            <input type="text" name="name" required class="input input-bordered">
+                            <label class="label py-1"><span class="label-text text-xs font-medium">{{ t('auth.name') }}</span></label>
+                            <input type="text" name="name" required class="input input-bordered input-sm w-full">
                         </div>
                         <div class="form-control">
-                            <label class="label py-1"><span class="label-text font-medium">{{ t('auth.email') }}</span></label>
-                            <input type="email" name="email" required class="input input-bordered">
+                            <label class="label py-1"><span class="label-text text-xs font-medium">{{ t('auth.email') }}</span></label>
+                            <input type="email" name="email" required class="input input-bordered input-sm w-full">
                         </div>
                         <div class="form-control">
-                            <label class="label py-1"><span class="label-text font-medium">{{ t('auth.password') }}</span></label>
-                            <input type="password" name="password" required minlength="6" class="input input-bordered font-mono">
+                            <label class="label py-1"><span class="label-text text-xs font-medium">{{ t('auth.password') }}</span></label>
+                            <input type="password" name="password" required minlength="6" class="input input-bordered input-sm font-mono w-full">
                         </div>
                         <div class="form-control">
-                            <label class="label py-1"><span class="label-text font-medium">{{ t('users.role') }}</span></label>
-                            <select name="role" class="select select-bordered">
+                            <label class="label py-1"><span class="label-text text-xs font-medium">{{ t('users.role') }}</span></label>
+                            <select name="role" class="select select-bordered select-sm w-full">
                                 <option value="user">{{ t('users.role_user') }}</option>
                                 <option value="admin">{{ t('users.role_admin') }}</option>
                             </select>
                         </div>
                     </div>
                     <div class="mt-4">
-                        <button type="submit" class="btn btn-primary gap-2"><i class="fas fa-user-plus"></i>{{ t('users.add_user') }}</button>
+                        <button type="submit" class="btn btn-primary btn-sm gap-2"><i class="fas fa-user-plus"></i>{{ t('users.add_user') }}</button>
                     </div>
                 </form>
             </div>
