@@ -52,15 +52,12 @@ code, pre, kbd, .font-mono {
    Sidebar nav active link
    ================================================ */
 .menu li a.active {
-  background-color: oklch(var(--p) / 0.1) !important;
-  color: oklch(var(--p)) !important;
+  background-color: oklch(var(--p)) !important;
+  color: oklch(var(--pc)) !important;
   font-weight: 600 !important;
-  border-left: 3px solid oklch(var(--p)) !important;
-  border-top-left-radius: 0 !important;
-  border-bottom-left-radius: 0 !important;
 }
 .menu li a.active i {
-  color: oklch(var(--p)) !important;
+  color: oklch(var(--pc)) !important;
 }
 
 /* ================================================
