@@ -68,3 +68,9 @@ code, pre, kbd, .font-mono {
    ================================================ */
 .mobile-menu { display: none; }
 .mobile-menu.active { display: block; }
+
+/* Fix FontAwesome icons with hidden class being displayed */
+.fas.hidden, .far.hidden, .fab.hidden, .fa.hidden {
+  display: none !important;
+}
+

@@ -21,12 +21,12 @@
             <div class="mt-2 ml-13 flex flex-wrap items-center gap-2">
                 <code class="text-xs bg-base-300 px-2 py-1 rounded font-mono text-base-content/60">{{ server.host }}</code>
                 {% if server.status == 'active' %}
-                    <span class="badge badge-success gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-success"></span>Active</span>
+                    <span class="badge badge-success inline-flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-success inline-block"></span>Active</span>
                 {% else %}
-                    <span class="badge badge-error gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-error"></span>{{ server.status }}</span>
+                    <span class="badge badge-error inline-flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-error inline-block"></span>{{ server.status }}</span>
                 {% endif %}
-                <span id="agentStatusBadge" class="badge {% if agent_online %}badge-success{% else %}badge-warning{% endif %} gap-1.5">
-                    <span class="w-1.5 h-1.5 rounded-full {% if agent_online %}bg-success{% else %}bg-warning{% endif %}" id="agentStatusDot"></span>
+                <span id="agentStatusBadge" class="badge {% if agent_online %}badge-success{% else %}badge-warning{% endif %} inline-flex items-center gap-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full {% if agent_online %}bg-success{% else %}bg-warning{% endif %} inline-block" id="agentStatusDot"></span>
                     <span id="agentStatusText">{% if agent_online %}Agent Online{% else %}Agent Offline{% endif %}</span>
                 </span>
             </div>
@@ -220,9 +220,13 @@
                                 <span class="text-indigo-400 download-bytes">↓{{ client.bytes_received|default(0)|format_bytes }}</span>
                             </div>
                             <div class="text-[10px] mt-0.5 flex gap-1 font-mono speed-container">
-                                {% if client.status == 'active' and (client.speed_up_kbps > 0 or client.speed_down_kbps > 0) %}
-                                    {% if client.speed_up_kbps >= 1000 %}<span class="text-success font-semibold">↑{{ (client.speed_up_kbps / 1000)|number_format(1) }} Mbps</span>{% elseif client.speed_up_kbps > 0 %}<span class="text-success">↑{{ client.speed_up_kbps|number_format(0) }} Kbps</span>{% endif %}
-                                    {% if client.speed_down_kbps >= 1000 %}<span class="text-indigo-400 font-semibold">↓{{ (client.speed_down_kbps / 1000)|number_format(1) }} Mbps</span>{% elseif client.speed_down_kbps > 0 %}<span class="text-indigo-400">↓{{ client.speed_down_kbps|number_format(0) }} Kbps</span>{% endif %}
+                                {% if client.status == 'active' %}
+                                    <span class="{% if client.speed_up_kbps > 0 %}text-success font-semibold{% else %}text-base-content/20{% endif %}">
+                                        ↑{% if client.speed_up_kbps >= 1000 %}{{ (client.speed_up_kbps / 1000)|number_format(1) }} Mbps{% else %}{{ client.speed_up_kbps|number_format(0) }} Kbps{% endif %}
+                                    </span>
+                                    <span class="{% if client.speed_down_kbps > 0 %}text-indigo-400 font-semibold{% else %}text-base-content/20{% endif %}">
+                                        ↓{% if client.speed_down_kbps >= 1000 %}{{ (client.speed_down_kbps / 1000)|number_format(1) }} Mbps{% else %}{{ client.speed_down_kbps|number_format(0) }} Kbps{% endif %}
+                                    </span>
                                 {% endif %}
                             </div>
                         </td>
@@ -284,9 +288,13 @@
                             <span class="text-indigo-400 download-bytes ml-1">↓{{ client.bytes_received|default(0)|format_bytes }}</span>
                         </div>
                         <div class="text-[10px] mt-0.5 flex flex-col font-mono speed-container">
-                            {% if client.status == 'active' and (client.speed_up_kbps > 0 or client.speed_down_kbps > 0) %}
-                                {% if client.speed_up_kbps >= 1000 %}<span class="text-success font-semibold">↑{{ (client.speed_up_kbps / 1000)|number_format(1) }} Mbps</span>{% elseif client.speed_up_kbps > 0 %}<span class="text-success">↑{{ client.speed_up_kbps|number_format(0) }} Kbps</span>{% endif %}
-                                {% if client.speed_down_kbps >= 1000 %}<span class="text-indigo-400 font-semibold">↓{{ (client.speed_down_kbps / 1000)|number_format(1) }} Mbps</span>{% elseif client.speed_down_kbps > 0 %}<span class="text-indigo-400">↓{{ client.speed_down_kbps|number_format(0) }} Kbps</span>{% endif %}
+                            {% if client.status == 'active' %}
+                                <span class="{% if client.speed_up_kbps > 0 %}text-success font-semibold{% else %}text-base-content/20{% endif %}">
+                                    ↑{% if client.speed_up_kbps >= 1000 %}{{ (client.speed_up_kbps / 1000)|number_format(1) }} Mbps{% else %}{{ client.speed_up_kbps|number_format(0) }} Kbps{% endif %}
+                                </span>
+                                <span class="{% if client.speed_down_kbps > 0 %}text-indigo-400 font-semibold{% else %}text-base-content/20{% endif %}">
+                                    ↓{% if client.speed_down_kbps >= 1000 %}{{ (client.speed_down_kbps / 1000)|number_format(1) }} Mbps{% else %}{{ client.speed_down_kbps|number_format(0) }} Kbps{% endif %}
+                                </span>
                             {% endif %}
                         </div>
                     </div>
@@ -583,7 +591,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function formatSpeed(kbps, arrow, colorClass, labelClass) {
-        if (kbps <= 0) return '';
+        if (kbps <= 0) return `<span class="text-base-content/20">${arrow}0 Kbps</span>`;
         if (kbps >= 1000) return `<span class="${colorClass} ${labelClass || ''}">${arrow}${(kbps / 1000).toFixed(1)} Mbps</span>`;
         return `<span class="${colorClass}">${arrow}${Math.round(kbps)} Kbps</span>`;
     }
@@ -602,13 +610,13 @@ document.addEventListener('DOMContentLoaded', function() {
             const installAgentBtnText = document.getElementById('installAgentBtnText');
             if (agentStatusBadge && agentStatusDot && agentStatusText) {
                 if (data.agent_online) {
-                    agentStatusBadge.className = 'badge badge-success gap-1.5';
-                    agentStatusDot.className = 'w-1.5 h-1.5 rounded-full bg-success';
+                    agentStatusBadge.className = 'badge badge-success inline-flex items-center gap-1.5';
+                    agentStatusDot.className = 'w-1.5 h-1.5 rounded-full bg-success inline-block';
                     agentStatusText.textContent = 'Agent Online';
                     if (installAgentBtnText) installAgentBtnText.textContent = 'Reinstall Agent';
                 } else {
-                    agentStatusBadge.className = 'badge badge-warning gap-1.5';
-                    agentStatusDot.className = 'w-1.5 h-1.5 rounded-full bg-warning';
+                    agentStatusBadge.className = 'badge badge-warning inline-flex items-center gap-1.5';
+                    agentStatusDot.className = 'w-1.5 h-1.5 rounded-full bg-warning inline-block';
                     agentStatusText.textContent = 'Agent Offline';
                     if (installAgentBtnText) installAgentBtnText.textContent = 'Install Agent';
                 }
@@ -635,7 +643,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         if (client.status === 'active') {
                             const upHtml = formatSpeed(client.stats?.speed_up_raw || 0, '↑', 'text-success', 'font-semibold');
                             const downHtml = formatSpeed(client.stats?.speed_down_raw || 0, '↓', 'text-indigo-400', 'font-semibold');
-                            if (upHtml || downHtml) speedHtml = upHtml + (upHtml && downHtml ? ' ' : '') + downHtml;
+                            speedHtml = upHtml + ' ' + downHtml;
                         }
                         speedContainer.innerHTML = speedHtml;
                     }
@@ -664,7 +672,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         if (client.status === 'active') {
                             const upHtml = formatSpeed(client.stats?.speed_up_raw || 0, '↑', 'text-success', 'font-semibold');
                             const downHtml = formatSpeed(client.stats?.speed_down_raw || 0, '↓', 'text-indigo-400', 'font-semibold');
-                            if (upHtml || downHtml) speedHtml = upHtml + ' ' + downHtml;
+                            speedHtml = upHtml + ' ' + downHtml;
                         }
                         speedContainer.innerHTML = speedHtml;
                     }

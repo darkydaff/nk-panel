@@ -37,8 +37,8 @@
                             <code class="text-xs text-base-content/50">{{ server.host }}</code>
                         </div>
                     </div>
-                    <span class="status-badge badge badge-sm {% if server.status == 'active' %}badge-success{% elseif server.status == 'deploying' %}badge-warning{% else %}badge-error{% endif %}">
-                        <span class="status-dot w-1.5 h-1.5 rounded-full {% if server.status == 'active' %}bg-success{% elseif server.status == 'deploying' %}bg-warning{% else %}bg-error{% endif %} mr-1"></span>
+                    <span class="status-badge badge badge-sm inline-flex items-center gap-1 {% if server.status == 'active' %}badge-success{% elseif server.status == 'deploying' %}badge-warning{% else %}badge-error{% endif %}">
+                        <span class="status-dot w-1.5 h-1.5 rounded-full inline-block {% if server.status == 'active' %}bg-success{% elseif server.status == 'deploying' %}bg-warning{% else %}bg-error{% endif %}"></span>
                         <span class="status-text">
                             {% if server.status == 'active' %}Active{% elseif server.status == 'deploying' %}Deploying{% else %}Offline{% endif %}
                         </span>
@@ -137,8 +137,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         const badgeClasses = { active: 'badge-success', deploying: 'badge-warning', offline: 'badge-error' };
                         const dotClasses  = { active: 'bg-success', deploying: 'bg-warning', offline: 'bg-error' };
                         const labels      = { active: 'Active', deploying: 'Deploying', offline: 'Offline' };
-                        statusBadge.className = `status-badge badge badge-sm ${badgeClasses[status] || 'badge-error'}`;
-                        statusDot.className = `status-dot w-1.5 h-1.5 rounded-full ${dotClasses[status] || 'bg-error'} mr-1`;
+                         statusBadge.className = `status-badge badge badge-sm inline-flex items-center gap-1 ${badgeClasses[status] || 'badge-error'}`;
+                         statusDot.className = `status-dot w-1.5 h-1.5 rounded-full inline-block ${dotClasses[status] || 'bg-error'}`;
                         statusText.textContent = labels[status] || 'Offline';
                     }
 
