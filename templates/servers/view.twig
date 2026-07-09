@@ -239,7 +239,7 @@
                     {% if client.last_handshake is not empty and client.last_handshake != '0000-00-00 00:00:00' and client.last_handshake != '1970-01-01 00:00:00' and client.last_handshake != '0' %}
                         {% set is_never = false %}
                     {% endif %}
-                    <tr class="hover client-row"
+                    <tr class="hover client-row {% if client.status == 'disabled' %}opacity-55{% endif %}"
                         data-name="{{ client.name }}"
                         data-ip="{{ client.client_ip }}"
                         data-city="{{ client.city|default('') }}"
@@ -254,6 +254,9 @@
                                     </div>
                                 </div>
                                 <span class="text-sm font-medium">{{ client.name }}</span>
+                                {% if client.status == 'disabled' %}
+                                    <span class="badge badge-warning badge-xs">Disabled</span>
+                                {% endif %}
                             </div>
                         </td>
                         <td><code class="text-xs text-base-content/50 font-mono">{{ client.client_ip }}</code></td>
@@ -284,6 +287,19 @@
                         <td class="text-right">
                             <div class="flex items-center justify-end gap-1">
                                 <a href="/clients/{{ client.id }}" class="btn btn-ghost btn-xs" title="View"><i class="fas fa-eye"></i></a>
+                                {% if client.status == 'disabled' %}
+                                    <form method="POST" action="/clients/{{ client.id }}/restore" style="display:inline;">
+                                        <button type="submit" class="btn btn-ghost btn-xs text-success" title="Restore Config">
+                                            <i class="fas fa-play"></i>
+                                        </button>
+                                    </form>
+                                {% else %}
+                                    <form method="POST" action="/clients/{{ client.id }}/revoke" style="display:inline;">
+                                        <button type="submit" class="btn btn-ghost btn-xs text-warning" onclick="return confirm('Revoke config access for {{ client.name }}?')" title="Revoke Config">
+                                            <i class="fas fa-pause"></i>
+                                        </button>
+                                    </form>
+                                {% endif %}
                                 <form method="POST" action="/clients/{{ client.id }}/delete" style="display:inline;">
                                     <button type="submit" class="btn btn-ghost btn-xs text-error" onclick="return confirm('Delete client {{ client.name }}?')" title="Delete">
                                         <i class="fas fa-trash"></i>
@@ -304,7 +320,7 @@
             {% if client.last_handshake is not empty and client.last_handshake != '0000-00-00 00:00:00' and client.last_handshake != '1970-01-01 00:00:00' and client.last_handshake != '0' %}
                 {% set is_never = false %}
             {% endif %}
-            <div class="p-4 client-card"
+            <div class="p-4 client-card {% if client.status == 'disabled' %}opacity-55{% endif %}"
                  data-name="{{ client.name }}"
                  data-ip="{{ client.client_ip }}"
                  data-city="{{ client.city|default('') }}"
@@ -319,7 +335,12 @@
                             </div>
                         </div>
                         <div>
-                            <span class="text-sm font-medium">{{ client.name }}</span>
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-sm font-medium">{{ client.name }}</span>
+                                {% if client.status == 'disabled' %}
+                                    <span class="badge badge-warning badge-xs">Disabled</span>
+                                {% endif %}
+                            </div>
                             <code class="block text-xs text-base-content/40 mt-0.5 font-mono card-ip-value">{{ client.client_ip }}{% if client.city %} ({{ client.city }}){% endif %}</code>
                         </div>
                     </div>
@@ -349,6 +370,19 @@
                 </div>
                 <div class="flex gap-2">
                     <a href="/clients/{{ client.id }}" class="btn btn-ghost btn-sm flex-1 gap-2"><i class="fas fa-eye"></i>View</a>
+                    {% if client.status == 'disabled' %}
+                        <form method="POST" action="/clients/{{ client.id }}/restore" class="flex-1">
+                            <button type="submit" class="btn btn-outline btn-success btn-sm w-full gap-2">
+                                <i class="fas fa-play"></i>Restore
+                            </button>
+                        </form>
+                    {% else %}
+                        <form method="POST" action="/clients/{{ client.id }}/revoke" class="flex-1">
+                            <button type="submit" class="btn btn-outline btn-warning btn-sm w-full gap-2" onclick="return confirm('Revoke config access for {{ client.name }}?')">
+                                <i class="fas fa-pause"></i>Revoke
+                            </button>
+                        </form>
+                    {% endif %}
                     <form method="POST" action="/clients/{{ client.id }}/delete" class="flex-1">
                         <button type="submit" class="btn btn-error btn-outline btn-sm w-full gap-2" onclick="return confirm('Delete client {{ client.name }}?')">
                             <i class="fas fa-trash"></i>Delete
