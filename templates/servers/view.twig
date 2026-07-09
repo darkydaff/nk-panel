@@ -51,6 +51,20 @@
         <!-- Server Info Card -->
         <div class="lg:col-span-2 card bg-base-200 border border-base-300 shadow">
             <div class="card-body p-5">
+                {# Pre-calculate initial stats in Twig #}
+                {% set initial_active_clients = 0 %}
+                {% set initial_total_bytes = 0 %}
+                {% set initial_speed_up = 0 %}
+                {% set initial_speed_down = 0 %}
+                {% for client in clients %}
+                    {% if client.status == 'active' %}
+                        {% set initial_active_clients = initial_active_clients + 1 %}
+                    {% endif %}
+                    {% set initial_total_bytes = initial_total_bytes + (client.bytes_sent|default(0)) + (client.bytes_received|default(0)) %}
+                    {% set initial_speed_up = initial_speed_up + (client.speed_up_kbps|default(0)) %}
+                    {% set initial_speed_down = initial_speed_down + (client.speed_down_kbps|default(0)) %}
+                {% endfor %}
+
                 <h3 class="card-title text-sm mb-4">
                     <i class="fas fa-info-circle text-primary"></i>Server Info
                 </h3>
@@ -70,6 +84,39 @@
                     <div class="bg-base-300/50 p-3 rounded-lg">
                         <span class="text-xs text-base-content/40 block mb-1">Deployed</span>
                         <span class="font-mono text-sm">{{ server.deployed_at|date('Y-m-d H:i') }}</span>
+                    </div>
+                </div>
+
+                <div class="divider my-3"></div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div class="bg-base-300/50 p-3 rounded-lg">
+                        <span class="text-xs text-base-content/40 block mb-1">Active Clients</span>
+                        <span class="font-mono font-medium" id="serverActiveClients">{{ initial_active_clients }} / {{ clients|length }}</span>
+                    </div>
+                    <div class="bg-base-300/50 p-3 rounded-lg">
+                        <span class="text-xs text-base-content/40 block mb-1">Total Traffic</span>
+                        <span class="font-mono text-sm" id="serverTotalTraffic">{{ initial_total_bytes|format_bytes }}</span>
+                    </div>
+                    <div class="bg-base-300/50 p-3 rounded-lg">
+                        <span class="text-xs text-base-content/40 block mb-1">Upload Speed</span>
+                        <span class="font-mono text-sm font-semibold text-success flex items-center gap-1.5" id="serverUploadSpeed">
+                            {% if initial_speed_up > 0 %}
+                                ↑{% if initial_speed_up >= 1000 %}{{ (initial_speed_up / 1000)|number_format(1) }} Mbps{% else %}{{ initial_speed_up|number_format(0) }} Kbps{% endif %}
+                            {% else %}
+                                <span class="text-base-content/20">↑0 Kbps</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="bg-base-300/50 p-3 rounded-lg">
+                        <span class="text-xs text-base-content/40 block mb-1">Download Speed</span>
+                        <span class="font-mono text-sm font-semibold text-indigo-400 flex items-center gap-1.5" id="serverDownloadSpeed">
+                            {% if initial_speed_down > 0 %}
+                                ↓{% if initial_speed_down >= 1000 %}{{ (initial_speed_down / 1000)|number_format(1) }} Mbps{% else %}{{ initial_speed_down|number_format(0) }} Kbps{% endif %}
+                            {% else %}
+                                <span class="text-base-content/20">↓0 Kbps</span>
+                            {% endif %}
+                        </span>
                     </div>
                 </div>
             </div>
@@ -619,9 +666,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
+            let sumActiveClients = 0;
+            let sumTotalBytes = 0;
+            let sumSpeedUp = 0;
+            let sumSpeedDown = 0;
+
             data.clients.forEach(client => {
                 const rawHandshake = client.last_handshake_raw !== null ? client.last_handshake_raw : 'never';
                 const totalBytes = (client.bytes_sent || 0) + (client.bytes_received || 0);
+                sumTotalBytes += totalBytes;
+
+                if (client.status === 'active') {
+                    sumActiveClients++;
+                    sumSpeedUp += parseFloat(client.stats?.speed_up_raw || 0);
+                    sumSpeedDown += parseFloat(client.stats?.speed_down_raw || 0);
+                }
 
                 const row = document.querySelector(`tr.client-row[data-client-id="${client.id}"]`);
                 if (row) {
@@ -677,6 +736,25 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (handshakeValue) handshakeValue.textContent = client.last_handshake || 'Never';
                 }
             });
+
+            // Update server-wide info
+            const serverActiveClients = document.getElementById('serverActiveClients');
+            const serverTotalTraffic = document.getElementById('serverTotalTraffic');
+            const serverUploadSpeed = document.getElementById('serverUploadSpeed');
+            const serverDownloadSpeed = document.getElementById('serverDownloadSpeed');
+
+            if (serverActiveClients) {
+                serverActiveClients.textContent = `${sumActiveClients} / ${data.clients.length}`;
+            }
+            if (serverTotalTraffic) {
+                serverTotalTraffic.textContent = formatBytes(sumTotalBytes);
+            }
+            if (serverUploadSpeed) {
+                serverUploadSpeed.innerHTML = formatSpeed(sumSpeedUp, '↑', 'text-success', 'font-semibold');
+            }
+            if (serverDownloadSpeed) {
+                serverDownloadSpeed.innerHTML = formatSpeed(sumSpeedDown, '↓', 'text-indigo-400', 'font-semibold');
+            }
 
             sortClients();
             applyFilters();
