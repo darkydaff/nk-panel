@@ -1655,7 +1655,13 @@ Router::post('/api/servers/report-metrics', function () {
         // Clean old metrics (older than 24h)
         ServerMonitoring::cleanOldMetrics();
         
-        echo json_encode(['success' => true]);
+        // Fetch current monitoring interval
+        $stmtInterval = $pdo->prepare("SELECT value FROM settings WHERE namespace = 'monitoring' AND `key` = 'interval'");
+        $stmtInterval->execute();
+        $intervalVal = $stmtInterval->fetchColumn();
+        $metricsInterval = $intervalVal ? (int)json_decode($intervalVal, true) : 30;
+        
+        echo json_encode(['success' => true, 'interval' => $metricsInterval]);
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
@@ -2857,6 +2863,26 @@ Router::post('/settings/backup-config', function () {
 
     $_SESSION['settings_success'] = 'Backup configuration saved successfully';
     redirect('/settings#backups');
+});
+
+// Save Monitoring Config
+Router::post('/settings/monitoring-config', function () {
+    requireAdmin();
+    $pdo = DB::conn();
+    $interval = (int)($_POST['interval'] ?? 30);
+
+    // Validate interval to prevent invalid configurations
+    $allowed = [10, 30, 60, 120, 300];
+    if (!in_array($interval, $allowed)) {
+        $interval = 30;
+    }
+
+    $val = json_encode($interval);
+    $stmt = $pdo->prepare("INSERT INTO settings (namespace, `key`, value) VALUES ('monitoring', 'interval', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)");
+    $stmt->execute([$val]);
+
+    $_SESSION['settings_success'] = 'Monitoring configuration saved successfully';
+    redirect('/settings#monitoring');
 });
 
 // Test Telegram Connection (AJAX)

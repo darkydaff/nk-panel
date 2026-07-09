@@ -32,13 +32,25 @@ class SettingsController {
 
         $serversList = VpnServer::listAll();
 
+        // Load monitoring settings
+        $stmtMonitoring = $this->pdo->prepare("SELECT `key`, value FROM settings WHERE namespace = 'monitoring'");
+        $stmtMonitoring->execute();
+        $monitoringRows = $stmtMonitoring->fetchAll(PDO::FETCH_ASSOC);
+        $metricsInterval = 30; // default 30
+        foreach ($monitoringRows as $r) {
+            if ($r['key'] === 'interval') {
+                $metricsInterval = (int)json_decode($r['value'], true);
+            }
+        }
+
         $data = [
             'translation_stats' => $stats,
             'users' => $users,
             'openrouter_key' => $apiKey,
             'backup_settings' => $backupSettings,
             'backups' => $backups,
-            'servers' => $serversList
+            'servers' => $serversList,
+            'metrics_interval' => $metricsInterval
         ];
         
         // Check for session messages

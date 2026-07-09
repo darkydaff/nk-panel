@@ -38,6 +38,9 @@
         <button role="tab" onclick="showTab('backups')" id="tab-backups" class="tab gap-2">
             <i class="fas fa-database"></i>Backups
         </button>
+        <button role="tab" onclick="showTab('monitoring')" id="tab-monitoring" class="tab gap-2">
+            <i class="fas fa-chart-line"></i>Monitoring
+        </button>
         {% endif %}
     </div>
 
@@ -300,6 +303,31 @@
                         {% endfor %}
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Monitoring Tab -->
+    <div id="content-monitoring" class="hidden space-y-6">
+        <div class="card bg-base-200 border border-base-300 shadow overflow-hidden max-w-md">
+            <div class="px-5 py-4 border-b border-base-300 bg-base-300/30">
+                <h2 class="font-semibold flex items-center gap-2"><i class="fas fa-desktop text-primary"></i>Monitoring Settings</h2>
+            </div>
+            <div class="card-body p-5">
+                <form method="POST" action="/settings/monitoring-config" class="space-y-4">
+                    <div class="form-control">
+                        <label class="label py-1"><span class="label-text text-xs font-medium">Metrics Update Interval</span></label>
+                        <select name="interval" class="select select-bordered select-sm w-full">
+                            <option value="10" {% if metrics_interval == 10 %}selected{% endif %}>10 seconds</option>
+                            <option value="30" {% if metrics_interval == 30 %}selected{% endif %}>30 seconds (Default)</option>
+                            <option value="60" {% if metrics_interval == 60 %}selected{% endif %}>1 minute</option>
+                            <option value="120" {% if metrics_interval == 120 %}selected{% endif %}>2 minutes</option>
+                            <option value="300" {% if metrics_interval == 300 %}selected{% endif %}>5 minutes</option>
+                        </select>
+                        <label class="label py-1"><span class="label-text-alt text-base-content/50">Controls how often push agents report stats and local pull fallbacks query servers.</span></label>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm gap-2 w-full"><i class="fas fa-save"></i>Save Config</button>
+                </form>
             </div>
         </div>
     </div>

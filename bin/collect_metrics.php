@@ -74,9 +74,15 @@ while (true) {
         // Clean old metrics
         ServerMonitoring::cleanOldMetrics();
         
+        // Fetch current monitoring interval
+        $stmtInterval = DB::conn()->prepare("SELECT value FROM settings WHERE namespace = 'monitoring' AND `key` = 'interval'");
+        $stmtInterval->execute();
+        $intervalVal = $stmtInterval->fetchColumn();
+        $metricsInterval = $intervalVal ? (int)json_decode($intervalVal, true) : 30;
+
         // Calculate sleep time
         $executionTime = microtime(true) - $startTime;
-        $sleepTime = max(0, 30 - $executionTime);
+        $sleepTime = max(0, $metricsInterval - $executionTime);
         
         echo "[" . date('Y-m-d H:i:s') . "] Collection completed in " . round($executionTime, 2) . "s, sleeping for " . round($sleepTime, 2) . "s\n\n";
         

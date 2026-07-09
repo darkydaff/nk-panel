@@ -1237,6 +1237,12 @@ INI;
      */
     private function generateMonitorScript(string $token, string $panelUrl, string $containerName): string
     {
+        $pdo = DB::conn();
+        $stmtInterval = $pdo->prepare("SELECT value FROM settings WHERE namespace = 'monitoring' AND `key` = 'interval'");
+        $stmtInterval->execute();
+        $intervalVal = $stmtInterval->fetchColumn();
+        $initialInterval = $intervalVal ? (int)json_decode($intervalVal, true) : 30;
+
         return <<<BASH
 #!/bin/bash
 
@@ -1244,7 +1250,7 @@ INI;
 TOKEN="{$token}"
 PANEL_URL="{$panelUrl}"
 CONTAINER_NAME="{$containerName}"
-INTERVAL=30
+INTERVAL={$initialInterval}
 
 # Clean up function
 cleanup() {
@@ -1297,15 +1303,20 @@ while true; do
 EOF
 )
 
-    # POST to panel
-    curl -s -X POST \
+    # POST to panel and read dynamic interval
+    response=\$(curl -s -X POST \
          -H "Content-Type: application/json" \
          -d "\$payload" \
-         "\${PANEL_URL}/api/servers/report-metrics" > /dev/null
+         "\${PANEL_URL}/api/servers/report-metrics")
+         
+    # Parse new interval from JSON response {"success":true,"interval":10}
+    new_interval=\$(echo "\$response" | grep -o '"interval":[0-9]*' | cut -d: -f2)
+    if [ -n "\$new_interval" ] && [ "\$new_interval" -gt 0 ]; then
+        INTERVAL=\$new_interval
+    fi
          
     end_time=\$(date +%s)
-    elapsed=\$((end_time - start_time))
-    sleep_time=\$((INTERVAL - elapsed))
+    sleep_time=\$((INTERVAL - (end_time % INTERVAL)))
     if [ \$sleep_time -gt 0 ]; then
         sleep \$sleep_time
     fi
