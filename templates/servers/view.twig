@@ -52,13 +52,21 @@
         <div class="lg:col-span-2 card bg-base-200 border border-base-300 shadow">
             <div class="card-body p-5">
                 {# Pre-calculate initial stats in Twig #}
-                {% set initial_active_clients = 0 %}
+                {% set initial_online_clients = 0 %}
                 {% set initial_total_bytes = 0 %}
                 {% set initial_speed_up = 0 %}
                 {% set initial_speed_down = 0 %}
+                {% set current_ts = "now"|date('U') %}
                 {% for client in clients %}
-                    {% if client.status == 'active' %}
-                        {% set initial_active_clients = initial_active_clients + 1 %}
+                    {% set is_online = false %}
+                    {% if client.last_handshake is not empty and client.last_handshake != '0000-00-00 00:00:00' and client.last_handshake != '1970-01-01 00:00:00' and client.last_handshake != '0' %}
+                        {% set handshake_ts = client.last_handshake|date('U') %}
+                        {% if (current_ts - handshake_ts) < 300 %}
+                            {% set is_online = true %}
+                        {% endif %}
+                    {% endif %}
+                    {% if is_online %}
+                        {% set initial_online_clients = initial_online_clients + 1 %}
                     {% endif %}
                     {% set initial_total_bytes = initial_total_bytes + (client.bytes_sent|default(0)) + (client.bytes_received|default(0)) %}
                     {% set initial_speed_up = initial_speed_up + (client.speed_up_kbps|default(0)) %}
@@ -91,8 +99,8 @@
 
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div class="bg-base-300/50 p-3 rounded-lg">
-                        <span class="text-xs text-base-content/40 block mb-1">Active Clients</span>
-                        <span class="font-mono font-medium" id="serverActiveClients">{{ initial_active_clients }} / {{ clients|length }}</span>
+                        <span class="text-xs text-base-content/40 block mb-1">Online Clients</span>
+                        <span class="font-mono font-medium" id="serverOnlineClients">{{ initial_online_clients }} / {{ clients|length }}</span>
                     </div>
                     <div class="bg-base-300/50 p-3 rounded-lg">
                         <span class="text-xs text-base-content/40 block mb-1">Total Traffic</span>
@@ -700,18 +708,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
-            let sumActiveClients = 0;
+            let sumOnlineClients = 0;
             let sumTotalBytes = 0;
             let sumSpeedUp = 0;
             let sumSpeedDown = 0;
+            const currentTime = Math.floor(Date.now() / 1000);
 
             data.clients.forEach(client => {
                 const rawHandshake = client.last_handshake_raw !== null ? client.last_handshake_raw : 'never';
                 const totalBytes = (client.bytes_sent || 0) + (client.bytes_received || 0);
                 sumTotalBytes += totalBytes;
 
+                // Check online status (handshake in last 5 minutes)
+                const isNever = rawHandshake === null || rawHandshake === 'never' || rawHandshake <= 0;
+                const isOnline = !isNever && (currentTime - rawHandshake) < 300;
+                if (isOnline) {
+                    sumOnlineClients++;
+                }
+
                 if (client.status === 'active') {
-                    sumActiveClients++;
                     sumSpeedUp += parseFloat(client.stats?.speed_up_raw || 0);
                     sumSpeedDown += parseFloat(client.stats?.speed_down_raw || 0);
                 }
@@ -772,13 +787,13 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             // Update server-wide info
-            const serverActiveClients = document.getElementById('serverActiveClients');
+            const serverOnlineClients = document.getElementById('serverOnlineClients');
             const serverTotalTraffic = document.getElementById('serverTotalTraffic');
             const serverUploadSpeed = document.getElementById('serverUploadSpeed');
             const serverDownloadSpeed = document.getElementById('serverDownloadSpeed');
 
-            if (serverActiveClients) {
-                serverActiveClients.textContent = `${sumActiveClients} / ${data.clients.length}`;
+            if (serverOnlineClients) {
+                serverOnlineClients.textContent = `${sumOnlineClients} / ${data.clients.length}`;
             }
             if (serverTotalTraffic) {
                 serverTotalTraffic.textContent = formatBytes(sumTotalBytes);
