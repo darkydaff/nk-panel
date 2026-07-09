@@ -102,25 +102,25 @@
             <nav class="flex-grow px-3 py-4 overflow-y-auto">
                 <ul class="menu menu-md gap-0.5 p-0 w-full">
                     <li>
-                        <a href="/dashboard" class="{% if current_uri == '/dashboard' %}active{% endif %}">
+                        <a href="/dashboard" class="{% if '/dashboard' in current_uri %}active{% endif %}">
                             <i class="fas fa-tachometer-alt w-4 text-center"></i>
                             <span>{{ t('menu.dashboard') }}</span>
                         </a>
                     </li>
                     <li>
-                        <a href="/servers" class="{% if current_uri starts with '/servers' %}active{% endif %}">
+                        <a href="/servers" class="{% if '/servers' in current_uri %}active{% endif %}">
                             <i class="fas fa-server w-4 text-center"></i>
                             <span>{{ t('menu.servers') }}</span>
                         </a>
                     </li>
                     <li>
-                        <a href="/clients" class="{% if current_uri starts with '/clients' %}active{% endif %}">
+                        <a href="/clients" class="{% if '/clients' in current_uri %}active{% endif %}">
                             <i class="fas fa-users w-4 text-center"></i>
                             <span>Clients</span>
                         </a>
                     </li>
                     <li>
-                        <a href="/routers" class="{% if current_uri starts with '/routers' %}active{% endif %}">
+                        <a href="/routers" class="{% if '/routers' in current_uri %}active{% endif %}">
                             <i class="fas fa-network-wired w-4 text-center"></i>
                             <span>Routers</span>
                         </a>
@@ -132,7 +132,7 @@
             <div class="mt-auto border-t border-base-300 p-3 space-y-3 shrink-0">
                 <ul class="menu menu-md gap-0.5 p-0 w-full">
                     <li>
-                        <a href="/settings" class="{% if current_uri starts with '/settings' %}active{% endif %}">
+                        <a href="/settings" class="{% if '/settings' in current_uri %}active{% endif %}">
                             <i class="fas fa-cog w-4 text-center"></i>
                             <span>{{ t('menu.settings') }}</span>
                         </a>
