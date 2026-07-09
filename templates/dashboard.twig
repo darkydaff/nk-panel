@@ -430,7 +430,7 @@ function initChart() {
                 y: {
                     grid: { color: gridColor, borderDash: [5, 5], drawBorder: false },
                     ticks: { color: textColor, font: { family: 'Inter', size: 10 }, callback: function(value) { return value.toFixed(1) + ' Mbps'; } },
-                    suggestedMin: 0, suggestedMax: 10
+                    min: 0, suggestedMax: 10
                 }
             }
         }
