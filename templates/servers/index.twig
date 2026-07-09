@@ -37,7 +37,7 @@
                             <code class="text-xs text-base-content/50">{{ server.host }}</code>
                         </div>
                     </div>
-                    <span class="status-badge badge badge-sm gap-1 {% if server.status == 'active' %}badge-success{% elseif server.status == 'deploying' %}badge-warning{% else %}badge-error{% endif %}"><span class="status-dot w-1.5 h-1.5 rounded-full {% if server.status == 'active' %}bg-success{% elseif server.status == 'deploying' %}bg-warning{% else %}bg-error{% endif %}"></span><span class="status-text">{% if server.status == 'active' %}Active{% elseif server.status == 'deploying' %}Deploying{% else %}Offline{% endif %}</span></span>
+                    <span class="status-badge badge badge-sm gap-1 {% if server.status == 'active' %}bg-success/10 text-success border-success/20{% elseif server.status == 'deploying' %}bg-warning/10 text-warning border-warning/20{% else %}bg-error/10 text-error border-error/20{% endif %}"><span class="status-dot w-1.5 h-1.5 rounded-full {% if server.status == 'active' %}bg-success{% elseif server.status == 'deploying' %}bg-warning{% else %}bg-error{% endif %}"></span><span class="status-text">{% if server.status == 'active' %}Active{% elseif server.status == 'deploying' %}Deploying{% else %}Offline{% endif %}</span></span>
                 </div>
 
                 <div class="grid grid-cols-2 gap-2 mb-2">
@@ -129,11 +129,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
                     if (statusBadge && statusDot && statusText) {
                         const status = server.status || 'offline';
-                        const badgeClasses = { active: 'badge-success', deploying: 'badge-warning', offline: 'badge-error' };
+                        const badgeClasses = {
+                            active: 'bg-success/10 text-success border-success/20',
+                            deploying: 'bg-warning/10 text-warning border-warning/20',
+                            offline: 'bg-error/10 text-error border-error/20'
+                        };
                         const dotClasses  = { active: 'bg-success', deploying: 'bg-warning', offline: 'bg-error' };
                         const labels      = { active: 'Active', deploying: 'Deploying', offline: 'Offline' };
-                        statusBadge.className = `status-badge badge badge-sm gap-1 ${badgeClasses[status] || 'badge-error'}`;
-                        statusDot.className = `status-dot w-1.5 h-1.5 rounded-full ${dotClasses[status] || 'bg-error'}`;
+                        statusBadge.className = `status-badge badge badge-sm gap-1 ${badgeClasses[status] || badgeClasses.offline}`;
+                        statusDot.className = `status-dot w-1.5 h-1.5 rounded-full ${dotClasses[status] || dotClasses.offline}`;
                         statusText.textContent = labels[status] || 'Offline';
                     }
 

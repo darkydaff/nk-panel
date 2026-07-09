@@ -21,11 +21,11 @@
             <div class="mt-2 ml-13 flex flex-wrap items-center gap-2">
                 <code class="text-xs bg-base-300 px-2 py-1 rounded font-mono text-base-content/60">{{ server.host }}</code>
                 {% if server.status == 'active' %}
-                    <span class="badge badge-success gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-success"></span><span>Active</span></span>
+                    <span class="badge bg-success/10 text-success border-success/20 gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-success"></span><span>Active</span></span>
                 {% else %}
-                    <span class="badge badge-error gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-error"></span><span>{{ server.status }}</span></span>
+                    <span class="badge bg-error/10 text-error border-error/20 gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-error"></span><span>{{ server.status }}</span></span>
                 {% endif %}
-                <span id="agentStatusBadge" class="badge {% if agent_online %}badge-success{% else %}badge-warning{% endif %} gap-1.5"><span class="w-1.5 h-1.5 rounded-full {% if agent_online %}bg-success{% else %}bg-warning{% endif %}" id="agentStatusDot"></span><span id="agentStatusText">{% if agent_online %}Agent Online{% else %}Agent Offline{% endif %}</span></span>
+                <span id="agentStatusBadge" class="badge {% if agent_online %}bg-success/10 text-success border-success/20{% else %}bg-warning/10 text-warning border-warning/20{% endif %} gap-1.5"><span class="w-1.5 h-1.5 rounded-full {% if agent_online %}bg-success{% else %}bg-warning{% endif %}" id="agentStatusDot"></span><span id="agentStatusText">{% if agent_online %}Agent Online{% else %}Agent Offline{% endif %}</span></span>
             </div>
         </div>
         <div class="flex gap-2">
@@ -607,12 +607,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const installAgentBtnText = document.getElementById('installAgentBtnText');
             if (agentStatusBadge && agentStatusDot && agentStatusText) {
                 if (data.agent_online) {
-                    agentStatusBadge.className = 'badge badge-success gap-1.5';
+                    agentStatusBadge.className = 'badge bg-success/10 text-success border-success/20 gap-1.5';
                     agentStatusDot.className = 'w-1.5 h-1.5 rounded-full bg-success';
                     agentStatusText.textContent = 'Agent Online';
                     if (installAgentBtnText) installAgentBtnText.textContent = 'Reinstall Agent';
                 } else {
-                    agentStatusBadge.className = 'badge badge-warning gap-1.5';
+                    agentStatusBadge.className = 'badge bg-warning/10 text-warning border-warning/20 gap-1.5';
                     agentStatusDot.className = 'w-1.5 h-1.5 rounded-full bg-warning';
                     agentStatusText.textContent = 'Agent Offline';
                     if (installAgentBtnText) installAgentBtnText.textContent = 'Install Agent';
