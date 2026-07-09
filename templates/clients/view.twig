@@ -69,57 +69,57 @@
                 {% endif %}
             </div>
         </div>
-        <a href="/servers/{{ client.server_id }}" class="btn-secondary px-4 py-2 text-sm">
-            <i class="fas fa-arrow-left mr-2"></i>Back to Server
+        <a href="/servers/{{ client.server_id }}" class="btn btn-outline btn-sm gap-2">
+            <i class="fas fa-arrow-left"></i>Back to Server
         </a>
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-        <div class="panel p-5 border-slate-800/60 bg-slate-900/60 backdrop-blur hover:-translate-y-0.5 transition-all duration-300">
+        <div class="card bg-base-200 border border-base-300 shadow p-5 hover:-translate-y-0.5 transition-all duration-300">
             <div class="flex items-center justify-between mb-2">
-                <span class="text-xs font-medium text-slate-500 uppercase tracking-wide">Config Uploaded</span>
+                <span class="text-xs font-medium text-base-content/50 uppercase tracking-wide">Config Uploaded</span>
                 <i class="fas fa-arrow-up text-cyan-400 text-sm"></i>
             </div>
-            <div class="text-2xl font-bold text-white font-mono">{{ client.bytes_sent|format_bytes(true) }}</div>
+            <div class="text-2xl font-bold text-base-content font-mono">{{ client.bytes_sent|format_bytes(true) }}</div>
         </div>
-        <div class="panel p-5 border-slate-800/60 bg-slate-900/60 backdrop-blur hover:-translate-y-0.5 transition-all duration-300">
+        <div class="card bg-base-200 border border-base-300 shadow p-5 hover:-translate-y-0.5 transition-all duration-300">
             <div class="flex items-center justify-between mb-2">
-                <span class="text-xs font-medium text-slate-500 uppercase tracking-wide">Config Downloaded</span>
+                <span class="text-xs font-medium text-base-content/50 uppercase tracking-wide">Config Downloaded</span>
                 <i class="fas fa-arrow-down text-blue-400 text-sm"></i>
             </div>
-            <div class="text-2xl font-bold text-white font-mono">{{ client.bytes_received|format_bytes(true) }}</div>
+            <div class="text-2xl font-bold text-base-content font-mono">{{ client.bytes_received|format_bytes(true) }}</div>
         </div>
 
         {# Aggregate Client Traffic card (if linked) #}
         {% if ext_client %}
-        <div class="panel p-5 border-slate-800/60 bg-slate-900/60 backdrop-blur hover:-translate-y-0.5 transition-all duration-300">
+        <div class="card bg-base-200 border border-base-300 shadow p-5 hover:-translate-y-0.5 transition-all duration-300">
             <div class="flex items-center justify-between mb-2">
                 <span class="text-xs font-medium text-indigo-400 uppercase tracking-wide">Total Client Traffic</span>
                 <i class="fas fa-chart-pie text-indigo-400 text-sm"></i>
             </div>
-            <div class="text-lg font-bold text-white font-mono flex flex-col gap-0.5 pt-0.5">
+            <div class="text-lg font-bold text-base-content font-mono flex flex-col gap-0.5 pt-0.5">
                 <span class="text-cyan-400 text-sm">↑{{ ext_client.bytes_sent|default(0)|format_bytes }}</span>
                 <span class="text-indigo-400 text-sm">↓{{ ext_client.bytes_received|default(0)|format_bytes }}</span>
             </div>
         </div>
         {% else %}
-        <div class="panel p-5 border-slate-800/60 bg-slate-900/30 backdrop-blur text-slate-650 flex flex-col justify-center items-center text-center">
+        <div class="card bg-base-200/50 border border-base-300 shadow p-5 text-base-content/40 flex flex-col justify-center items-center text-center">
             <i class="fas fa-link-slash text-base mb-1.5 opacity-40"></i>
-            <span class="text-[10px] uppercase font-semibold tracking-wider text-slate-500">Not Linked to Client</span>
+            <span class="text-[10px] uppercase font-semibold tracking-wider text-base-content/50">Not Linked to Client</span>
         </div>
         {% endif %}
 
-        <div class="panel p-5 border-slate-800/60 bg-slate-900/60 backdrop-blur hover:-translate-y-0.5 transition-all duration-300">
+        <div class="card bg-base-200 border border-base-300 shadow p-5 hover:-translate-y-0.5 transition-all duration-300">
             <div class="flex items-center justify-between mb-2">
-                <span class="text-xs font-medium text-slate-500 uppercase tracking-wide">Current Speed</span>
+                <span class="text-xs font-medium text-base-content/50 uppercase tracking-wide">Current Speed</span>
                 <i class="fas fa-bolt text-emerald-400 text-sm"></i>
             </div>
-            <div class="text-base font-bold text-white font-mono flex flex-col gap-0.5">
+            <div class="text-base font-bold text-base-content font-mono flex flex-col gap-0.5">
                 <span class="text-emerald-400">↑{{ stats.speed_up }}</span>
                 <span class="text-indigo-400">↓{{ stats.speed_down }}</span>
             </div>
         </div>
-        <div class="panel p-5 border-slate-800/60 bg-slate-900/60 backdrop-blur hover:-translate-y-0.5 transition-all duration-300">
+        <div class="card bg-base-200 border border-base-300 shadow p-5 hover:-translate-y-0.5 transition-all duration-300">
             <div class="flex items-center justify-between mb-2">
                 <span class="text-xs font-medium text-slate-500 uppercase tracking-wide">Last Handshake</span>
                 <i class="fas fa-clock text-accent text-sm"></i>
@@ -139,32 +139,32 @@
     </div>
 
     <!-- Client Telemetry Speed Chart -->
-    <div class="panel p-5 border-slate-800 bg-slate-900 shadow-xl rounded-xl mb-6">
+    <div class="card bg-base-200 border border-base-300 shadow p-5 mb-6">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
-                <h3 class="text-base font-semibold text-white flex items-center">
+                <h3 class="text-base font-semibold text-base-content flex items-center">
                     <i class="fas fa-chart-line text-emerald-400 mr-2"></i>Traffic Speed History
                 </h3>
-                <p class="text-xs text-slate-500 mt-1">Real-time upload and download speeds over time</p>
+                <p class="text-xs text-base-content/50 mt-1">Real-time upload and download speeds over time</p>
             </div>
             
-            <div class="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[11px] self-start sm:self-auto select-none" id="chartHoursGroup">
-                <button type="button" class="chart-hours-btn px-3 py-1 rounded-md font-medium transition-all bg-slate-800 text-white" data-hours="24">24h</button>
-                <button type="button" class="chart-hours-btn px-3 py-1 rounded-md font-medium transition-all text-slate-400 hover:text-slate-200" data-hours="12">12h</button>
-                <button type="button" class="chart-hours-btn px-3 py-1 rounded-md font-medium transition-all text-slate-400 hover:text-slate-200" data-hours="6">6h</button>
+            <div class="join self-start sm:self-auto" id="chartHoursGroup">
+                <button type="button" class="join-item chart-hours-btn btn btn-xs btn-active" data-hours="24">24h</button>
+                <button type="button" class="join-item chart-hours-btn btn btn-xs text-base-content/60" data-hours="12">12h</button>
+                <button type="button" class="join-item chart-hours-btn btn btn-xs text-base-content/60" data-hours="6">6h</button>
             </div>
         </div>
         
         <div class="relative h-[220px] w-full" id="chartContainer">
             <canvas id="speedChart"></canvas>
-            <div id="chartLoading" class="absolute inset-0 bg-slate-900/80 flex items-center justify-center rounded-lg">
+            <div id="chartLoading" class="absolute inset-0 bg-base-200/80 flex items-center justify-center rounded-lg">
                 <div class="flex flex-col items-center gap-2">
                     <i class="fas fa-spinner fa-spin text-emerald-400 text-xl"></i>
-                    <span class="text-xs text-slate-500 font-medium">Loading telemetry...</span>
+                    <span class="text-xs text-base-content/50 font-medium">Loading telemetry...</span>
                 </div>
             </div>
-            <div id="chartEmpty" class="absolute inset-0 bg-slate-900 flex items-center justify-center rounded-lg hidden">
-                <div class="flex flex-col items-center gap-1.5 text-slate-500">
+            <div id="chartEmpty" class="absolute inset-0 bg-base-200 flex items-center justify-center rounded-lg hidden">
+                <div class="flex flex-col items-center gap-1.5 text-base-content/50">
                     <i class="fas fa-chart-line text-xl opacity-40"></i>
                     <span class="text-xs">No traffic data recorded in this range</span>
                 </div>
@@ -173,20 +173,24 @@
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pb-8">
-        <div class="panel p-5 border-slate-800/60 bg-slate-900/60 backdrop-blur">
-            <h3 class="text-base font-semibold mb-4 text-white flex items-center">
+        <div class="card bg-base-200 border border-base-300 shadow p-5">
+            <h3 class="text-base font-semibold mb-4 text-base-content flex items-center">
                 <i class="fas fa-edit text-accent mr-2"></i>Client Settings
             </h3>
             
             <form method="POST" action="/clients/{{ client.id }}/update" class="mb-4 space-y-4">
-                <div>
-                    <label class="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Client Name</label>
-                    <input name="name" value="{{ client.name }}" class="input-field w-full px-4 py-2.5 text-sm" required>
+                <div class="form-control">
+                    <label class="label py-1">
+                        <span class="label-text font-medium text-xs">Client Name</span>
+                    </label>
+                    <input name="name" value="{{ client.name }}" class="input input-bordered input-sm w-full" required>
                 </div>
 
-                <div>
-                    <label class="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Link to External DB Client</label>
-                    <select name="ext_client_code" class="input-field w-full px-3 py-2.5 text-sm bg-slate-900 border border-slate-750 rounded-lg text-slate-300 focus:outline-none focus:border-indigo-500 cursor-pointer">
+                <div class="form-control">
+                    <label class="label py-1">
+                        <span class="label-text font-medium text-xs">Link to External DB Client</span>
+                    </label>
+                    <select name="ext_client_code" class="select select-bordered select-sm w-full font-mono">
                         <option value="">None (Unlinked)</option>
                         {% for ext in all_ext_clients %}
                             <option value="{{ ext.code }}" {% if client.ext_client_code == ext.code %}selected{% endif %}>
@@ -197,20 +201,22 @@
                 </div>
 
                 <div class="flex justify-end">
-                    <button type="submit" class="btn-primary px-5 py-2.5 text-sm">
-                        <i class="fas fa-save mr-2"></i>Save Settings
+                    <button type="submit" class="btn btn-primary btn-sm gap-2">
+                        <i class="fas fa-save"></i>Save Settings
                     </button>
                 </div>
             </form>
 
-            <div class="border-t border-slate-700 pt-4">
-                <label class="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Configuration</label>
+            <div class="border-t border-base-300 pt-4 mt-4">
+                <label class="label py-1">
+                    <span class="label-text font-medium text-xs">Configuration</span>
+                </label>
                 <div class="flex flex-wrap gap-2">
-                    <a href="/clients/{{ client.id }}/download" class="btn-secondary px-4 py-2.5 text-sm flex-1 text-center">
-                        <i class="fas fa-download mr-2"></i>Download Config
+                    <a href="/clients/{{ client.id }}/download" class="btn btn-outline btn-sm flex-1 gap-2">
+                        <i class="fas fa-download"></i>Download Config
                     </a>
-                    <button onclick="copyConfig()" id="copyBtn" class="btn-secondary px-4 py-2.5 text-sm flex-1 text-center">
-                        <i class="fas fa-copy mr-2"></i>Copy Config
+                    <button onclick="copyConfig()" id="copyBtn" class="btn btn-outline btn-sm flex-1 gap-2">
+                        <i class="fas fa-copy"></i>Copy Config
                     </button>
                 </div>
             </div>
@@ -218,32 +224,32 @@
         </div>
 
         <div class="flex flex-col gap-4">
-            <div class="panel p-5 border-slate-800/60 bg-slate-900/60 backdrop-blur">
-                <h3 class="text-base font-semibold mb-4 text-white flex items-center">
+            <div class="card bg-base-200 border border-base-300 shadow p-5">
+                <h3 class="text-base font-semibold mb-4 text-base-content flex items-center">
                     <i class="fas fa-cog text-accent mr-2"></i>Actions
                 </h3>
                 <div class="space-y-3">
-                    <button onclick="refreshClientStats()" id="refreshStatsBtn" class="btn-secondary w-full py-2.5 text-sm">
-                        <i class="fas fa-sync-alt mr-2"></i>Sync Stats
+                    <button onclick="refreshClientStats()" id="refreshStatsBtn" class="btn btn-outline btn-sm w-full gap-2">
+                        <i class="fas fa-sync-alt"></i>Sync Stats
                     </button>
                     
                     {% if client.status != 'active' %}
                     <form method="POST" action="/clients/{{ client.id }}/restore">
-                        <button type="submit" class="w-full bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-lg py-2.5 text-sm transition-colors font-medium">
-                            <i class="fas fa-check mr-2"></i>Restore Client
+                        <button type="submit" class="btn btn-outline btn-info btn-sm w-full gap-2">
+                            <i class="fas fa-check"></i>Restore Client
                         </button>
                     </form>
                     {% endif %}
 
                     <form method="POST" action="/clients/{{ client.id }}/reset-traffic" onsubmit="return confirm('Are you sure you want to reset traffic statistics for this client to 0?')">
-                        <button type="submit" class="w-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg py-2.5 text-sm transition-colors font-medium">
-                            <i class="fas fa-undo mr-2"></i>Reset Traffic Stats
+                        <button type="submit" class="btn btn-outline btn-warning btn-sm w-full gap-2">
+                            <i class="fas fa-undo"></i>Reset Traffic Stats
                         </button>
                     </form>
 
                     <form method="POST" action="/clients/{{ client.id }}/delete" onsubmit="return confirm('Delete this client permanently?')">
-                        <button type="submit" class="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg py-2.5 text-sm transition-colors font-medium">
-                            <i class="fas fa-trash-alt mr-2"></i>Delete Client
+                        <button type="submit" class="btn btn-outline btn-error btn-sm w-full gap-2">
+                            <i class="fas fa-trash-alt"></i>Delete Client
                         </button>
                     </form>
                 </div>
@@ -251,8 +257,8 @@
 
             {# Router Configuration Panel #}
             {% if router %}
-            <div class="panel p-5 border-slate-800/60 bg-slate-900/60 backdrop-blur">
-                <h3 class="text-base font-semibold mb-4 text-white flex items-center justify-between">
+            <div class="card bg-base-200 border border-base-300 shadow p-5">
+                <h3 class="text-base font-semibold mb-4 text-base-content flex items-center justify-between">
                     <span class="flex items-center">
                         <i class="fas fa-network-wired text-indigo-400 mr-2"></i>Router Connection
                     </span>
@@ -263,93 +269,93 @@
                     {% elseif router.status == 'error' %}
                         <span class="text-[10px] px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 font-semibold uppercase tracking-wider">Error</span>
                     {% else %}
-                        <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 font-semibold uppercase tracking-wider">Pending</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded bg-base-300 text-base-content/60 border border-base-300 font-semibold uppercase tracking-wider">Pending</span>
                     {% endif %}
                 </h3>
                 
                 <div class="space-y-3 mb-4">
-                    <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-                        <span class="text-xs text-slate-500 uppercase tracking-wide">Domain / IP</span>
+                    <div class="flex justify-between items-center border-b border-base-300/50 pb-2">
+                        <span class="text-xs text-base-content/50 uppercase tracking-wide">Domain / IP</span>
                         <a href="{% if '://' in router.domain %}{{ router.domain }}{% else %}https://{{ router.domain }}{% endif %}" target="_blank" class="text-sm font-mono text-indigo-400 hover:text-indigo-300 underline truncate max-w-[200px]" title="Open router panel: {{ router.domain }}">{{ router.domain }}</a>
                     </div>
-                    <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-                        <span class="text-xs text-slate-500 uppercase tracking-wide">Router Model</span>
-                        <span class="text-sm text-white font-medium">{{ router.router_model|default('Keenetic (Generic)') }}</span>
+                    <div class="flex justify-between items-center border-b border-base-300/50 pb-2">
+                        <span class="text-xs text-base-content/50 uppercase tracking-wide">Router Model</span>
+                        <span class="text-sm text-base-content font-medium">{{ router.router_model|default('Keenetic (Generic)') }}</span>
                     </div>
                     {% if router.wg_interface_id %}
-                    <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-                        <span class="text-xs text-slate-500 uppercase tracking-wide">WG Interface</span>
+                    <div class="flex justify-between items-center border-b border-base-300/50 pb-2">
+                        <span class="text-xs text-base-content/50 uppercase tracking-wide">WG Interface</span>
                         <span class="text-sm font-mono text-cyan-400">{{ router.wg_interface_id }}</span>
                     </div>
                     {% endif %}
                     {% if router.last_push_at %}
-                    <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-                        <span class="text-xs text-slate-500 uppercase tracking-wide">Last Config Push</span>
-                        <span class="text-sm text-slate-300 font-mono">{{ router.last_push_at }}</span>
+                    <div class="flex justify-between items-center border-b border-base-300/50 pb-2">
+                        <span class="text-xs text-base-content/50 uppercase tracking-wide">Last Config Push</span>
+                        <span class="text-sm text-base-content/80 font-mono">{{ router.last_push_at }}</span>
                     </div>
                     {% endif %}
                     {% if router.last_check_at %}
-                    <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-                        <span class="text-xs text-slate-500 uppercase tracking-wide">Last Check</span>
-                        <span class="text-sm text-slate-300 font-mono">{{ router.last_check_at }}</span>
+                    <div class="flex justify-between items-center border-b border-base-300/50 pb-2">
+                        <span class="text-xs text-base-content/50 uppercase tracking-wide">Last Check</span>
+                        <span class="text-sm text-base-content/80 font-mono">{{ router.last_check_at }}</span>
                     </div>
                     {% endif %}
                 </div>
 
                 {% if router.error_message %}
-                <div class="bg-rose-500/10 border border-rose-500/20 rounded-lg p-3 text-[11px] text-rose-400 mb-4 font-mono break-all whitespace-pre-wrap">
+                <div class="alert alert-error text-xs mb-4 font-mono break-all whitespace-pre-wrap">
                     <strong>Error:</strong> {{ router.error_message }}
                 </div>
                 {% endif %}
 
-                <div class="flex flex-wrap gap-2 pt-2 border-t border-slate-800">
-                    <button onclick="triggerViewPush({{ router.id }}, {{ client.id }})" id="viewPushBtn" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors">
+                <div class="flex flex-wrap gap-2 pt-2 border-t border-base-300/50">
+                    <button onclick="triggerViewPush({{ router.id }}, {{ client.id }})" id="viewPushBtn" class="btn btn-primary btn-sm flex-1 gap-1.5">
                         <i class="fas fa-upload"></i>Push Config
                     </button>
-                    <button onclick="triggerViewCheck({{ router.id }})" id="viewCheckBtn" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors">
+                    <button onclick="triggerViewCheck({{ router.id }})" id="viewCheckBtn" class="btn btn-outline btn-sm flex-1 gap-1.5">
                         <i class="fas fa-sync-alt"></i>Check Status
                     </button>
                     {% if router.wg_interface_id %}
-                    <button onclick="triggerViewRemove({{ router.id }})" id="viewRemoveBtn" class="w-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/25 rounded-lg py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors">
+                    <button onclick="triggerViewRemove({{ router.id }})" id="viewRemoveBtn" class="btn btn-outline btn-error btn-sm w-full gap-1.5">
                         <i class="fas fa-trash-alt"></i>Remove Interface
                     </button>
                     {% endif %}
                 </div>
             </div>
             {% elseif client.ext_client_code %}
-            <div class="panel p-5 border-slate-800/60 bg-slate-900/30 backdrop-blur flex flex-col justify-center items-center text-center text-slate-500">
+            <div class="card bg-base-200/50 border border-base-300 shadow p-5 flex flex-col justify-center items-center text-center text-base-content/40">
                 <i class="fas fa-network-wired text-base mb-1.5 opacity-40"></i>
-                <span class="text-[10px] uppercase font-semibold tracking-wider text-slate-500 mb-1">No Router Connected</span>
-                <p class="text-[10px] text-slate-650 max-w-[200px]">Fill the Router Domain and Password fields in the external database for client code <strong>{{ client.ext_client_code }}</strong> to sync it.</p>
+                <span class="text-[10px] uppercase font-semibold tracking-wider text-base-content/50 mb-1">No Router Connected</span>
+                <p class="text-[10px] text-base-content/60 max-w-[200px]">Fill the Router Domain and Password fields in the external database for client code <strong>{{ client.ext_client_code }}</strong> to sync it.</p>
             </div>
             {% endif %}
 
-            <div class="panel p-5 border-slate-800/60 bg-slate-900/60 backdrop-blur">
-                <h3 class="text-base font-semibold mb-4 text-white flex items-center">
-                    <i class="fas fa-globe text-accent mr-2"></i>{{ t('clients.geoip_title') }}
+            <div class="card bg-base-200 border border-base-300 shadow p-5">
+                <h3 class="text-base font-semibold mb-4 text-base-content flex items-center">
+                    <i class="fas fa-globe text-secondary mr-2"></i>{{ t('clients.geoip_title') }}
                 </h3>
                 <div class="space-y-3">
-                    <div class="flex justify-between items-center border-b border-slate-800 pb-2.5">
-                        <span class="text-xs text-slate-500 uppercase tracking-wide">{{ t('clients.last_endpoint') }}</span>
-                        <span class="text-sm font-mono text-white">{{ client.last_endpoint_ip|default('N/A') }}</span>
+                    <div class="flex justify-between items-center border-b border-base-300/50 pb-2.5">
+                        <span class="text-xs text-base-content/50 uppercase tracking-wide">{{ t('clients.last_endpoint') }}</span>
+                        <span class="text-sm font-mono text-base-content">{{ client.last_endpoint_ip|default('N/A') }}</span>
                     </div>
-                    <div class="flex justify-between items-center border-b border-slate-800 pb-2.5">
-                        <span class="text-xs text-slate-500 uppercase tracking-wide">{{ t('clients.country') }}</span>
-                        <span class="text-sm text-white flex items-center">
+                    <div class="flex justify-between items-center border-b border-base-300/50 pb-2.5">
+                        <span class="text-xs text-base-content/50 uppercase tracking-wide">{{ t('clients.country') }}</span>
+                        <span class="text-sm text-base-content flex items-center">
                             {% if client.country %}
-                                <i class="fas fa-flag mr-1.5 text-accent"></i>{{ client.country }}
+                                <i class="fas fa-flag mr-1.5 text-secondary"></i>{{ client.country }}
                             {% else %}
                                 N/A
                             {% endif %}
                         </span>
                     </div>
-                    <div class="flex justify-between items-center border-b border-slate-800 pb-2.5">
-                        <span class="text-xs text-slate-500 uppercase tracking-wide">{{ t('clients.city') }}</span>
-                        <span class="text-sm text-white">{{ client.city|default('N/A') }}</span>
+                    <div class="flex justify-between items-center border-b border-base-300/50 pb-2.5">
+                        <span class="text-xs text-base-content/50 uppercase tracking-wide">{{ t('clients.city') }}</span>
+                        <span class="text-sm text-base-content">{{ client.city|default('N/A') }}</span>
                     </div>
                     <div class="flex justify-between items-start pt-0.5">
-                        <span class="text-xs text-slate-500 uppercase tracking-wide mt-0.5">{{ t('clients.isp') }}</span>
-                        <span class="text-sm text-white text-right break-words max-w-[220px]">{{ client.isp|default('N/A') }}</span>
+                        <span class="text-xs text-base-content/50 uppercase tracking-wide mt-0.5">{{ t('clients.isp') }}</span>
+                        <span class="text-sm text-base-content text-right break-words max-w-[220px]">{{ client.isp|default('N/A') }}</span>
                     </div>
                 </div>
             </div>
