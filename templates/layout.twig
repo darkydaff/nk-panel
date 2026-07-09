@@ -1,14 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="night">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{{ app_name }}{% endblock %}</title>
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
+
     <meta name="theme-color" content="#0f172a">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -16,422 +12,226 @@
     <link rel="apple-touch-icon" href="/img/logo.svg">
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" type="image/svg+xml" href="/img/logo.svg">
-    
-    <script>
-        tailwind = { 
-            config: { 
-                darkMode: 'class',
-                theme: {
-                    extend: {
-                        fontFamily: {
-                            sans: ['Inter', 'sans-serif'],
-                            heading: ['"Space Grotesk"', 'sans-serif'],
-                            mono: ['"Geist Mono"', 'monospace'],
-                        }
-                    }
-                } 
-            } 
-        };
-    </script>
-    <script src="/js/tailwind.min.js"></script>
+
+    <link rel="stylesheet" href="/css/app.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous">
     <script src="/js/chart.umd.min.js"></script>
     {% block styles %}{% endblock %}
-    
-    <style>
-        :root {
-            --bg-base: #0f172a;
-            --bg-elevated: #1e293b;
-            --bg-panel: #1e293b;
-            --accent: #5b8def;
-            --accent-hover: #4a7dd8;
-            --accent-cyan: #38bdf8;
-            --text-primary: #e2e8f0;
-            --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-            --border: #334155;
-            --border-light: #475569;
-            --status-active: #38bdf8;
-            --status-warning: #fbbf24;
-            --status-error: #f87171;
-            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-        }
-
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--bg-base);
-            background-image: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
-            background-attachment: fixed;
-            color: var(--text-primary);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        h1, h2, h3, h4, h5, h6, .font-heading {
-            font-family: 'Space Grotesk', sans-serif;
-        }
-
-        .panel {
-            background: var(--bg-panel);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            box-shadow: var(--shadow);
-        }
-
-        .nav {
-            background: rgba(15, 23, 42, 0.95);
-            border-bottom: 1px solid var(--border);
-        }
-
-        .input-field {
-            background: var(--bg-base);
-            border: 1px solid var(--border);
-            color: var(--text-primary);
-            border-radius: 8px;
-            transition: border-color 0.2s ease;
-        }
-
-        .input-field:focus {
-            border-color: var(--accent);
-            outline: none;
-        }
-
-        .btn-primary {
-            background: var(--accent);
-            color: white;
-            border-radius: 8px;
-            font-weight: 600;
-            transition: background-color 0.2s ease;
-        }
-
-        .btn-primary:hover {
-            background: var(--accent-hover);
-        }
-
-        .btn-secondary {
-            background: rgba(91, 141, 239, 0.1);
-            color: var(--accent);
-            border: 1px solid rgba(91, 141, 239, 0.3);
-            border-radius: 8px;
-            font-weight: 500;
-            transition: all 0.2s ease;
-        }
-
-        .btn-secondary:hover {
-            background: rgba(91, 141, 239, 0.2);
-        }
-
-        .badge-active {
-            background: rgba(56, 189, 248, 0.15);
-            color: var(--status-active);
-            border: 1px solid rgba(56, 189, 248, 0.3);
-        }
-
-        .badge-warning {
-            background: rgba(251, 191, 36, 0.15);
-            color: var(--status-warning);
-            border: 1px solid rgba(251, 191, 36, 0.3);
-        }
-
-        .badge-error {
-            background: rgba(248, 113, 113, 0.15);
-            color: var(--status-error);
-            border: 1px solid rgba(248, 113, 113, 0.3);
-        }
-
-        .text-muted { color: var(--text-muted) !important; }
-        .text-secondary { color: var(--text-secondary) !important; }
-        .text-primary { color: var(--text-primary) !important; }
-        .text-accent { color: var(--accent) !important; }
-        .text-cyan { color: var(--status-active) !important; }
-
-        .bg-panel { background: var(--bg-panel) !important; }
-        .bg-base { background: var(--bg-base) !important; }
-        .border-default { border-color: var(--border) !important; }
-
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
-
-        .mobile-menu { display: none; }
-        .mobile-menu.active { display: block; }
-        .language-dropdown { display: none; }
-        .language-dropdown.active { display: block; }
-
-        @media (max-width: 768px) {
-            .table-wrapper {
-                display: block;
-                overflow-x: auto;
-                -webkit-overflow-scrolling: touch;
-            }
-            .hide-mobile { display: none !important; }
-        }
-
-        .toast-container {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .toast {
-            background: var(--bg-panel);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 14px 18px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
-            min-width: 280px;
-            max-width: 400px;
-            animation: toastIn 0.3s ease;
-        }
-
-        .toast.toast-out {
-            animation: toastOut 0.3s ease forwards;
-        }
-
-        @keyframes toastIn {
-            from { opacity: 0; transform: translateX(100%); }
-            to { opacity: 1; transform: translateX(0); }
-        }
-
-        @keyframes toastOut {
-            from { opacity: 1; transform: translateX(0); }
-            to { opacity: 0; transform: translateX(100%); }
-        }
-
-        .toast-success { border-color: rgba(56, 189, 248, 0.4); }
-        .toast-success .toast-icon { color: var(--status-active); }
-        
-        .toast-error { border-color: rgba(248, 113, 113, 0.4); }
-        .toast-error .toast-icon { color: var(--status-error); }
-        
-        .toast-warning { border-color: rgba(251, 191, 36, 0.4); }
-        .toast-warning .toast-icon { color: var(--status-warning); }
-
-        .toast-message { color: var(--text-primary); font-size: 14px; flex-grow: 1; }
-        .toast-close { 
-            color: var(--text-muted); 
-            cursor: pointer; 
-            padding: 4px;
-            transition: color 0.2s;
-        }
-        .toast-close:hover { color: var(--text-primary); }
-    </style>
 </head>
-<body class="text-slate-100 bg-slate-950 font-sans">
-    {% if user %}
-    <div class="flex min-h-screen bg-slate-950">
-        <!-- Off-canvas Mobile Sidebar Overlay -->
-        <div id="sidebarOverlay" class="fixed inset-0 z-30 bg-black/60 hidden transition-opacity duration-300 md:hidden" onclick="toggleMobileSidebar()"></div>
+<body class="bg-base-100 text-base-content font-sans min-h-screen">
 
-        <!-- Vertical Left Sidebar -->
-        <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 w-64 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out border-r border-slate-800 bg-slate-900 flex flex-col">
-            <!-- Sidebar Header (Logo & Brand) -->
-            <div class="h-16 flex items-center px-6 border-b border-slate-800 gap-3 shrink-0">
-                <img src="/img/logo.svg" alt="Logo" class="w-8 h-8">
-                <span class="text-white text-lg font-bold tracking-tight">{{ app_name }}</span>
-            </div>
+{% if user %}
+<div class="drawer lg:drawer-open min-h-screen">
+    <input id="sidebarDrawer" type="checkbox" class="drawer-toggle">
 
-            <!-- Main Navigation Links -->
-            <nav class="flex-grow px-4 py-6 space-y-1.5 overflow-y-auto">
-                <a href="/dashboard" class="text-slate-300 hover:text-white hover:bg-slate-800/50 px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center gap-3 {% if current_uri == '/dashboard' %}bg-slate-800 text-white font-semibold{% endif %}">
-                    <i class="fas fa-tachometer-alt w-5 text-center opacity-70"></i>
-                    <span>{{ t('menu.dashboard') }}</span>
-                </a>
-                <a href="/servers" class="text-slate-300 hover:text-white hover:bg-slate-800/50 px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center gap-3 {% if current_uri starts with '/servers' %}bg-slate-800 text-white font-semibold{% endif %}">
-                    <i class="fas fa-server w-5 text-center opacity-70"></i>
-                    <span>{{ t('menu.servers') }}</span>
-                </a>
-                <a href="/clients" class="text-slate-300 hover:text-white hover:bg-slate-800/50 px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center gap-3 {% if current_uri starts with '/clients' %}bg-slate-800 text-white font-semibold{% endif %}">
-                    <i class="fas fa-users w-5 text-center opacity-70"></i>
-                    <span>Clients</span>
-                </a>
-                <a href="/routers" class="text-slate-300 hover:text-white hover:bg-slate-800/50 px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center gap-3 {% if current_uri starts with '/routers' %}bg-slate-800 text-white font-semibold{% endif %}">
-                    <i class="fas fa-network-wired w-5 text-center opacity-70"></i>
-                    <span>Routers</span>
-                </a>
-            </nav>
+    <!-- Page content -->
+    <div class="drawer-content flex flex-col min-h-screen">
 
-            <!-- Sidebar Footer (Settings, Profile & Logout) -->
-            <div class="mt-auto border-t border-slate-800 p-4 space-y-4 bg-slate-900/50 shrink-0">
-                <div class="space-y-1">
-                    <a href="/settings" class="text-slate-300 hover:text-white hover:bg-slate-800/50 px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center gap-3 {% if current_uri starts with '/settings' %}bg-slate-800 text-white font-semibold{% endif %}">
-                        <i class="fas fa-cog w-5 text-center opacity-70"></i>
-                        <span>{{ t('menu.settings') }}</span>
-                    </a>
-                    <a href="/logout" class="text-slate-400 hover:text-red-400 hover:bg-red-500/10 px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center gap-3">
-                        <i class="fas fa-sign-out-alt w-5 text-center"></i>
-                        <span>{{ t('menu.logout') }}</span>
-                    </a>
-                </div>
-
-                <div class="border-t border-slate-800 my-2"></div>
-
-                <!-- User Widget -->
-                <div class="flex items-center gap-3 px-2 py-1.5 rounded-lg bg-slate-950/40">
-                    <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-semibold text-xs text-sky-400 border border-slate-700 select-none">
-                        {{ user.name|slice(0, 2)|upper }}
-                    </div>
-                    <div class="flex flex-col min-w-0">
-                        <span class="text-xs font-semibold text-white truncate">{{ user.name }}</span>
-                        <span class="text-[9px] text-slate-500 uppercase tracking-wider">{{ user.role }}</span>
-                    </div>
-                </div>
-            </div>
-        </aside>
-
-        <!-- Right side Viewport -->
-        <div class="flex-1 flex flex-col min-w-0 md:pl-64">
-            <!-- Top Utility Bar -->
-            <header class="h-16 border-b border-slate-800 bg-slate-900/30 backdrop-blur sticky top-0 z-30 flex items-center justify-between px-4 sm:px-6">
-                <!-- Breadcrumbs & Hamburger Menu -->
-                <div class="flex items-center gap-3">
-                    <button onclick="toggleMobileSidebar()" type="button" class="md:hidden text-slate-300 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition-colors focus:outline-none">
-                        <i class="fas fa-bars text-lg"></i>
-                    </button>
-                    <div class="flex items-center text-xs font-medium text-slate-500 gap-1 sm:gap-2">
+        <!-- Top Navbar -->
+        <header class="navbar sticky top-0 z-30 bg-base-200/80 backdrop-blur border-b border-base-300 px-4 h-16 min-h-16 shrink-0">
+            <!-- Mobile hamburger -->
+            <div class="flex items-center gap-3 flex-1">
+                <label for="sidebarDrawer" class="btn btn-square btn-ghost btn-sm lg:hidden">
+                    <i class="fas fa-bars text-base"></i>
+                </label>
+                <!-- Breadcrumbs -->
+                <div class="breadcrumbs text-xs text-base-content/50 p-0 hidden sm:block">
+                    <ul>
                         {% block breadcrumbs %}
-                            <a href="/dashboard" class="hover:text-slate-300 transition-colors">Home</a>
+                            <li><a href="/dashboard" class="hover:text-base-content transition-colors">Home</a></li>
                         {% endblock %}
-                    </div>
+                    </ul>
                 </div>
+            </div>
 
-                <!-- Right Utils (Language Dropdown) -->
-                <div class="flex items-center">
-                    <div class="relative">
-                        <button onclick="toggleLanguageDropdown()" class="text-slate-300 hover:text-white flex items-center px-3 py-2 rounded-lg hover:bg-slate-800 transition-colors focus:outline-none text-sm font-medium">
-                            {% for lang in languages %}
-                                {% if lang.code == current_language %}
-                                    <span class="mr-2">{{ getFlag(lang.code) }}</span>
-                                {% endif %}
-                            {% endfor %}
-                            <i class="fas fa-chevron-down ml-1.5 text-[10px] opacity-70"></i>
-                        </button>
-                        <div id="languageDropdown" class="language-dropdown absolute right-0 mt-2 w-48 panel z-50 shadow-xl p-1 bg-slate-900 border border-slate-800 rounded-lg">
-                            {% for lang in languages %}
-                            <form method="POST" action="/language/change" class="block">
+            <!-- Right: Language Dropdown -->
+            <div class="flex items-center gap-2">
+                <div class="dropdown dropdown-end">
+                    <div tabindex="0" role="button" class="btn btn-ghost btn-sm gap-1.5 font-medium">
+                        {% for lang in languages %}
+                            {% if lang.code == current_language %}
+                                <span>{{ getFlag(lang.code) }}</span>
+                            {% endif %}
+                        {% endfor %}
+                        <i class="fas fa-chevron-down text-[10px] opacity-60"></i>
+                    </div>
+                    <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-200 rounded-box z-50 w-48 p-1 shadow-2xl border border-base-300 mt-1">
+                        {% for lang in languages %}
+                        <li>
+                            <form method="POST" action="/language/change">
                                 <input type="hidden" name="language" value="{{ lang.code }}">
                                 <input type="hidden" name="redirect" value="{{ current_uri }}">
-                                <button type="submit" class="w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg flex items-center transition-colors
-                                    {% if lang.code == current_language %}bg-slate-800 text-white font-medium{% endif %}">
-                                    <span class="mr-3">{{ getFlag(lang.code) }}</span>
-                                    <span>{{ lang.name }}</span>
+                                <button type="submit" class="flex items-center w-full {% if lang.code == current_language %}font-semibold bg-base-300{% endif %}">
+                                    <span class="mr-2">{{ getFlag(lang.code) }}</span>
+                                    <span class="flex-1 text-left">{{ lang.name }}</span>
                                     {% if lang.code == current_language %}
-                                    <i class="fas fa-check text-cyan-400 ml-auto"></i>
+                                        <i class="fas fa-check text-primary ml-auto"></i>
                                     {% endif %}
                                 </button>
                             </form>
-                            {% endfor %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-grow py-6 px-4 sm:px-6 lg:px-8 w-full max-w-7xl mx-auto flex flex-col">
+            {{ block('content') }}
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer footer-center py-4 bg-base-200/30 border-t border-base-300 text-base-content/40 shrink-0">
+            <p class="text-xs font-mono">{{ app_name }} &copy; {{ "now"|date("Y") }}</p>
+        </footer>
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="drawer-side z-40">
+        <label for="sidebarDrawer" aria-label="close sidebar" class="drawer-overlay"></label>
+        <div class="w-64 min-h-full bg-base-200 border-r border-base-300 flex flex-col">
+
+            <!-- Logo & Brand -->
+            <div class="h-16 flex items-center px-6 border-b border-base-300 gap-3 shrink-0">
+                <img src="/img/logo.svg" alt="Logo" class="w-8 h-8">
+                <span class="text-base-content font-bold text-lg tracking-tight">{{ app_name }}</span>
+            </div>
+
+            <!-- Navigation -->
+            <nav class="flex-grow px-3 py-4 overflow-y-auto">
+                <ul class="menu menu-md gap-0.5 p-0 w-full">
+                    <li>
+                        <a href="/dashboard" class="{% if current_uri == '/dashboard' %}nav-active{% endif %}">
+                            <i class="fas fa-tachometer-alt w-4 text-center"></i>
+                            <span>{{ t('menu.dashboard') }}</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/servers" class="{% if current_uri starts with '/servers' %}nav-active{% endif %}">
+                            <i class="fas fa-server w-4 text-center"></i>
+                            <span>{{ t('menu.servers') }}</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/clients" class="{% if current_uri starts with '/clients' %}nav-active{% endif %}">
+                            <i class="fas fa-users w-4 text-center"></i>
+                            <span>Clients</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/routers" class="{% if current_uri starts with '/routers' %}nav-active{% endif %}">
+                            <i class="fas fa-network-wired w-4 text-center"></i>
+                            <span>Routers</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+
+            <!-- Sidebar Footer: Settings, Logout, User -->
+            <div class="mt-auto border-t border-base-300 p-3 space-y-3 shrink-0">
+                <ul class="menu menu-md gap-0.5 p-0 w-full">
+                    <li>
+                        <a href="/settings" class="{% if current_uri starts with '/settings' %}nav-active{% endif %}">
+                            <i class="fas fa-cog w-4 text-center"></i>
+                            <span>{{ t('menu.settings') }}</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/logout" class="text-error hover:bg-error/10 hover:text-error">
+                            <i class="fas fa-sign-out-alt w-4 text-center"></i>
+                            <span>{{ t('menu.logout') }}</span>
+                        </a>
+                    </li>
+                </ul>
+
+                <div class="divider my-0"></div>
+
+                <!-- User Widget -->
+                <div class="flex items-center gap-3 px-2 py-1.5 rounded-xl bg-base-300/50">
+                    <div class="avatar avatar-placeholder">
+                        <div class="bg-neutral text-neutral-content rounded-full w-8 text-xs font-bold border border-base-content/20">
+                            <span>{{ user.name|slice(0, 2)|upper }}</span>
                         </div>
                     </div>
+                    <div class="flex flex-col min-w-0">
+                        <span class="text-xs font-semibold text-base-content truncate">{{ user.name }}</span>
+                        <span class="text-[10px] text-base-content/40 uppercase tracking-wider font-mono">{{ user.role }}</span>
+                    </div>
                 </div>
-            </header>
-
-            <!-- Main Content Workspace -->
-            <main class="flex-grow py-6 px-4 sm:px-6 lg:px-8 w-full max-w-7xl mx-auto flex flex-col">
-                {{ block('content') }}
-            </main>
-
-            <!-- Main Footer -->
-            <footer class="mt-auto border-t border-slate-800 py-4 bg-slate-900/10 text-center shrink-0">
-                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <span class="text-xs text-slate-600">{{ app_name }} &copy; {{ "now"|date("Y") }}</span>
-                </div>
-            </footer>
+            </div>
         </div>
-    </div>
-    {% else %}
-    <main class="flex-grow flex flex-col">
-        {% block content %}{% endblock %}
-    </main>
-    {% endif %}
+    </aside>
+</div>
 
-    <div id="toastContainer" class="toast-container"></div>
+{% else %}
+<main class="flex-grow flex flex-col min-h-screen">
+    {% block content %}{% endblock %}
+</main>
+{% endif %}
 
-    <script>
-        function toggleMobileSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('sidebarOverlay');
-            if (sidebar && overlay) {
-                sidebar.classList.toggle('-translate-x-full');
-                overlay.classList.toggle('hidden');
-            }
+<!-- Toast Container -->
+<div id="toastContainer" class="toast toast-top toast-end z-[9999] gap-2 pointer-events-none"></div>
+
+<script>
+    function showToast(message, type = 'success') {
+        const container = document.getElementById('toastContainer');
+        if (!container) return;
+
+        const toast = document.createElement('div');
+        toast.className = 'alert pointer-events-auto shadow-lg max-w-sm toast-in';
+
+        const icons = {
+            success: 'fa-check-circle',
+            error: 'fa-exclamation-circle',
+            warning: 'fa-exclamation-triangle'
+        };
+        const alertTypes = {
+            success: 'alert-success',
+            error: 'alert-error',
+            warning: 'alert-warning'
+        };
+        toast.classList.add(alertTypes[type] || 'alert-success');
+
+        const escapeHtml = (str) => {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        };
+
+        toast.innerHTML = `
+            <i class="fas ${icons[type] || icons.success}"></i>
+            <span class="text-sm">${escapeHtml(message)}</span>
+            <button class="btn btn-ghost btn-xs btn-circle" onclick="this.closest('.alert').remove()">
+                <i class="fas fa-times text-xs"></i>
+            </button>
+        `;
+
+        container.appendChild(toast);
+
+        setTimeout(() => {
+            toast.classList.remove('toast-in');
+            toast.classList.add('toast-out');
+            setTimeout(() => toast.remove(), 300);
+        }, 4000);
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const urlParams = new URLSearchParams(window.location.search);
+        const successMsg = urlParams.get('success');
+        const errorMsg = urlParams.get('error');
+
+        if (successMsg) {
+            showToast(decodeURIComponent(successMsg), 'success');
+            window.history.replaceState({}, '', window.location.pathname);
         }
-
-        function toggleLanguageDropdown() {
-            const dropdown = document.getElementById('languageDropdown');
-            dropdown.classList.toggle('active');
+        if (errorMsg) {
+            showToast(decodeURIComponent(errorMsg), 'error');
+            window.history.replaceState({}, '', window.location.pathname);
         }
+    });
+</script>
 
-        document.addEventListener('click', function(event) {
-            const languageButton = event.target.closest('button[onclick="toggleLanguageDropdown()"]');
-            const dropdown = document.getElementById('languageDropdown');
-            const isInsideDropdown = dropdown && dropdown.contains(event.target);
-            
-            if (!languageButton && !isInsideDropdown && dropdown) {
-                dropdown.classList.remove('active');
-            }
-        });
-
-        function showToast(message, type = 'success') {
-            const container = document.getElementById('toastContainer');
-            if (!container) return;
-            
-            const toast = document.createElement('div');
-            toast.className = `toast toast-${type}`;
-            
-            const icons = {
-                success: 'fa-check-circle',
-                error: 'fa-exclamation-circle',
-                warning: 'fa-exclamation-triangle'
-            };
-
-            const escapeHtml = (str) => {
-                const div = document.createElement('div');
-                div.textContent = str;
-                return div.innerHTML;
-            };
-
-            toast.innerHTML = `
-                <i class="fas ${icons[type] || icons.success} toast-icon"></i>
-                <span class="toast-message">${escapeHtml(message)}</span>
-                <i class="fas fa-times toast-close" onclick="this.parentElement.remove()"></i>
-            `;
-
-            container.appendChild(toast);
-
-            setTimeout(() => {
-                toast.classList.add('toast-out');
-                setTimeout(() => toast.remove(), 300);
-            }, 4000);
-        }
-
-        document.addEventListener('DOMContentLoaded', function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const successMsg = urlParams.get('success');
-            const errorMsg = urlParams.get('error');
-            
-            if (successMsg) {
-                showToast(decodeURIComponent(successMsg), 'success');
-                const cleanUrl = window.location.pathname;
-                window.history.replaceState({}, '', cleanUrl);
-            }
-            if (errorMsg) {
-                showToast(decodeURIComponent(errorMsg), 'error');
-                const cleanUrl = window.location.pathname;
-                window.history.replaceState({}, '', cleanUrl);
-            }
-        });
-    </script>
-
-    {% block scripts %}{% endblock %}
+{% block scripts %}{% endblock %}
 </body>
 </html>

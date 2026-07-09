@@ -1,0 +1,70 @@
+/* ================================================
+   Google Fonts — must precede all other @imports
+   ================================================ */
+@import url("https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap");
+
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: night --default;
+}
+
+:root {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Space Grotesk", ui-sans-serif, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+h1, h2, h3, h4, h5, h6, .font-heading {
+  font-family: var(--font-heading);
+}
+
+code, pre, kbd, .font-mono {
+  font-family: var(--font-mono);
+}
+
+/* ================================================
+   Custom Scrollbar
+   ================================================ */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: oklch(var(--b3)); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: oklch(var(--bc) / 0.3); }
+
+/* ================================================
+   Toast slide-in animation
+   ================================================ */
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(100%); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes toastOut {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(100%); }
+}
+.toast-in  { animation: toastIn  0.3s ease; }
+.toast-out { animation: toastOut 0.3s ease forwards; }
+
+/* ================================================
+   Sidebar nav active link
+   ================================================ */
+.menu li a.nav-active {
+  background-color: oklch(var(--b3));
+  color: oklch(var(--bc));
+  font-weight: 600;
+}
+
+/* ================================================
+   Speed indicator colours (used in servers index JS)
+   ================================================ */
+.speed-up   { color: oklch(var(--su)); }
+.speed-down { color: #818cf8; } /* indigo-400 equivalent */
+
+/* ================================================
+   Mobile menu state classes (JS-toggled)
+   ================================================ */
+.mobile-menu { display: none; }
+.mobile-menu.active { display: block; }

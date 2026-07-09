@@ -3,95 +3,101 @@
 {% block title %}{{ t('servers.title') }}{% endblock %}
 
 {% block breadcrumbs %}
-    <a href="/dashboard" class="hover:text-slate-300 transition-colors">Home</a>
-    <i class="fas fa-chevron-right text-[10px] text-slate-700 mx-1"></i>
-    <span class="text-slate-300">Servers</span>
+    <li><a href="/dashboard" class="hover:text-base-content transition-colors">Home</a></li>
+    <li><span class="text-base-content/70">Servers</span></li>
 {% endblock %}
 
 {% block content %}
 <div class="w-full">
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div>
-            <h1 class="text-2xl font-bold text-white flex items-center">
-                <div class="w-10 h-10 rounded-lg bg-slate-700 text-accent flex items-center justify-center mr-3">
-                    <i class="fas fa-server"></i>
-                </div>
-                {{ t('servers.title') }}
-            </h1>
-        </div>
-        <a href="/servers/create" class="btn-primary flex items-center px-5 py-2.5 text-sm">
-            <i class="fas fa-plus mr-2"></i> {{ t('servers.add') }}
+        <h1 class="text-2xl font-bold flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-base-300 text-primary flex items-center justify-center">
+                <i class="fas fa-server"></i>
+            </div>
+            {{ t('servers.title') }}
+        </h1>
+        <a href="/servers/create" class="btn btn-primary btn-sm gap-2">
+            <i class="fas fa-plus"></i>
+            {{ t('servers.add') }}
         </a>
     </div>
 
     {% if servers|length > 0 %}
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {% for server in servers %}
-        <div class="panel p-5 border-slate-800/60 bg-slate-900/60 backdrop-blur hover:-translate-y-1 hover:border-slate-700/80 transition-all duration-300 server-card" data-server-id="{{ server.id }}">
-            <div class="flex items-start justify-between mb-4">
-                <div class="flex items-center">
-                    <div class="w-10 h-10 rounded-lg bg-slate-700 text-accent flex items-center justify-center mr-3">
-                        <i class="fas fa-server"></i>
+        <div class="card bg-base-200 border border-base-300 shadow hover:-translate-y-1 hover:border-base-content/20 transition-all duration-300 server-card" data-server-id="{{ server.id }}">
+            <div class="card-body p-5">
+                <div class="flex items-start justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-base-300 text-primary flex items-center justify-center shrink-0">
+                            <i class="fas fa-server"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-semibold text-base-content">{{ server.name }}</h3>
+                            <code class="text-xs text-base-content/50">{{ server.host }}</code>
+                        </div>
                     </div>
-                    <div>
-                        <h3 class="text-white font-semibold">{{ server.name }}</h3>
-                        <code class="text-xs text-slate-400">{{ server.host }}</code>
-                    </div>
-                </div>
-                <span class="status-badge text-xs px-2 py-1 rounded-md flex items-center {% if server.status == 'active' %}badge-active{% elseif server.status == 'deploying' %}badge-warning{% else %}badge-error{% endif %}">
-                    <span class="status-dot w-1.5 h-1.5 rounded-full {% if server.status == 'active' %}bg-cyan-400{% elseif server.status == 'deploying' %}bg-yellow-400{% else %}bg-red-400{% endif %} mr-1.5"></span>
-                    <span class="status-text">
-                        {% if server.status == 'active' %}Active{% elseif server.status == 'deploying' %}Deploying{% else %}Offline{% endif %}
+                    <span class="status-badge badge badge-sm {% if server.status == 'active' %}badge-success{% elseif server.status == 'deploying' %}badge-warning{% else %}badge-error{% endif %}">
+                        <span class="status-dot w-1.5 h-1.5 rounded-full {% if server.status == 'active' %}bg-success{% elseif server.status == 'deploying' %}bg-warning{% else %}bg-error{% endif %} mr-1"></span>
+                        <span class="status-text">
+                            {% if server.status == 'active' %}Active{% elseif server.status == 'deploying' %}Deploying{% else %}Offline{% endif %}
+                        </span>
                     </span>
-                </span>
-            </div>
-            
-            <div class="grid grid-cols-2 gap-2 mb-2 text-xs">
-                <div class="bg-slate-800/50 p-2 rounded">
-                    <span class="text-slate-500 block mb-0.5">VPN Port</span>
-                    <span class="text-slate-300 font-mono">{{ server.vpn_port }}</span>
                 </div>
-                <div class="bg-slate-800/50 p-2 rounded">
-                    <span class="text-slate-500 block mb-0.5">Clients</span>
-                    <span class="text-slate-300 client-count">{{ server.client_count|default(0) }}</span>
+
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                    <div class="bg-base-300/50 p-2 rounded-lg text-xs">
+                        <span class="text-base-content/40 block mb-0.5">VPN Port</span>
+                        <span class="font-mono font-medium">{{ server.vpn_port }}</span>
+                    </div>
+                    <div class="bg-base-300/50 p-2 rounded-lg text-xs">
+                        <span class="text-base-content/40 block mb-0.5">Clients</span>
+                        <span class="font-mono font-medium client-count">{{ server.client_count|default(0) }}</span>
+                    </div>
                 </div>
-            </div>
-            
-            <div class="bg-slate-800/50 p-2 rounded mb-4 text-xs flex justify-between items-center">
-                <span class="text-slate-500">Live Traffic Speed</span>
-                <div class="font-mono text-slate-300 speed-value">
-                    {% if server.speed_up_kbps > 0 or server.speed_down_kbps > 0 %}
-                        <span class="text-emerald-400 font-semibold">
-                            ↑{% if server.speed_up_kbps >= 1000 %}{{ (server.speed_up_kbps / 1000)|number_format(1) }} Mbps{% else %}{{ server.speed_up_kbps|number_format(0) }} Kbps{% endif %}
-                        </span>
-                        <span class="text-slate-600 mx-1">|</span>
-                        <span class="text-indigo-400 font-semibold">
-                            ↓{% if server.speed_down_kbps >= 1000 %}{{ (server.speed_down_kbps / 1000)|number_format(1) }} Mbps{% else %}{{ server.speed_down_kbps|number_format(0) }} Kbps{% endif %}
-                        </span>
-                    {% else %}
-                        <span class="text-slate-500">Idle (0 Kbps)</span>
-                    {% endif %}
+
+                <div class="bg-base-300/50 p-2 rounded-lg mb-3 text-xs flex justify-between items-center">
+                    <span class="text-base-content/40">Live Traffic Speed</span>
+                    <div class="font-mono speed-value">
+                        {% if server.speed_up_kbps > 0 or server.speed_down_kbps > 0 %}
+                            <span class="text-success font-semibold">
+                                ↑{% if server.speed_up_kbps >= 1000 %}{{ (server.speed_up_kbps / 1000)|number_format(1) }} Mbps{% else %}{{ server.speed_up_kbps|number_format(0) }} Kbps{% endif %}
+                            </span>
+                            <span class="text-base-content/20 mx-1">|</span>
+                            <span class="text-indigo-400 font-semibold">
+                                ↓{% if server.speed_down_kbps >= 1000 %}{{ (server.speed_down_kbps / 1000)|number_format(1) }} Mbps{% else %}{{ server.speed_down_kbps|number_format(0) }} Kbps{% endif %}
+                            </span>
+                        {% else %}
+                            <span class="text-base-content/30">Idle (0 Kbps)</span>
+                        {% endif %}
+                    </div>
                 </div>
-            </div>
-            
-            <div class="flex gap-2 pt-3 border-t border-slate-700">
-                <a href="/servers/{{ server.id }}" class="btn-secondary flex-1 text-center py-2 text-xs">
-                    <i class="fas fa-eye mr-1"></i> {{ t('servers.view') }}
-                </a>
+
+                <div class="card-actions border-t border-base-300 pt-3">
+                    <a href="/servers/{{ server.id }}" class="btn btn-outline btn-sm flex-1 gap-2">
+                        <i class="fas fa-eye"></i>
+                        {{ t('servers.view') }}
+                    </a>
+                </div>
             </div>
         </div>
         {% endfor %}
     </div>
     {% else %}
-    <div class="panel p-12 text-center border-slate-800/60 bg-slate-900/60 backdrop-blur">
-        <div class="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-4">
-            <i class="fas fa-server text-slate-600 text-2xl"></i>
+    <div class="card bg-base-200 border border-base-300 shadow">
+        <div class="card-body items-center text-center py-12">
+            <div class="w-16 h-16 rounded-full bg-base-300 flex items-center justify-center mb-4">
+                <i class="fas fa-server text-base-content/20 text-2xl"></i>
+            </div>
+            <h2 class="card-title text-xl">No Servers Yet</h2>
+            <p class="text-base-content/50">Get started by adding your first VPN server.</p>
+            <div class="card-actions mt-2">
+                <a href="/servers/create" class="btn btn-primary gap-2">
+                    <i class="fas fa-plus"></i>
+                    Add Your First Server
+                </a>
+            </div>
         </div>
-        <h2 class="text-xl text-white mb-2">No Servers Yet</h2>
-        <p class="text-slate-400 mb-6">Get started by adding your first VPN server.</p>
-        <a href="/servers/create" class="btn-primary inline-flex items-center px-6 py-3">
-            <i class="fas fa-plus mr-2"></i> Add Your First Server
-        </a>
     </div>
     {% endif %}
 </div>
@@ -103,27 +109,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const speedStr = kbps >= 1000 ? (kbps / 1000).toFixed(1) + ' Mbps' : Math.round(kbps) + ' Kbps';
         return `<span class="${colorClass} ${labelClass || ''}">${arrow}${speedStr}</span>`;
     }
-
     function formatServerCardSpeed(upKbps, downKbps) {
-        if (upKbps <= 0 && downKbps <= 0) {
-            return '<span class="text-slate-500">Idle (0 Kbps)</span>';
-        }
-        
+        if (upKbps <= 0 && downKbps <= 0) return '<span class="text-base-content/30">Idle (0 Kbps)</span>';
         let html = '';
-        if (upKbps > 0) {
-            html += formatSpeed(upKbps, '↑', 'text-emerald-400', 'font-semibold');
-        } else {
-            html += '<span class="text-slate-500">↑0 Kbps</span>';
-        }
-        
-        html += '<span class="text-slate-600 mx-1">|</span>';
-        
-        if (downKbps > 0) {
-            html += formatSpeed(downKbps, '↓', 'text-indigo-400', 'font-semibold');
-        } else {
-            html += '<span class="text-slate-500">↓0 Kbps</span>';
-        }
-        
+        html += upKbps > 0 ? formatSpeed(upKbps, '↑', 'text-success', 'font-semibold') : '<span class="text-base-content/30">↑0 Kbps</span>';
+        html += '<span class="text-base-content/20 mx-1">|</span>';
+        html += downKbps > 0 ? formatSpeed(downKbps, '↓', 'text-indigo-400', 'font-semibold') : '<span class="text-base-content/30">↓0 Kbps</span>';
         return html;
     }
 
@@ -137,35 +128,23 @@ document.addEventListener('DOMContentLoaded', function() {
             data.servers.forEach(server => {
                 const card = document.querySelector(`.server-card[data-server-id="${server.id}"]`);
                 if (card) {
-                    // Update Status Badge
                     const statusBadge = card.querySelector('.status-badge');
                     const statusDot = card.querySelector('.status-dot');
                     const statusText = card.querySelector('.status-text');
-                    
+
                     if (statusBadge && statusDot && statusText) {
                         const status = server.status || 'offline';
-                        if (status === 'active') {
-                            statusBadge.className = 'status-badge text-xs px-2 py-1 rounded-md flex items-center badge-active';
-                            statusDot.className = 'status-dot w-1.5 h-1.5 rounded-full bg-cyan-400 mr-1.5';
-                            statusText.textContent = 'Active';
-                        } else if (status === 'deploying') {
-                            statusBadge.className = 'status-badge text-xs px-2 py-1 rounded-md flex items-center badge-warning';
-                            statusDot.className = 'status-dot w-1.5 h-1.5 rounded-full bg-yellow-400 mr-1.5';
-                            statusText.textContent = 'Deploying';
-                        } else {
-                            statusBadge.className = 'status-badge text-xs px-2 py-1 rounded-md flex items-center badge-error';
-                            statusDot.className = 'status-dot w-1.5 h-1.5 rounded-full bg-red-400 mr-1.5';
-                            statusText.textContent = 'Offline';
-                        }
+                        const badgeClasses = { active: 'badge-success', deploying: 'badge-warning', offline: 'badge-error' };
+                        const dotClasses  = { active: 'bg-success', deploying: 'bg-warning', offline: 'bg-error' };
+                        const labels      = { active: 'Active', deploying: 'Deploying', offline: 'Offline' };
+                        statusBadge.className = `status-badge badge badge-sm ${badgeClasses[status] || 'badge-error'}`;
+                        statusDot.className = `status-dot w-1.5 h-1.5 rounded-full ${dotClasses[status] || 'bg-error'} mr-1`;
+                        statusText.textContent = labels[status] || 'Offline';
                     }
 
-                    // Update Client Count
                     const clientCountEl = card.querySelector('.client-count');
-                    if (clientCountEl) {
-                        clientCountEl.textContent = server.client_count || 0;
-                    }
+                    if (clientCountEl) clientCountEl.textContent = server.client_count || 0;
 
-                    // Update Live Traffic Speed
                     const speedValEl = card.querySelector('.speed-value');
                     if (speedValEl) {
                         const up = parseFloat(server.speed_up_kbps) || 0;
@@ -174,13 +153,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             });
-
-        } catch (error) {
-            console.error('Failed to poll servers index page metrics:', error);
-        }
+        } catch (error) { console.error('Failed to poll servers index page metrics:', error); }
     }
 
-    // Run polling every 8 seconds
     setInterval(pollServers, 8000);
 });
 </script>

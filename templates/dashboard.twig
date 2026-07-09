@@ -3,58 +3,56 @@
 {% block title %}{{ t('dashboard.title') }} - {{ app_name }}{% endblock %}
 
 {% block breadcrumbs %}
-    <span class="text-slate-300">Dashboard</span>
+    <li><a href="/dashboard" class="hover:text-base-content transition-colors">Home</a></li>
+    <li><span class="text-base-content/70">Dashboard</span></li>
 {% endblock %}
 
 {% block content %}
 <div class="w-full space-y-6">
+
+    <!-- Page Header -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-            <h1 class="text-2xl font-bold text-white flex items-center">
-                <div class="w-10 h-10 rounded-lg bg-slate-700 text-accent flex items-center justify-center mr-3">
+            <h1 class="text-2xl font-bold flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-base-300 text-primary flex items-center justify-center">
                     <i class="fas fa-tachometer-alt"></i>
                 </div>
                 {{ t('dashboard.title') }}
             </h1>
-            <p class="mt-2 text-slate-400 italic">{{ t('dashboard.welcome') }}</p>
+            <p class="mt-1 text-sm text-base-content/50 italic">{{ t('dashboard.welcome') }}</p>
         </div>
-        <div>
-            <a href="/servers/create" class="btn-primary px-5 py-2.5 text-sm inline-flex items-center">
-                <i class="fas fa-plus mr-2"></i>
-                {{ t('servers.add') }}
-            </a>
-        </div>
+        <a href="/servers/create" class="btn btn-primary btn-sm gap-2">
+            <i class="fas fa-plus"></i>
+            {{ t('servers.add') }}
+        </a>
     </div>
 
-    <!-- Metrics Cards Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <!-- Servers Card -->
-        <div class="panel p-5 border-slate-800/60 bg-slate-900/60 backdrop-blur hover:-translate-y-1 transition-all duration-300">
-            <div class="flex items-center justify-between mb-3">
-                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Servers</span>
-                <div class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-accent">
-                    <i class="fas fa-server"></i>
-                </div>
+    <!-- Metric Stats Row -->
+    <div class="stats stats-vertical md:stats-horizontal shadow w-full bg-base-200 border border-base-300">
+
+        <!-- Servers Stat -->
+        <div class="stat">
+            <div class="stat-figure text-primary">
+                <i class="fas fa-server text-2xl"></i>
             </div>
-            <div class="text-3xl font-bold text-white font-heading">{{ servers|length }}</div>
+            <div class="stat-title">Total Servers</div>
+            <div class="stat-value font-mono">{{ servers|length }}</div>
             {% set active_servers_count = 0 %}
             {% for s in servers %}
                 {% if s.status == 'active' %}
                     {% set active_servers_count = active_servers_count + 1 %}
                 {% endif %}
             {% endfor %}
-            <p class="text-xs text-slate-500 mt-1.5 font-mono">{{ active_servers_count }} Active / {{ servers|length - active_servers_count }} Offline</p>
+            <div class="stat-desc font-mono">{{ active_servers_count }} Active / {{ servers|length - active_servers_count }} Offline</div>
         </div>
-        
-        <!-- Clients Card -->
-        <div class="panel p-5 border-slate-800/60 bg-slate-900/60 backdrop-blur hover:-translate-y-1 transition-all duration-300">
-            <div class="flex items-center justify-between mb-3">
-                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Clients</span>
-                <div class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-cyan-400">
-                    <i class="fas fa-users"></i>
-                </div>
+
+        <!-- Clients Stat -->
+        <div class="stat">
+            <div class="stat-figure text-info">
+                <i class="fas fa-users text-2xl"></i>
             </div>
-            <div class="text-3xl font-bold text-white font-heading">{{ clients|length }}</div>
+            <div class="stat-title">Total Clients</div>
+            <div class="stat-value font-mono">{{ clients|length }}</div>
             {% set online_clients_count = 0 %}
             {% set offline_clients_count = 0 %}
             {% set never_connected_count = 0 %}
@@ -64,7 +62,6 @@
                 {% if c.last_handshake is not empty and c.last_handshake != '0000-00-00 00:00:00' and c.last_handshake != '1970-01-01 00:00:00' and c.last_handshake != '0' %}
                     {% set is_never = false %}
                 {% endif %}
-                
                 {% if not is_never %}
                     {% set handshake_time = c.last_handshake|date("U") %}
                     {% if (current_time - handshake_time) < 300 %}
@@ -76,274 +73,259 @@
                     {% set never_connected_count = never_connected_count + 1 %}
                 {% endif %}
             {% endfor %}
-            <p class="text-xs text-slate-500 mt-1.5 font-mono">{{ online_clients_count }} Online / {{ offline_clients_count }} Offline / {{ never_connected_count }} Never Connected</p>
+            <div class="stat-desc font-mono">{{ online_clients_count }} Online / {{ offline_clients_count }} Offline / {{ never_connected_count }} Never</div>
         </div>
 
-        <!-- Live Network Speed Card -->
-        <div class="panel p-5 border-slate-800/60 bg-slate-900/60 backdrop-blur hover:-translate-y-1 transition-all duration-300">
-            <div class="flex items-center justify-between mb-3">
-                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Live Network Speed</span>
-                <div class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-emerald-400">
-                    <i class="fas fa-chart-line animate-pulse"></i>
-                </div>
+        <!-- Live Network Speed Stat -->
+        <div class="stat">
+            <div class="stat-figure text-success">
+                <i class="fas fa-chart-line text-2xl animate-pulse"></i>
             </div>
+            <div class="stat-title">Live Network Speed</div>
             {% set total_speed_up = 0 %}
             {% set total_speed_down = 0 %}
             {% for server in servers %}
                 {% set total_speed_up = total_speed_up + server.speed_up_kbps|default(0) %}
                 {% set total_speed_down = total_speed_down + server.speed_down_kbps|default(0) %}
             {% endfor %}
-            <div class="text-3xl font-bold text-white flex items-baseline gap-2 font-mono" id="globalLiveSpeed">
-                <span class="text-emerald-400 text-lg font-semibold upload-speed-value">
-                    ↑{% if total_speed_up >= 1000 %}{{ (total_speed_up / 1000)|number_format(1) }} <span class="text-[10px] font-normal text-slate-500">Mbps</span>{% else %}{{ total_speed_up|number_format(0) }} <span class="text-[10px] font-normal text-slate-500">Kbps</span>{% endif %}
+            <div class="stat-value text-lg font-mono" id="globalLiveSpeed">
+                <span class="text-success text-base font-semibold upload-speed-value">
+                    ↑{% if total_speed_up >= 1000 %}{{ (total_speed_up / 1000)|number_format(1) }} <span class="text-[10px] font-normal text-base-content/40">Mbps</span>{% else %}{{ total_speed_up|number_format(0) }} <span class="text-[10px] font-normal text-base-content/40">Kbps</span>{% endif %}
                 </span>
-                <span class="text-slate-600 text-sm">/</span>
-                <span class="text-indigo-400 text-lg font-semibold download-speed-value">
-                    ↓{% if total_speed_down >= 1000 %}{{ (total_speed_down / 1000)|number_format(1) }} <span class="text-[10px] font-normal text-slate-500">Mbps</span>{% else %}{{ total_speed_down|number_format(0) }} <span class="text-[10px] font-normal text-slate-500">Kbps</span>{% endif %}
+                <span class="text-base-content/30 text-sm mx-1">/</span>
+                <span class="text-indigo-400 text-base font-semibold download-speed-value">
+                    ↓{% if total_speed_down >= 1000 %}{{ (total_speed_down / 1000)|number_format(1) }} <span class="text-[10px] font-normal text-base-content/40">Mbps</span>{% else %}{{ total_speed_down|number_format(0) }} <span class="text-[10px] font-normal text-base-content/40">Kbps</span>{% endif %}
                 </span>
             </div>
-            <p class="text-xs text-slate-500 mt-1.5">Aggregate upload / download</p>
+            <div class="stat-desc">Aggregate upload / download</div>
         </div>
     </div>
 
     <!-- Subscription Health Section -->
-    <div class="panel border-slate-800/60 bg-slate-900/40 p-5 space-y-4">
-        <div>
-            <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Subscription Health Overview</h3>
-            <p class="text-xs text-slate-500 mt-1">Sync status of client subscriptions from external DB. Click card to view list.</p>
-        </div>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <!-- Active Subscriptions -->
-            <a href="/clients?filter=active" class="panel p-4 border-slate-800 bg-slate-900/60 hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all flex items-center gap-4 group">
-                <div class="w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0 group-hover:bg-emerald-500/20 transition-all">
-                    <i class="fas fa-calendar-check text-base"></i>
-                </div>
-                <div>
-                    <div class="text-2xl font-bold text-white font-mono">{{ sub_stats.active }}</div>
-                    <div class="text-[11px] text-slate-500 font-medium group-hover:text-slate-400 transition-colors">Active (10+ days)</div>
-                </div>
-            </a>
-
-            <!-- Expiring Soon -->
-            <a href="/clients?filter=expiring" class="panel p-4 border-slate-800 bg-slate-900/60 hover:border-amber-500/30 hover:bg-amber-500/5 transition-all flex items-center gap-4 group">
-                <div class="w-10 h-10 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center shrink-0 group-hover:bg-amber-500/20 transition-all">
-                    <i class="fas fa-calendar-minus text-base animate-pulse"></i>
-                </div>
-                <div>
-                    <div class="text-2xl font-bold text-white font-mono">{{ sub_stats.expiring_soon }}</div>
-                    <div class="text-[11px] text-slate-500 font-medium group-hover:text-slate-400 transition-colors">Expiring Soon</div>
-                </div>
-            </a>
-
-            <!-- Expired -->
-            <a href="/clients?filter=expired" class="panel p-4 border-slate-800 bg-slate-900/60 hover:border-rose-500/30 hover:bg-rose-500/5 transition-all flex items-center gap-4 group">
-                <div class="w-10 h-10 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center shrink-0 group-hover:bg-rose-500/20 transition-all">
-                    <i class="fas fa-calendar-times text-base"></i>
-                </div>
-                <div>
-                    <div class="text-2xl font-bold text-white font-mono">{{ sub_stats.expired }}</div>
-                    <div class="text-[11px] text-slate-500 font-medium group-hover:text-slate-400 transition-colors">Expired</div>
-                </div>
-            </a>
-
-            <!-- Paused -->
-            <a href="/clients?filter=paused" class="panel p-4 border-slate-800 bg-slate-900/60 hover:border-sky-500/30 hover:bg-sky-500/5 transition-all flex items-center gap-4 group">
-                <div class="w-10 h-10 rounded-lg bg-sky-500/10 text-sky-400 flex items-center justify-center shrink-0 group-hover:bg-sky-500/20 transition-all">
-                    <i class="fas fa-pause-circle text-base"></i>
-                </div>
-                <div>
-                    <div class="text-2xl font-bold text-white font-mono">{{ sub_stats.paused }}</div>
-                    <div class="text-[11px] text-slate-500 font-medium group-hover:text-slate-400 transition-colors">Paused</div>
-                </div>
-            </a>
+    <div class="card bg-base-200 border border-base-300 shadow">
+        <div class="card-body p-5 space-y-4">
+            <div>
+                <h3 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">Subscription Health Overview</h3>
+                <p class="text-xs text-base-content/40 mt-1">Sync status of client subscriptions from external DB. Click card to view list.</p>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <!-- Active -->
+                <a href="/clients?filter=active" class="card bg-base-300 border border-success/20 hover:border-success/40 hover:bg-success/5 transition-all group">
+                    <div class="card-body p-4 flex-row items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-success/10 text-success flex items-center justify-center shrink-0 group-hover:bg-success/20 transition-all">
+                            <i class="fas fa-calendar-check"></i>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold font-mono">{{ sub_stats.active }}</div>
+                            <div class="text-[11px] text-base-content/40 font-medium">Active (10+ days)</div>
+                        </div>
+                    </div>
+                </a>
+                <!-- Expiring Soon -->
+                <a href="/clients?filter=expiring" class="card bg-base-300 border border-warning/20 hover:border-warning/40 hover:bg-warning/5 transition-all group">
+                    <div class="card-body p-4 flex-row items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-warning/10 text-warning flex items-center justify-center shrink-0 group-hover:bg-warning/20 transition-all">
+                            <i class="fas fa-calendar-minus animate-pulse"></i>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold font-mono">{{ sub_stats.expiring_soon }}</div>
+                            <div class="text-[11px] text-base-content/40 font-medium">Expiring Soon</div>
+                        </div>
+                    </div>
+                </a>
+                <!-- Expired -->
+                <a href="/clients?filter=expired" class="card bg-base-300 border border-error/20 hover:border-error/40 hover:bg-error/5 transition-all group">
+                    <div class="card-body p-4 flex-row items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-error/10 text-error flex items-center justify-center shrink-0 group-hover:bg-error/20 transition-all">
+                            <i class="fas fa-calendar-times"></i>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold font-mono">{{ sub_stats.expired }}</div>
+                            <div class="text-[11px] text-base-content/40 font-medium">Expired</div>
+                        </div>
+                    </div>
+                </a>
+                <!-- Paused -->
+                <a href="/clients?filter=paused" class="card bg-base-300 border border-info/20 hover:border-info/40 hover:bg-info/5 transition-all group">
+                    <div class="card-body p-4 flex-row items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-info/10 text-info flex items-center justify-center shrink-0 group-hover:bg-info/20 transition-all">
+                            <i class="fas fa-pause-circle"></i>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold font-mono">{{ sub_stats.paused }}</div>
+                            <div class="text-[11px] text-base-content/40 font-medium">Paused</div>
+                        </div>
+                    </div>
+                </a>
+            </div>
         </div>
     </div>
 
-    <!-- Network Traffic & Bandwidth Chart Panel -->
-    <div class="panel border-slate-800/60 bg-slate-900/60 backdrop-blur p-5 space-y-4">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div class="flex items-center gap-2.5">
-                <div class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-                <h2 class="text-base font-semibold text-white">Network Traffic & Bandwidth</h2>
-            </div>
-            
-            <div class="flex flex-wrap items-center gap-2">
-                <!-- Server Selector -->
-                <select id="chartServerSelect" class="bg-slate-800 border border-slate-700/80 text-slate-300 text-xs px-2.5 py-1.5 rounded-lg focus:outline-none focus:border-accent">
-                    <option value="">All Servers</option>
-                    {% for server in servers %}
-                        {% if server.status == 'active' %}
-                            <option value="{{ server.id }}">{{ server.name }}</option>
-                        {% endif %}
-                    {% endfor %}
-                </select>
-                
-                <!-- Time/Mode Selector Buttons -->
-                <div class="inline-flex rounded-lg bg-slate-800 p-0.5 border border-slate-700/50">
-                    <button id="btnChartModeLive" onclick="setChartMode('live')" class="px-3 py-1 text-[11px] font-medium rounded-md transition-all bg-accent text-white shadow">
-                        Live Speed
-                    </button>
-                    <button id="btnChartModeHistory" onclick="setChartMode('history')" class="px-3 py-1 text-[11px] font-medium rounded-md transition-all text-slate-400 hover:text-white">
-                        Last 24h
-                    </button>
+    <!-- Network Traffic Chart Panel -->
+    <div class="card bg-base-200 border border-base-300 shadow">
+        <div class="card-body p-5 space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-2 h-2 rounded-full bg-success animate-pulse"></div>
+                    <h2 class="text-base font-semibold">Network Traffic &amp; Bandwidth</h2>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <!-- Server Selector -->
+                    <select id="chartServerSelect" class="select select-sm select-bordered text-xs">
+                        <option value="">All Servers</option>
+                        {% for server in servers %}
+                            {% if server.status == 'active' %}
+                                <option value="{{ server.id }}">{{ server.name }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                    <!-- Mode Toggle -->
+                    <div class="join">
+                        <button id="btnChartModeLive" onclick="setChartMode('live')" class="btn btn-xs join-item btn-primary">Live Speed</button>
+                        <button id="btnChartModeHistory" onclick="setChartMode('history')" class="btn btn-xs join-item btn-ghost">Last 24h</button>
+                    </div>
                 </div>
             </div>
-        </div>
-        
-        <div class="relative w-full h-[260px] bg-slate-950/20 rounded-lg p-2">
-            <canvas id="networkTrafficChart" class="w-full h-full"></canvas>
+            <div class="relative w-full h-[260px] bg-base-300/30 rounded-xl p-2">
+                <canvas id="networkTrafficChart" class="w-full h-full"></canvas>
+            </div>
         </div>
     </div>
 
     <!-- Client Locations Map Panel -->
-    <div class="panel overflow-hidden relative">
-        <div class="px-5 py-4 border-b border-slate-700 flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-white flex items-center">
-                <i class="fas fa-globe-americas text-accent mr-2"></i>
-                Client Locations Map
-            </h2>
-            <span class="text-xs text-slate-500 font-mono" id="mapStatus">Loading clients...</span>
-        </div>
-        <div class="relative w-full h-[400px]">
-            <!-- Leaflet Map Container -->
-            <div id="clientsMap" class="w-full h-full bg-slate-950/20"></div>
-            
-            <!-- Dynamic Client Info Overlay Panel (Initially Hidden) -->
-            <div id="mapClientCard" class="absolute top-4 right-4 z-[1000] w-72 bg-slate-900/95 backdrop-blur-md border border-slate-700/80 rounded-xl p-4 shadow-2xl hidden transition-all duration-300 transform translate-y-2 opacity-0 flex flex-col max-h-[350px]">
-                
-                <!-- View 1: List of Clients in Location -->
-                <div id="cardListView" class="flex flex-col h-full overflow-hidden">
-                    <div class="flex items-start justify-between mb-3 shrink-0">
-                        <div class="min-w-0">
-                            <h4 id="cardLocationTitle" class="text-sm font-semibold text-white truncate pr-2">City, Country</h4>
-                            <span id="cardClientCount" class="text-[10px] text-slate-500 font-medium">0 clients</span>
-                        </div>
-                        <button onclick="closeMapCard()" class="text-slate-500 hover:text-white transition-colors focus:outline-none">
-                            <i class="fas fa-times text-xs"></i>
-                        </button>
-                    </div>
-                    <div id="cardClientList" class="space-y-2 overflow-y-auto pr-1 flex-grow scrollbar-thin">
-                        <!-- Dynamic list items will be injected here -->
-                    </div>
-                </div>
+    <div class="card bg-base-200 border border-base-300 shadow overflow-hidden">
+        <div class="card-body p-0">
+            <div class="px-5 py-4 border-b border-base-300 flex items-center justify-between">
+                <h2 class="text-base font-semibold flex items-center gap-2">
+                    <i class="fas fa-globe-americas text-primary"></i>
+                    Client Locations Map
+                </h2>
+                <span class="text-xs text-base-content/40 font-mono" id="mapStatus">Loading clients...</span>
+            </div>
+            <div class="relative w-full h-[400px]">
+                <div id="clientsMap" class="w-full h-full bg-base-300/20"></div>
 
-                <!-- View 2: Single Client Detail View -->
-                <div id="cardDetailView" class="hidden flex flex-col h-full overflow-hidden">
-                    <div class="flex items-start justify-between mb-3 shrink-0">
-                        <div class="flex flex-col min-w-0">
-                            <button id="cardBackButton" class="text-[10px] text-accent hover:text-blue-300 font-medium mb-1.5 flex items-center gap-1 focus:outline-none w-max">
-                                <i class="fas fa-chevron-left text-[8px]"></i> Back to List
+                <!-- Dynamic Client Info Overlay Panel -->
+                <div id="mapClientCard" class="absolute top-4 right-4 z-[1000] w-72 bg-base-200/95 backdrop-blur-md border border-base-300 rounded-2xl p-4 shadow-2xl hidden transition-all duration-300 transform translate-y-2 opacity-0 flex flex-col max-h-[350px]">
+
+                    <!-- View 1: List of Clients in Location -->
+                    <div id="cardListView" class="flex flex-col h-full overflow-hidden">
+                        <div class="flex items-start justify-between mb-3 shrink-0">
+                            <div class="min-w-0">
+                                <h4 id="cardLocationTitle" class="text-sm font-semibold text-base-content truncate pr-2">City, Country</h4>
+                                <span id="cardClientCount" class="text-[10px] text-base-content/40 font-medium">0 clients</span>
+                            </div>
+                            <button onclick="closeMapCard()" class="btn btn-ghost btn-xs btn-circle">
+                                <i class="fas fa-times text-xs"></i>
                             </button>
-                            <h4 id="cardClientName" class="text-sm font-semibold text-white truncate max-w-[200px]">Client Name</h4>
-                            <span id="cardClientStatus" class="inline-flex items-center text-[10px] px-2 py-0.5 rounded-full font-medium mt-1 w-max">Status</span>
                         </div>
-                        <button onclick="closeMapCard()" class="text-slate-500 hover:text-white transition-colors focus:outline-none">
-                            <i class="fas fa-times text-xs"></i>
-                        </button>
+                        <div id="cardClientList" class="space-y-2 overflow-y-auto pr-1 flex-grow"></div>
                     </div>
-                    
-                    <div class="space-y-2 text-xs overflow-y-auto pr-1 flex-grow scrollbar-thin">
-                        <div class="flex justify-between items-center border-b border-slate-800 pb-1.5">
-                            <span class="text-slate-500">IP Address</span>
-                            <code id="cardClientIp" class="text-[10px] bg-slate-950/50 px-1.5 py-0.5 rounded text-slate-300 font-mono">10.0.0.2</code>
+
+                    <!-- View 2: Single Client Detail View -->
+                    <div id="cardDetailView" class="hidden flex flex-col h-full overflow-hidden">
+                        <div class="flex items-start justify-between mb-3 shrink-0">
+                            <div class="flex flex-col min-w-0">
+                                <button id="cardBackButton" class="text-[10px] text-primary hover:text-primary/70 font-medium mb-1.5 flex items-center gap-1 w-max btn-ghost btn-xs px-0">
+                                    <i class="fas fa-chevron-left text-[8px]"></i> Back to List
+                                </button>
+                                <h4 id="cardClientName" class="text-sm font-semibold text-base-content truncate max-w-[200px]">Client Name</h4>
+                                <span id="cardClientStatus" class="badge badge-sm mt-1 w-max">Status</span>
+                            </div>
+                            <button onclick="closeMapCard()" class="btn btn-ghost btn-xs btn-circle">
+                                <i class="fas fa-times text-xs"></i>
+                            </button>
                         </div>
-                        <div class="flex justify-between items-center border-b border-slate-800 pb-1.5">
-                            <span class="text-slate-500">Server</span>
-                            <span id="cardClientServer" class="text-slate-300 font-medium truncate max-w-[155px] text-right">Server Name</span>
+
+                        <div class="space-y-2 text-xs overflow-y-auto pr-1 flex-grow">
+                            <div class="flex justify-between items-center border-b border-base-300 pb-1.5">
+                                <span class="text-base-content/50">IP Address</span>
+                                <code id="cardClientIp" class="text-[10px] bg-base-300 px-1.5 py-0.5 rounded font-mono">10.0.0.2</code>
+                            </div>
+                            <div class="flex justify-between items-center border-b border-base-300 pb-1.5">
+                                <span class="text-base-content/50">Server</span>
+                                <span id="cardClientServer" class="font-medium truncate max-w-[155px] text-right">Server Name</span>
+                            </div>
+                            <div class="flex justify-between items-center border-b border-base-300 pb-1.5">
+                                <span class="text-base-content/50">Location</span>
+                                <span id="cardClientLoc" class="font-medium">City, Country</span>
+                            </div>
+                            <div class="flex justify-between items-center border-b border-base-300 pb-1.5">
+                                <span class="text-base-content/50">ISP</span>
+                                <span id="cardClientIsp" class="font-medium truncate max-w-[150px] text-right">ISP Name</span>
+                            </div>
+                            <div class="flex justify-between items-center border-b border-base-300 pb-1.5">
+                                <span class="text-base-content/50">Total Traffic</span>
+                                <span id="cardClientTraffic" class="font-mono">0 MB</span>
+                            </div>
+                            <div class="flex justify-between items-center pb-1">
+                                <span class="text-base-content/50">Last Active</span>
+                                <span id="cardClientLastSeen">Never</span>
+                            </div>
                         </div>
-                        <div class="flex justify-between items-center border-b border-slate-800 pb-1.5">
-                            <span class="text-slate-500">Location</span>
-                            <span id="cardClientLoc" class="text-slate-300 font-medium">City, Country</span>
+
+                        <div class="mt-3 pt-2.5 border-t border-base-300 shrink-0">
+                            <a id="cardClientLink" href="#" class="btn btn-outline btn-primary btn-sm w-full">
+                                View Client Details <i class="fas fa-arrow-right ml-1"></i>
+                            </a>
                         </div>
-                        <div class="flex justify-between items-center border-b border-slate-800 pb-1.5">
-                            <span class="text-slate-500">ISP</span>
-                            <span id="cardClientIsp" class="text-slate-300 font-medium truncate max-w-[150px] text-right">ISP Name</span>
-                        </div>
-                        <div class="flex justify-between items-center border-b border-slate-800 pb-1.5">
-                            <span class="text-slate-500">Total Traffic</span>
-                            <span id="cardClientTraffic" class="text-slate-300 font-mono">0 MB</span>
-                        </div>
-                        <div class="flex justify-between items-center pb-1">
-                            <span class="text-slate-500">Last Active</span>
-                            <span id="cardClientLastSeen" class="text-slate-300">Never</span>
-                        </div>
-                    </div>
-                    
-                    <div class="mt-3 pt-2.5 border-t border-slate-800 shrink-0">
-                        <a id="cardClientLink" href="#" class="btn-secondary w-full py-2 text-center text-xs block">
-                            View Client Details <i class="fas fa-arrow-right ml-1"></i>
-                        </a>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+
 </div>
 {% endblock %}
 
 {% block styles %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous" />
 <style>
-    /* Customize Leaflet map appearance */
     .leaflet-container {
-        background: #0f172a !important;
+        background: oklch(var(--b1)) !important;
         font-family: inherit;
     }
-    /* Style Leaflet controls to match dark theme */
     .leaflet-bar {
-        border: 1px solid var(--border) !important;
+        border: 1px solid oklch(var(--b3)) !important;
         box-shadow: none !important;
         border-radius: 8px !important;
         overflow: hidden;
     }
     .leaflet-bar a {
-        background-color: var(--bg-panel) !important;
-        color: var(--text-primary) !important;
-        border-bottom: 1px solid var(--border) !important;
+        background-color: oklch(var(--b2)) !important;
+        color: oklch(var(--bc)) !important;
+        border-bottom: 1px solid oklch(var(--b3)) !important;
         transition: background-color 0.2s;
     }
     .leaflet-bar a:hover {
-        background-color: var(--border-light) !important;
-        color: white !important;
+        background-color: oklch(var(--b3)) !important;
+        color: oklch(var(--bc)) !important;
     }
-    .leaflet-bar a:last-child {
-        border-bottom: none !important;
-    }
-    /* Style Attributions */
+    .leaflet-bar a:last-child { border-bottom: none !important; }
     .leaflet-control-attribution {
-        background: rgba(15, 23, 42, 0.8) !important;
-        color: var(--text-muted) !important;
+        background: oklch(var(--b1) / 0.8) !important;
+        color: oklch(var(--bc) / 0.4) !important;
         font-size: 9px !important;
     }
-    .leaflet-control-attribution a {
-        color: var(--accent) !important;
-    }
-    
-    /* Custom map markers */
-    .custom-map-marker {
-        background: transparent !important;
-        border: none !important;
-    }
+    .leaflet-control-attribution a { color: oklch(var(--p)) !important; }
+    .custom-map-marker { background: transparent !important; border: none !important; }
 </style>
 {% endblock %}
 
 {% block scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
 <script>
-// Global function to close overlay card
 function closeMapCard() {
     const card = document.getElementById('mapClientCard');
     if (card) {
         card.classList.add('translate-y-2', 'opacity-0');
-        setTimeout(() => {
-            card.classList.add('hidden');
-        }, 300);
+        setTimeout(() => { card.classList.add('hidden'); }, 300);
     }
 }
 
-// Chart.js State variables
+// Chart.js State
 let trafficChart = null;
-let chartMode = 'live'; // 'live' or 'history'
+let chartMode = 'live';
 let selectedServerId = '';
 
 const MAX_LIVE_POINTS = 15;
@@ -355,19 +337,18 @@ function initChart() {
     const canvas = document.getElementById('networkTrafficChart');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    
-    // Setup gradients
+
     const uploadGradient = ctx.createLinearGradient(0, 0, 0, 240);
     uploadGradient.addColorStop(0, 'rgba(16, 185, 129, 0.12)');
     uploadGradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
-    
+
     const downloadGradient = ctx.createLinearGradient(0, 0, 0, 240);
     downloadGradient.addColorStop(0, 'rgba(99, 102, 241, 0.12)');
     downloadGradient.addColorStop(1, 'rgba(99, 102, 241, 0.0)');
-    
+
     const gridColor = 'rgba(255, 255, 255, 0.03)';
     const textColor = 'rgba(255, 255, 255, 0.4)';
-    
+
     trafficChart = new Chart(ctx, {
         type: 'line',
         plugins: [{
@@ -423,77 +404,33 @@ function initChart() {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false
-            },
+            interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: {
-                    display: true,
-                    position: 'top',
-                    align: 'end',
-                    labels: {
-                        color: textColor,
-                        boxWidth: 8,
-                        boxHeight: 8,
-                        usePointStyle: true,
-                        pointStyle: 'circle',
-                        font: { family: 'Inter', size: 11, weight: '500' },
-                        padding: 20
-                    }
+                    display: true, position: 'top', align: 'end',
+                    labels: { color: textColor, boxWidth: 8, boxHeight: 8, usePointStyle: true, pointStyle: 'circle', font: { family: 'Inter', size: 11, weight: '500' }, padding: 20 }
                 },
                 tooltip: {
-                    mode: 'index',
-                    intersect: false,
-                    backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                    borderColor: 'rgba(255, 255, 255, 0.08)',
-                    borderWidth: 1,
-                    titleColor: '#ffffff',
-                    bodyColor: '#cbd5e1',
-                    titleFont: { family: 'Inter', size: 12, weight: '600' },
-                    bodyFont: { family: 'Inter', size: 11 },
-                    padding: 12,
-                    cornerRadius: 8,
-                    usePointStyle: true,
+                    mode: 'index', intersect: false,
+                    backgroundColor: 'rgba(15, 23, 42, 0.95)', borderColor: 'rgba(255,255,255,0.08)', borderWidth: 1,
+                    titleColor: '#ffffff', bodyColor: '#cbd5e1',
+                    titleFont: { family: 'Inter', size: 12, weight: '600' }, bodyFont: { family: 'Inter', size: 11 },
+                    padding: 12, cornerRadius: 8, usePointStyle: true,
                     callbacks: {
                         label: function(context) {
                             let label = context.dataset.label || '';
                             const val = context.parsed.y !== null ? context.parsed.y.toFixed(2) + ' Mbps' : '0.00 Mbps';
-                            if (label.includes('Download')) {
-                                return ' ↓ ' + label + ': ' + val;
-                            } else {
-                                return ' ↑ ' + label + ': ' + val;
-                            }
+                            return (label.includes('Download') ? ' ↓ ' : ' ↑ ') + label + ': ' + val;
                         }
                     }
                 }
             },
             scales: {
-                x: {
-                    grid: { display: false },
-                    ticks: {
-                        color: textColor,
-                        font: { family: 'Inter', size: 10 },
-                        maxRotation: 0,
-                        autoSkip: true,
-                        maxTicksLimit: 8
-                    }
-                },
+                x: { grid: { display: false }, ticks: { color: textColor, font: { family: 'Inter', size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
                 y: {
-                    grid: { 
-                        color: gridColor,
-                        borderDash: [5, 5],
-                        drawBorder: false
-                    },
-                    ticks: {
-                        color: textColor,
-                        font: { family: 'Inter', size: 10 },
-                        callback: function(value) {
-                            return value.toFixed(1) + ' Mbps';
-                        }
-                    },
-                    suggestedMin: 0,
-                    suggestedMax: 10
+                    grid: { color: gridColor, borderDash: [5, 5], drawBorder: false },
+                    ticks: { color: textColor, font: { family: 'Inter', size: 10 }, callback: function(value) { return value.toFixed(1) + ' Mbps'; } },
+                    suggestedMin: 0, suggestedMax: 10
                 }
             }
         }
@@ -502,20 +439,10 @@ function initChart() {
 
 function updateLiveChart(upMbps, downMbps) {
     if (chartMode !== 'live') return;
-    
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    
-    liveLabels.push(timeStr);
-    liveUploadData.push(upMbps);
-    liveDownloadData.push(downMbps);
-    
-    if (liveLabels.length > MAX_LIVE_POINTS) {
-        liveLabels.shift();
-        liveUploadData.shift();
-        liveDownloadData.shift();
-    }
-    
+    liveLabels.push(timeStr); liveUploadData.push(upMbps); liveDownloadData.push(downMbps);
+    if (liveLabels.length > MAX_LIVE_POINTS) { liveLabels.shift(); liveUploadData.shift(); liveDownloadData.shift(); }
     if (trafficChart) {
         trafficChart.data.labels = liveLabels;
         trafficChart.data.datasets[0].data = liveDownloadData;
@@ -526,49 +453,35 @@ function updateLiveChart(upMbps, downMbps) {
 
 async function loadHistoricalData() {
     if (chartMode !== 'history') return;
-    
     try {
         const url = `/api/dashboard/metrics?server_id=${selectedServerId}&hours=24`;
         const response = await fetch(url);
         if (!response.ok) return;
         const res = await response.json();
         if (!res.success || !res.metrics) return;
-        
-        const labels = [];
-        const uploadData = [];
-        const downloadData = [];
-        
+        const labels = [], uploadData = [], downloadData = [];
         res.metrics.forEach(row => {
             const date = new Date(row.time_bucket.includes('T') ? row.time_bucket : row.time_bucket.replace(' ', 'T') + 'Z');
-            const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            labels.push(timeStr);
-            
-            // Convert Kbps to Mbps
+            labels.push(date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
             uploadData.push(row.speed_up / 1000);
             downloadData.push(row.speed_down / 1000);
         });
-        
         if (trafficChart) {
             trafficChart.data.labels = labels;
             trafficChart.data.datasets[0].data = downloadData;
             trafficChart.data.datasets[1].data = uploadData;
             trafficChart.update();
         }
-    } catch (err) {
-        console.error('Failed to load historical traffic metrics:', err);
-    }
+    } catch (err) { console.error('Failed to load historical traffic metrics:', err); }
 }
 
 window.setChartMode = function(mode) {
     chartMode = mode;
-    
     const btnLive = document.getElementById('btnChartModeLive');
     const btnHistory = document.getElementById('btnChartModeHistory');
-    
     if (mode === 'live') {
-        btnLive.className = 'px-3 py-1 text-[11px] font-medium rounded-md transition-all bg-accent text-white shadow';
-        btnHistory.className = 'px-3 py-1 text-[11px] font-medium rounded-md transition-all text-slate-400 hover:text-white';
-        
+        btnLive.className = 'btn btn-xs join-item btn-primary';
+        btnHistory.className = 'btn btn-xs join-item btn-ghost';
         if (trafficChart) {
             trafficChart.data.labels = liveLabels;
             trafficChart.data.datasets[0].data = liveDownloadData;
@@ -576,9 +489,8 @@ window.setChartMode = function(mode) {
             trafficChart.update();
         }
     } else {
-        btnHistory.className = 'px-3 py-1 text-[11px] font-medium rounded-md transition-all bg-accent text-white shadow';
-        btnLive.className = 'px-3 py-1 text-[11px] font-medium rounded-md transition-all text-slate-400 hover:text-white';
-        
+        btnHistory.className = 'btn btn-xs join-item btn-primary';
+        btnLive.className = 'btn btn-xs join-item btn-ghost';
         loadHistoricalData();
     }
 };
@@ -590,274 +502,169 @@ document.addEventListener('DOMContentLoaded', function() {
     if (serverSelect) {
         serverSelect.addEventListener('change', function(e) {
             selectedServerId = e.target.value;
-            
             if (chartMode === 'live') {
-                liveLabels.fill('');
-                liveUploadData.fill(0);
-                liveDownloadData.fill(0);
-                if (trafficChart) {
-                    trafficChart.update();
-                }
-            } else {
-                loadHistoricalData();
-            }
+                liveLabels.fill(''); liveUploadData.fill(0); liveDownloadData.fill(0);
+                if (trafficChart) trafficChart.update();
+            } else { loadHistoricalData(); }
         });
     }
 
-    // 1. Get raw client data from Twig
+    // Map
     const clients = {{ clients|json_encode|raw }};
-    
-    // Filter out clients without valid coordinates
     const mappedClients = clients.filter(c => c.latitude !== null && c.longitude !== null);
 
-    // 2. Initialize Map
-    const map = L.map('clientsMap', { 
-        zoomControl: false,
-        attributionControl: true,
-        minZoom: 1.5,
-        maxZoom: 15
-    }).setView([20, 0], 2);
-    
+    const map = L.map('clientsMap', { zoomControl: false, attributionControl: true, minZoom: 1.5, maxZoom: 15 }).setView([20, 0], 2);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: 'abcd',
-        maxZoom: 20
+        subdomains: 'abcd', maxZoom: 20
     }).addTo(map);
-    
     L.control.zoom({ position: 'bottomright' }).addTo(map);
-    
     const markerGroup = L.featureGroup().addTo(map);
-    
+
     function formatBytes(bytes) {
         if (!bytes || bytes <= 0) return '0 MB';
         const units = ['B', 'KB', 'MB', 'GB', 'TB'];
         const i = Math.floor(Math.log(bytes) / Math.log(1024));
-        const val = bytes / Math.pow(1024, i);
-        return `${val.toFixed(i === 0 ? 0 : 2)} ${units[i]}`;
+        return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 2)} ${units[i]}`;
     }
-    
     function getClientActivity(lastHandshake) {
         if (!lastHandshake) return { status: 'offline', text: 'Offline', colorClass: 'badge-error' };
-        
-        const utcString = lastHandshake.trim().replace(' ', 'T') + 'Z';
-        const lastSeenDate = new Date(utcString);
-        const now = new Date();
-        const diffSeconds = Math.floor((now.getTime() - lastSeenDate.getTime()) / 1000);
-        
-        if (diffSeconds < 300) {
-            return { status: 'online', text: 'Online', colorClass: 'badge-active' };
-        } else if (diffSeconds < 86400) {
+        const lastSeenDate = new Date(lastHandshake.trim().replace(' ', 'T') + 'Z');
+        const diffSeconds = Math.floor((Date.now() - lastSeenDate.getTime()) / 1000);
+        if (diffSeconds < 300) return { status: 'online', text: 'Online', colorClass: 'badge-success' };
+        if (diffSeconds < 86400) {
             const mins = Math.floor(diffSeconds / 60);
-            if (mins < 60) return { status: 'idle', text: `${mins}m ago`, colorClass: 'badge-warning' };
-            return { status: 'idle', text: `${Math.floor(mins / 60)}h ago`, colorClass: 'badge-warning' };
-        } else {
-            return { status: 'offline', text: `${Math.floor(diffSeconds / 86400)}d ago`, colorClass: 'badge-error' };
+            return { status: 'idle', text: mins < 60 ? `${mins}m ago` : `${Math.floor(mins / 60)}h ago`, colorClass: 'badge-warning' };
         }
+        return { status: 'offline', text: `${Math.floor(diffSeconds / 86400)}d ago`, colorClass: 'badge-error' };
     }
-    
     function formatRelativeTime(lastHandshake) {
         if (!lastHandshake) return 'Never';
-        const utcString = lastHandshake.trim().replace(' ', 'T') + 'Z';
-        const lastSeenDate = new Date(utcString);
-        const now = new Date();
-        const diffSeconds = Math.floor((now.getTime() - lastSeenDate.getTime()) / 1000);
-        
+        const diffSeconds = Math.floor((Date.now() - new Date(lastHandshake.trim().replace(' ', 'T') + 'Z').getTime()) / 1000);
         if (diffSeconds < 60) return 'Active now';
         if (diffSeconds < 3600) return Math.floor(diffSeconds / 60) + 'm ago';
         if (diffSeconds < 86400) return Math.floor(diffSeconds / 3600) + 'h ago';
         return Math.floor(diffSeconds / 86400) + 'd ago';
     }
 
-    // 3. Group clients by location
     const locationGroups = {};
     mappedClients.forEach(client => {
-        const lat = parseFloat(client.latitude);
-        const lon = parseFloat(client.longitude);
+        const lat = parseFloat(client.latitude), lon = parseFloat(client.longitude);
         const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
-        
-        if (!locationGroups[key]) {
-            locationGroups[key] = {
-                lat: lat,
-                lon: lon,
-                city: client.city || 'Unknown',
-                country: client.country || 'Unknown',
-                clients: []
-            };
-        }
+        if (!locationGroups[key]) locationGroups[key] = { lat, lon, city: client.city || 'Unknown', country: client.country || 'Unknown', clients: [] };
         locationGroups[key].clients.push(client);
     });
-    
+
     const mapStatus = document.getElementById('mapStatus');
-    if (mapStatus) {
-        const citiesCount = Object.keys(locationGroups).length;
-        mapStatus.textContent = `${mappedClients.length} clients in ${citiesCount} locations plotted`;
-    }
-    
-    // 4. Draw markers for each group
+    if (mapStatus) mapStatus.textContent = `${mappedClients.length} clients in ${Object.keys(locationGroups).length} locations plotted`;
+
     Object.values(locationGroups).forEach(group => {
         let groupStatus = 'offline';
-        
         group.clients.forEach(c => {
             const act = getClientActivity(c.last_handshake);
-            if (act.status === 'online') {
-                groupStatus = 'online';
-            } else if (act.status === 'idle' && groupStatus !== 'online') {
-                groupStatus = 'idle';
-            }
+            if (act.status === 'online') groupStatus = 'online';
+            else if (act.status === 'idle' && groupStatus !== 'online') groupStatus = 'idle';
         });
-        
+
         let pulseColorClass = 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]';
         let pingColorClass = 'bg-red-400';
-        
-        if (groupStatus === 'online') {
-            pulseColorClass = 'bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.8)]';
-            pingColorClass = 'bg-sky-400';
-        } else if (groupStatus === 'idle') {
-            pulseColorClass = 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]';
-            pingColorClass = 'bg-amber-400';
-        }
-        
+        if (groupStatus === 'online') { pulseColorClass = 'bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.8)]'; pingColorClass = 'bg-sky-400'; }
+        else if (groupStatus === 'idle') { pulseColorClass = 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]'; pingColorClass = 'bg-amber-400'; }
+
         const pulseSize = 10 + Math.min(10, (group.clients.length - 1) * 2);
         const pingSize = pulseSize + 8;
-        
+
         const customIcon = L.divIcon({
             className: 'custom-map-marker',
-            html: `
-                <div class="relative flex items-center justify-center" style="width: ${pingSize}px; height: ${pingSize}px;">
-                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full ${pingColorClass} opacity-60"></span>
-                    <span class="relative inline-flex rounded-full ${pulseColorClass}" style="width: ${pulseSize}px; height: ${pulseSize}px;"></span>
-                </div>
-            `,
-            iconSize: [pingSize, pingSize],
-            iconAnchor: [pingSize / 2, pingSize / 2]
+            html: `<div class="relative flex items-center justify-center" style="width:${pingSize}px;height:${pingSize}px;"><span class="animate-ping absolute inline-flex h-full w-full rounded-full ${pingColorClass} opacity-60"></span><span class="relative inline-flex rounded-full ${pulseColorClass}" style="width:${pulseSize}px;height:${pulseSize}px;"></span></div>`,
+            iconSize: [pingSize, pingSize], iconAnchor: [pingSize / 2, pingSize / 2]
         });
-        
+
         const marker = L.marker([group.lat, group.lon], { icon: customIcon });
-        
+
         function showClientDetails(client, activity) {
             document.getElementById('cardClientName').textContent = client.name;
-            
             const statusBadge = document.getElementById('cardClientStatus');
-            statusBadge.className = `inline-flex items-center text-[10px] px-2 py-0.5 rounded-full font-medium mt-1 ${activity.colorClass}`;
+            statusBadge.className = `badge badge-sm mt-1 w-max ${activity.colorClass}`;
             statusBadge.textContent = activity.text;
-            
             document.getElementById('cardClientIp').textContent = client.client_ip;
             document.getElementById('cardClientServer').textContent = client.server_name || 'N/A';
             document.getElementById('cardClientLoc').textContent = `${client.city || 'Unknown'}, ${client.country || 'Unknown'}`;
             document.getElementById('cardClientIsp').textContent = client.isp || 'N/A';
-            
-            const totalBytes = (parseInt(client.bytes_sent) || 0) + (parseInt(client.bytes_received) || 0);
-            document.getElementById('cardClientTraffic').textContent = formatBytes(totalBytes);
+            document.getElementById('cardClientTraffic').textContent = formatBytes((parseInt(client.bytes_sent) || 0) + (parseInt(client.bytes_received) || 0));
             document.getElementById('cardClientLastSeen').textContent = formatRelativeTime(client.last_handshake);
-            
             document.getElementById('cardClientLink').href = `/clients/${client.id}`;
-            
             document.getElementById('cardListView').classList.add('hidden');
             document.getElementById('cardDetailView').classList.remove('hidden');
         }
-        
+
         marker.on('click', function(e) {
             map.setView([group.lat, group.lon], Math.max(map.getZoom(), 5), { animate: true });
-            
             document.getElementById('cardBackButton').onclick = function() {
                 document.getElementById('cardDetailView').classList.add('hidden');
                 document.getElementById('cardListView').classList.remove('hidden');
             };
-            
+
             if (group.clients.length === 1) {
                 const client = group.clients[0];
-                const activity = getClientActivity(client.last_handshake);
-                showClientDetails(client, activity);
+                showClientDetails(client, getClientActivity(client.last_handshake));
                 document.getElementById('cardBackButton').classList.add('hidden');
             } else {
                 document.getElementById('cardLocationTitle').textContent = `${group.city}, ${group.country}`;
                 document.getElementById('cardClientCount').textContent = `${group.clients.length} clients`;
-                
                 const listContainer = document.getElementById('cardClientList');
                 listContainer.innerHTML = '';
-                
                 group.clients.forEach(client => {
                     const activity = getClientActivity(client.last_handshake);
-                    
                     const item = document.createElement('div');
-                    item.className = 'flex items-center justify-between p-2 rounded-lg bg-slate-800/40 border border-slate-700/30 hover:bg-slate-800/80 transition-colors';
-                    
-                    let statusColor = 'bg-red-500';
-                    if (activity.status === 'online') statusColor = 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.6)]';
-                    else if (activity.status === 'idle') statusColor = 'bg-amber-400';
-                    
+                    item.className = 'flex items-center justify-between p-2 rounded-lg bg-base-300/50 border border-base-content/5 hover:bg-base-300 transition-colors';
+                    let dotColor = 'bg-error';
+                    if (activity.status === 'online') dotColor = 'bg-success';
+                    else if (activity.status === 'idle') dotColor = 'bg-warning';
                     item.innerHTML = `
                         <div class="flex items-center gap-2 min-w-0">
-                            <span class="w-1.5 h-1.5 rounded-full ${statusColor} shrink-0"></span>
+                            <span class="w-1.5 h-1.5 rounded-full ${dotColor} shrink-0"></span>
                             <div class="flex flex-col min-w-0">
-                                <span class="text-xs font-semibold text-slate-200 truncate max-w-[130px]">${client.name}</span>
-                                <span class="text-[9px] text-slate-500 font-mono">${client.client_ip}</span>
+                                <span class="text-xs font-semibold truncate max-w-[130px]">${client.name}</span>
+                                <span class="text-[9px] text-base-content/40 font-mono">${client.client_ip}</span>
                             </div>
                         </div>
-                        <button class="btn-secondary px-2 py-0.5 text-[10px] inline-flex items-center hover:bg-slate-700 transition-colors focus:outline-none shrink-0">
-                            Details
-                        </button>
+                        <button class="btn btn-ghost btn-xs">Details</button>
                     `;
-                    
                     item.querySelector('button').addEventListener('click', function() {
                         showClientDetails(client, activity);
                         document.getElementById('cardBackButton').classList.remove('hidden');
                     });
-                    
                     listContainer.appendChild(item);
                 });
-                
                 document.getElementById('cardListView').classList.remove('hidden');
                 document.getElementById('cardDetailView').classList.add('hidden');
             }
-            
+
             const card = document.getElementById('mapClientCard');
             card.classList.remove('hidden');
-            setTimeout(() => {
-                card.classList.remove('translate-y-2', 'opacity-0');
-            }, 10);
+            setTimeout(() => { card.classList.remove('translate-y-2', 'opacity-0'); }, 10);
         });
-        
+
         marker.addTo(markerGroup);
     });
-    
-    if (mappedClients.length > 0) {
-        map.fitBounds(markerGroup.getBounds(), { padding: [40, 40], maxZoom: 6 });
-    }
+
+    if (mappedClients.length > 0) map.fitBounds(markerGroup.getBounds(), { padding: [40, 40], maxZoom: 6 });
 });
 </script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     function formatSpeed(kbps, arrow, colorClass, labelClass) {
-        if (kbps >= 1000) {
-            return `<span class="${colorClass} ${labelClass || ''}">${arrow}${(kbps / 1000).toFixed(1)} <span class="text-[10px] font-normal text-slate-500">Mbps</span></span>`;
-        }
-        return `<span class="${colorClass}">${arrow}${Math.round(kbps)} <span class="text-[10px] font-normal text-slate-500">Kbps</span></span>`;
+        if (kbps >= 1000) return `<span class="${colorClass} ${labelClass||''}">${arrow}${(kbps/1000).toFixed(1)} <span class="text-[10px] font-normal text-base-content/40">Mbps</span></span>`;
+        return `<span class="${colorClass}">${arrow}${Math.round(kbps)} <span class="text-[10px] font-normal text-base-content/40">Kbps</span></span>`;
     }
-
     function formatTableCellSpeed(upKbps, downKbps) {
-        if (upKbps <= 0 && downKbps <= 0) {
-            return '<span class="text-slate-500">Idle</span>';
-        }
-        
+        if (upKbps <= 0 && downKbps <= 0) return '<span class="text-base-content/30">Idle</span>';
         let html = '';
-        if (upKbps > 0) {
-            const speedUpStr = upKbps >= 1000 ? (upKbps / 1000).toFixed(1) + ' Mbps' : Math.round(upKbps) + ' Kbps';
-            html += `<span class="text-emerald-400 font-semibold">↑${speedUpStr}</span>`;
-        } else {
-            html += '<span class="text-slate-500">↑0 Kbps</span>';
-        }
-        
-        html += '<span class="text-slate-600 mx-1">|</span>';
-        
-        if (downKbps > 0) {
-            const speedDownStr = downKbps >= 1000 ? (downKbps / 1000).toFixed(1) + ' Mbps' : Math.round(downKbps) + ' Kbps';
-            html += `<span class="text-indigo-400 font-semibold">↓${speedDownStr}</span>`;
-        } else {
-            html += '<span class="text-slate-500">↓0 Kbps</span>';
-        }
-        
+        html += upKbps > 0 ? `<span class="text-success font-semibold">↑${upKbps >= 1000 ? (upKbps/1000).toFixed(1)+' Mbps' : Math.round(upKbps)+' Kbps'}</span>` : '<span class="text-base-content/30">↑0 Kbps</span>';
+        html += '<span class="text-base-content/20 mx-1">|</span>';
+        html += downKbps > 0 ? `<span class="text-indigo-400 font-semibold">↓${downKbps >= 1000 ? (downKbps/1000).toFixed(1)+' Mbps' : Math.round(downKbps)+' Kbps'}</span>` : '<span class="text-base-content/30">↓0 Kbps</span>';
         return html;
     }
 
@@ -868,54 +675,34 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
             if (!data.servers) return;
 
-            let totalSpeedUp = 0;
-            let totalSpeedDown = 0;
-            let currentScopeSpeedUp = 0;
-            let currentScopeSpeedDown = 0;
+            let totalSpeedUp = 0, totalSpeedDown = 0, currentScopeSpeedUp = 0, currentScopeSpeedDown = 0;
 
             data.servers.forEach(server => {
                 const up = parseFloat(server.speed_up_kbps) || 0;
                 const down = parseFloat(server.speed_down_kbps) || 0;
-                totalSpeedUp += up;
-                totalSpeedDown += down;
-
+                totalSpeedUp += up; totalSpeedDown += down;
                 if (selectedServerId && parseInt(selectedServerId) === parseInt(server.id)) {
-                    currentScopeSpeedUp = up;
-                    currentScopeSpeedDown = down;
+                    currentScopeSpeedUp = up; currentScopeSpeedDown = down;
                 }
-
-                // Update server row in recent table
                 const row = document.querySelector(`.server-row[data-server-id="${server.id}"]`);
                 if (row) {
                     const speedCell = row.querySelector('.speed-cell');
-                    if (speedCell) {
-                        speedCell.innerHTML = formatTableCellSpeed(up, down);
-                    }
+                    if (speedCell) speedCell.innerHTML = formatTableCellSpeed(up, down);
                 }
             });
 
-            // Update live chart
             const finalUp = selectedServerId ? currentScopeSpeedUp : totalSpeedUp;
             const finalDown = selectedServerId ? currentScopeSpeedDown : totalSpeedDown;
             updateLiveChart(finalUp / 1000, finalDown / 1000);
 
-            // Update global network speed card
             const globalLiveSpeed = document.getElementById('globalLiveSpeed');
             if (globalLiveSpeed) {
-                const upHtml = formatSpeed(totalSpeedUp, '↑', 'text-emerald-400', 'font-semibold');
-                const downHtml = formatSpeed(totalSpeedDown, '↓', 'text-indigo-400', 'font-semibold');
-                globalLiveSpeed.innerHTML = `${upHtml} <span class="text-slate-600 text-sm">/</span> ${downHtml}`;
+                globalLiveSpeed.innerHTML = `${formatSpeed(totalSpeedUp, '↑', 'text-success', 'font-semibold')} <span class="text-base-content/20 text-sm">/</span> ${formatSpeed(totalSpeedDown, '↓', 'text-indigo-400', 'font-semibold')}`;
             }
-
-        } catch (error) {
-            console.error('Failed to poll dashboard server metrics:', error);
-        }
+        } catch (error) { console.error('Failed to poll dashboard server metrics:', error); }
     }
 
-    // Run polling every 8 seconds
     setInterval(pollServers, 8000);
-    
-    // Trigger initial polling slightly delayed to let chart load
     setTimeout(pollServers, 1000);
 });
 </script>

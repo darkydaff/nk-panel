@@ -2,153 +2,144 @@
 {% block title %}Add Server{% endblock %}
 
 {% block breadcrumbs %}
-    <a href="/dashboard" class="hover:text-slate-300 transition-colors">Home</a>
-    <i class="fas fa-chevron-right text-[10px] text-slate-700 mx-1"></i>
-    <a href="/servers" class="hover:text-slate-300 transition-colors">Servers</a>
-    <i class="fas fa-chevron-right text-[10px] text-slate-700 mx-1"></i>
-    <span class="text-slate-300">Add Server</span>
+    <li><a href="/dashboard" class="hover:text-base-content transition-colors">Home</a></li>
+    <li><a href="/servers" class="hover:text-base-content transition-colors">Servers</a></li>
+    <li><span class="text-base-content/70">Add Server</span></li>
 {% endblock %}
 
 {% block content %}
-<div class="max-w-3xl mx-auto px-4 w-full py-6">
+<div class="max-w-3xl mx-auto w-full">
     <div class="mb-6">
-        <h1 class="text-2xl font-bold text-white flex items-center">
-            <div class="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 text-accent flex items-center justify-center mr-3">
+        <h1 class="text-2xl font-bold flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-base-300 border border-base-content/10 text-primary flex items-center justify-center">
                 <i class="fas fa-plus-circle"></i>
             </div>
             Add New Server
         </h1>
-        <p class="mt-2 ml-13 text-slate-400 text-sm">Deploy a new Amnezia VPN instance or import an existing configuration.</p>
+        <p class="mt-2 ml-13 text-base-content/50 text-sm">Deploy a new Amnezia VPN instance or import an existing configuration.</p>
     </div>
 
     {% if error %}
-    <div class="mb-6 bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded-lg flex items-center">
-        <i class="fas fa-exclamation-circle mr-3 text-red-400"></i>
-        {{ error }}
+    <div class="alert alert-error mb-6">
+        <i class="fas fa-exclamation-circle"></i>
+        <span>{{ error }}</span>
     </div>
     {% endif %}
 
-    <form method="POST" enctype="multipart/form-data" class="panel p-6 md:p-8 space-y-6 bg-slate-900 border-slate-800 shadow-xl rounded-xl">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="md:col-span-2">
-                <label class="block text-sm font-medium text-slate-300 mb-2">Server Name</label>
-                <div class="relative">
-                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
-                        <i class="fas fa-tag"></i>
-                    </div>
-                    <input name="name" required class="input-field w-full pl-11 pr-4 py-2.5 bg-slate-950 border-slate-800 text-white rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-500" placeholder="e.g. US East Prod">
+    <form method="POST" enctype="multipart/form-data" class="card bg-base-200 border border-base-300 shadow-xl">
+        <div class="card-body p-6 md:p-8 space-y-5">
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Server Name -->
+                <div class="form-control md:col-span-2">
+                    <label class="label py-1"><span class="label-text font-medium">Server Name</span></label>
+                    <label class="input input-bordered flex items-center gap-2">
+                        <i class="fas fa-tag text-base-content/30 text-sm"></i>
+                        <input name="name" required class="grow" placeholder="e.g. US East Prod">
+                    </label>
+                </div>
+
+                <!-- Host -->
+                <div class="form-control">
+                    <label class="label py-1"><span class="label-text font-medium">Server Host / IP</span></label>
+                    <label class="input input-bordered flex items-center gap-2">
+                        <i class="fas fa-network-wired text-base-content/30 text-sm"></i>
+                        <input name="host" required class="grow" placeholder="8.8.8.8">
+                    </label>
+                </div>
+
+                <!-- SSH Port -->
+                <div class="form-control">
+                    <label class="label py-1"><span class="label-text font-medium">SSH Port</span></label>
+                    <label class="input input-bordered flex items-center gap-2">
+                        <i class="fas fa-plug text-base-content/30 text-sm"></i>
+                        <input name="port" type="number" required class="grow" value="22">
+                    </label>
+                </div>
+
+                <!-- VPN Port -->
+                <div class="form-control">
+                    <label class="label py-1"><span class="label-text font-medium">VPN Port (UDP)</span></label>
+                    <label class="input input-bordered flex items-center gap-2">
+                        <i class="fas fa-door-open text-base-content/30 text-sm"></i>
+                        <input name="vpn_port" type="number" required class="grow" value="{{ random_port }}">
+                    </label>
+                </div>
+
+                <!-- SSH Username -->
+                <div class="form-control">
+                    <label class="label py-1"><span class="label-text font-medium">SSH Username</span></label>
+                    <label class="input input-bordered flex items-center gap-2">
+                        <i class="fas fa-user-shield text-base-content/30 text-sm"></i>
+                        <input name="username" value="root" class="grow font-mono">
+                    </label>
+                </div>
+
+                <!-- SSH Password -->
+                <div class="form-control md:col-span-2">
+                    <label class="label py-1"><span class="label-text font-medium">SSH Password</span></label>
+                    <label class="input input-bordered flex items-center gap-2">
+                        <i class="fas fa-key text-base-content/30 text-sm"></i>
+                        <input name="password" type="password" required class="grow font-mono">
+                    </label>
                 </div>
             </div>
 
-            <div>
-                <label class="block text-sm font-medium text-slate-300 mb-2">Server Host / IP</label>
-                <div class="relative">
-                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
-                        <i class="fas fa-network-wired text-xs"></i>
-                    </div>
-                    <input name="host" required class="input-field w-full pl-11 pr-4 py-2.5 bg-slate-950 border-slate-800 text-white rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-500" placeholder="8.8.8.8">
-                </div>
-            </div>
-            
-            <div>
-                <label class="block text-sm font-medium text-slate-300 mb-2">SSH Port</label>
-                <div class="relative">
-                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
-                        <i class="fas fa-plug text-xs"></i>
-                    </div>
-                    <input name="port" type="number" required class="input-field w-full pl-11 pr-4 py-2.5 bg-slate-950 border-slate-800 text-white rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-500" value="22">
-                </div>
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium text-slate-300 mb-2">VPN Port (UDP)</label>
-                <div class="relative">
-                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
-                        <i class="fas fa-door-open text-xs"></i>
-                    </div>
-                    <input name="vpn_port" type="number" required class="input-field w-full pl-11 pr-4 py-2.5 bg-slate-950 border-slate-800 text-white rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-500" value="{{ random_port }}">
-                </div>
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium text-slate-300 mb-2">SSH Username</label>
-                <div class="relative">
-                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
-                        <i class="fas fa-user-shield"></i>
-                    </div>
-                    <input name="username" value="root" class="input-field w-full pl-11 pr-4 py-2.5 font-mono bg-slate-950 border-slate-800 text-white rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-500">
-                </div>
-            </div>
-
-            <div class="md:col-span-2">
-                <label class="block text-sm font-medium text-slate-300 mb-2">SSH Password</label>
-                <div class="relative">
-                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
-                        <i class="fas fa-key"></i>
-                    </div>
-                    <input name="password" type="password" required class="input-field w-full pl-11 pr-4 py-2.5 font-mono bg-slate-950 border-slate-800 text-white rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-500">
-                </div>
-            </div>
-        </div>
-
-        <div class="border-t border-slate-800 pt-6">
-            <h3 class="text-base font-semibold text-white mb-4 flex items-center">
-                <i class="fas fa-shield-alt mr-2 text-accent"></i>
+            <!-- AmneziaWG Settings -->
+            <div class="divider text-xs text-base-content/40 uppercase tracking-wider">
+                <i class="fas fa-shield-alt mr-1 text-primary"></i>
                 AmneziaWG 2.0 Settings
-            </h3>
-            
-            <div class="p-5 bg-slate-950/40 rounded-xl border border-slate-800/60">
-                <label class="block text-sm font-medium text-slate-300 mb-2">Protocol Mimicry (Obfuscation)</label>
-                <div class="relative mb-3">
-                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
-                        <i class="fas fa-mask"></i>
-                    </div>
-                    <select name="mimicry_type" class="input-field w-full pl-11 pr-10 py-2.5 appearance-none bg-slate-950 border-slate-800 text-white rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all cursor-pointer">
-                        <option value="quic">QUIC (HTTP/3) - High performance, modern</option>
-                        <option value="dns">DNS (UDP/53) - High stealth, universal</option>
-                        <option value="stun">STUN (WebRTC) - Low latency video calls</option>
-                        <option value="sip">SIP (VoIP) - Voice traffic mimicry</option>
-                        <option value="none">None - Standard Obfuscation (V1)</option>
-                    </select>
-                    <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-500">
-                        <i class="fas fa-chevron-down text-xs"></i>
-                    </div>
-                </div>
-                <p class="text-xs text-slate-500">Header ranges and padding will be auto-generated.</p>
             </div>
-        </div>
-        
-        <div class="border-t border-slate-800 pt-6">
-            <label class="flex items-center cursor-pointer select-none">
-                <input type="checkbox" id="enableImport" name="enable_import" class="sr-only peer" onchange="toggleImportFields()">
-                <div class="w-10 h-6 bg-slate-800 border border-slate-700 rounded-full peer-checked:bg-accent peer-checked:border-accent/80 transition-colors relative cursor-pointer">
-                    <div class="absolute top-0.5 left-0.5 w-5 h-5 bg-slate-300 rounded-full transition-transform peer-checked:translate-x-4 peer-checked:bg-white"></div>
+
+            <div class="bg-base-300/50 rounded-xl border border-base-content/10 p-5">
+                <div class="form-control">
+                    <label class="label py-1"><span class="label-text font-medium">Protocol Mimicry (Obfuscation)</span></label>
+                    <label class="input input-bordered flex items-center gap-2">
+                        <i class="fas fa-mask text-base-content/30 text-sm"></i>
+                        <select name="mimicry_type" class="grow bg-transparent outline-none cursor-pointer">
+                            <option value="quic">QUIC (HTTP/3) - High performance, modern</option>
+                            <option value="dns">DNS (UDP/53) - High stealth, universal</option>
+                            <option value="stun">STUN (WebRTC) - Low latency video calls</option>
+                            <option value="sip">SIP (VoIP) - Voice traffic mimicry</option>
+                            <option value="none">None - Standard Obfuscation (V1)</option>
+                        </select>
+                    </label>
+                    <label class="label py-1"><span class="label-text-alt text-base-content/40">Header ranges and padding will be auto-generated.</span></label>
                 </div>
-                <span class="ml-3 text-sm font-medium text-slate-300 hover:text-white transition-colors">Import from existing panel</span>
-            </label>
-            
-            <div id="importFields" style="display: none;" class="mt-4 p-5 bg-slate-950/40 rounded-xl border border-slate-800/60 space-y-4">
-                <div>
-                    <label class="block text-sm font-medium text-slate-300 mb-2">Panel Type</label>
-                    <select name="panel_type" class="input-field w-full px-4 py-2.5 bg-slate-950 border-slate-800 text-white rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all cursor-pointer">
+            </div>
+
+            <!-- Import Toggle -->
+            <div class="divider text-xs text-base-content/40 uppercase tracking-wider">Import</div>
+
+            <div class="form-control">
+                <label class="label cursor-pointer justify-start gap-3">
+                    <input type="checkbox" id="enableImport" name="enable_import" class="toggle toggle-primary" onchange="toggleImportFields()">
+                    <span class="label-text font-medium">Import from existing panel</span>
+                </label>
+            </div>
+
+            <div id="importFields" class="hidden bg-base-300/50 rounded-xl border border-base-content/10 p-5 space-y-4">
+                <div class="form-control">
+                    <label class="label py-1"><span class="label-text font-medium">Panel Type</span></label>
+                    <select name="panel_type" class="select select-bordered">
                         <option value="">-- Select --</option>
                         <option value="wg-easy">wg-easy</option>
                         <option value="3x-ui">3x-ui</option>
                     </select>
                 </div>
-                
-                <div>
-                    <label class="block text-sm font-medium text-slate-300 mb-2">Backup File</label>
-                    <input type="file" name="backup_file" accept=".json" class="input-field w-full px-4 py-2.5 text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 cursor-pointer bg-slate-950 border-slate-800 text-slate-400 focus:outline-none focus:border-blue-500 transition-all">
-                    <p class="mt-2 text-xs text-slate-500">wg-easy: db.json | 3x-ui: export.json</p>
+                <div class="form-control">
+                    <label class="label py-1"><span class="label-text font-medium">Backup File</span></label>
+                    <input type="file" name="backup_file" accept=".json" class="file-input file-input-bordered w-full text-sm">
+                    <label class="label py-1"><span class="label-text-alt text-base-content/40">wg-easy: db.json | 3x-ui: export.json</span></label>
                 </div>
             </div>
-        </div>
-        
-        <div class="pt-4">
-            <button type="submit" class="btn-primary w-full py-3 text-sm font-semibold shadow-lg hover:shadow-accent/10 transition-all duration-300">
-                <i class="fas fa-save mr-2"></i>Create Server
-            </button>
+
+            <div class="card-actions pt-2">
+                <button type="submit" class="btn btn-primary w-full gap-2">
+                    <i class="fas fa-save"></i>
+                    Create Server
+                </button>
+            </div>
         </div>
     </form>
 </div>
@@ -157,7 +148,7 @@
 function toggleImportFields() {
     const checkbox = document.getElementById('enableImport');
     const fields = document.getElementById('importFields');
-    fields.style.display = checkbox.checked ? 'block' : 'none';
+    fields.classList.toggle('hidden', !checkbox.checked);
 }
 </script>
 {% endblock %}
