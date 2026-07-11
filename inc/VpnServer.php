@@ -903,8 +903,8 @@ public static function getMimicryPresets(): array
         try {
             // Get all clients for this server
             $stmt = $pdo->prepare('
-                SELECT id, name, client_ip, public_key, private_key, preshared_key, 
-                       config, status, expires_at, created_at
+                SELECT id, user_id, name, client_ip, public_key, private_key, preshared_key, 
+                       config, status, expires_at, traffic_limit, ext_client_code, created_at
                 FROM vpn_clients 
                 WHERE server_id = ?
             ');
@@ -923,6 +923,7 @@ public static function getMimicryPresets(): array
             // Prepare backup data
             $backupData = [
                 'server' => [
+                    'id' => $this->serverId,
                     'name' => $this->data['name'],
                     'host' => $this->data['host'],
                     'port' => $this->data['port'],
@@ -933,6 +934,7 @@ public static function getMimicryPresets(): array
                     'server_private_key' => $privKey,
                     'preshared_key' => $this->data['preshared_key'],
                     'awg_params' => $this->data['awg_params'],
+                    'secret_token' => $this->data['secret_token'] ?? null,
                 ],
                 'clients' => $clients,
                 'backup_date' => date('Y-m-d H:i:s'),
