@@ -723,12 +723,18 @@ Router::get('/clients', function () {
 
         if ($codeFilter !== '') {
             // Exact match for the code filter
-            $stmt = $pdo->prepare('SELECT code, name, start_date, sub, func, router, bytes_sent, bytes_received FROM ext_clients WHERE code = ? LIMIT 1');
+            $stmt = $pdo->prepare('
+                SELECT ec.code AS "Code", ec.name, ec.start_date, ec.sub, ec.func, ec.router, ec.bytes_sent, ec.bytes_received,
+                       r.id AS router_id, r.domain AS router_domain, r.status AS router_status, r.error_message AS router_error
+                FROM ext_clients ec
+                LEFT JOIN routers r ON r.ext_client_code = ec.code
+                WHERE ec.code = ? LIMIT 1
+            ');
             $stmt->execute([$codeFilter]);
             $rowExt = $stmt->fetch();
             if ($rowExt) {
                 $totalCount = 1;
-                $rawCodes   = [['Code' => $codeFilter, 'name' => $rowExt['name'], 'start_date' => $rowExt['start_date'], 'sub' => $rowExt['sub'], 'func' => $rowExt['func'], 'router' => $rowExt['router'], 'bytes_sent' => $rowExt['bytes_sent'], 'bytes_received' => $rowExt['bytes_received']]];
+                $rawCodes   = [$rowExt];
             } else {
                 $totalCount = 0;
                 $rawCodes   = [];
@@ -3259,6 +3265,19 @@ Router::get('/routers', function () {
     ]);
 });
 
+// Routing Groups management page
+Router::get('/routing-groups', function () {
+    requireAdmin();
+    
+    $pdo = DB::conn();
+    $stmt = $pdo->query("SELECT * FROM routing_groups ORDER BY name ASC");
+    $groups = $stmt->fetchAll();
+    
+    View::render('routing_groups.twig', [
+        'groups' => $groups
+    ]);
+});
+
 // API: List all routers
 Router::get('/api/routers', function () {
     header('Content-Type: application/json');
@@ -3298,6 +3317,106 @@ Router::post('/api/routers/{id}/push', function ($params) {
         require_once __DIR__ . '/../inc/RouterManager.php';
         $result = RouterManager::pushConfigToRouter($id, $vpnClientId);
         echo json_encode($result);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+});
+
+// API: Push selected routing groups to a router
+Router::post('/api/routers/{id}/push-routing-groups', function ($params) {
+    header('Content-Type: application/json');
+    requireAdmin();
+    
+    $id = (int)$params['id'];
+    
+    // Read JSON payload or fall back to $_POST
+    $input = json_decode(file_get_contents('php://input'), true);
+    if (!$input) {
+        $input = $_POST;
+    }
+    
+    $groupIds = $input['group_ids'] ?? [];
+    if (empty($groupIds)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'No routing groups selected.']);
+        return;
+    }
+    
+    // Convert to integers
+    $groupIds = array_map('intval', $groupIds);
+    
+    try {
+        require_once __DIR__ . '/../inc/KeeneticRouter.php';
+        require_once __DIR__ . '/../inc/RouterManager.php';
+        $result = RouterManager::pushRoutingGroupsToRouter($id, $groupIds);
+        echo json_encode($result);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+});
+
+// API: List all routing groups
+Router::get('/api/routing-groups', function () {
+    header('Content-Type: application/json');
+    requireAdmin();
+    
+    $pdo = DB::conn();
+    $stmt = $pdo->query("SELECT id, name, description FROM routing_groups ORDER BY name ASC");
+    echo json_encode(['groups' => $stmt->fetchAll()]);
+});
+
+// API: Create or update a routing group
+Router::post('/api/routing-groups', function () {
+    header('Content-Type: application/json');
+    requireAdmin();
+    
+    // Read JSON payload or $_POST
+    $input = json_decode(file_get_contents('php://input'), true);
+    if (!$input) {
+        $input = $_POST;
+    }
+    
+    $id = isset($input['id']) && $input['id'] !== '' ? (int)$input['id'] : null;
+    $name = trim($input['name'] ?? '');
+    $description = trim($input['description'] ?? '');
+    $content = trim($input['content'] ?? '');
+    
+    if (empty($name)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Group name is required.']);
+        return;
+    }
+    
+    $pdo = DB::conn();
+    try {
+        if ($id) {
+            $stmt = $pdo->prepare("UPDATE routing_groups SET name = ?, description = ?, content = ? WHERE id = ?");
+            $stmt->execute([$name, $description, $content, $id]);
+        } else {
+            $stmt = $pdo->prepare("INSERT INTO routing_groups (name, description, content) VALUES (?, ?, ?)");
+            $stmt->execute([$name, $description, $content]);
+        }
+        echo json_encode(['success' => true]);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+});
+
+// API: Delete a routing group
+Router::post('/api/routing-groups/{id}/delete', function ($params) {
+    header('Content-Type: application/json');
+    requireAdmin();
+    
+    $id = (int)$params['id'];
+    
+    $pdo = DB::conn();
+    try {
+        $stmt = $pdo->prepare("DELETE FROM routing_groups WHERE id = ?");
+        $stmt->execute([$id]);
+        echo json_encode(['success' => true]);
     } catch (Exception $e) {
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);

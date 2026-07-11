@@ -102,6 +102,7 @@
                                     <button onclick="checkStatus({{ r.id }})" class="btn btn-ghost btn-xs text-info" title="Check status"><i class="fas fa-sync-alt text-xs"></i></button>
                                     <button onclick="editCredentials({{ r.id }}, '{{ r.domain|e('js') }}', '{{ r.login|default('admin')|e('js') }}')" class="btn btn-ghost btn-xs text-warning" title="Edit credentials"><i class="fas fa-key text-xs"></i></button>
                                     {% if r.wg_interface_id %}
+                                    <button onclick="openPushDomainsModal({{ r.id }}, '{{ r.ext_client_code|escape('js') }}')" class="btn btn-ghost btn-xs text-secondary" title="Push routing groups"><i class="fas fa-route text-xs"></i></button>
                                     <button onclick="removeWg({{ r.id }})" class="btn btn-ghost btn-xs text-error" title="Remove interface"><i class="fas fa-trash-alt text-xs"></i></button>
                                     {% endif %}
                                 </div>
@@ -356,4 +357,6 @@ function closeModal(id) { document.getElementById(id).close(); }
     </div>
     <form method="dialog" class="modal-backdrop"><button onclick="closeModal('pushSelectorModal')">close</button></form>
 </dialog>
+
+{% include 'push_domains_modal.twig' %}
 {% endblock %}

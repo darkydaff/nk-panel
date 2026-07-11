@@ -216,6 +216,22 @@ class DB {
           $pdo->exec($sql);
         }
       }
+
+      // Check if routing_groups table exists
+      try {
+        $pdo->query("SELECT 1 FROM routing_groups LIMIT 1");
+        $hasRoutingGroupsTable = true;
+      } catch (Throwable $e) {
+        $hasRoutingGroupsTable = false;
+      }
+
+      if (!$hasRoutingGroupsTable) {
+        $sqlPath = __DIR__ . '/../migrations/030_create_routing_groups.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
     } catch (Throwable $e) {
       error_log("Database self-healing migration failed: " . $e->getMessage());
     }

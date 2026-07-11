@@ -316,6 +316,9 @@
                         <i class="fas fa-sync-alt"></i>Check Status
                     </button>
                     {% if router.wg_interface_id %}
+                    <button onclick="openPushDomainsModal({{ router.id }}, '{{ router.wg_interface_name|default('Router')|escape('js') }}')" class="btn btn-outline btn-secondary btn-sm w-full gap-1.5">
+                        <i class="fas fa-route"></i>Push Domains
+                    </button>
                     <button onclick="triggerViewRemove({{ router.id }})" id="viewRemoveBtn" class="btn btn-outline btn-error btn-sm w-full gap-1.5">
                         <i class="fas fa-trash-alt"></i>Remove Interface
                     </button>
@@ -760,4 +763,6 @@ function triggerViewRemove(routerId) {
     });
 }
 </script>
+
+{% include 'push_domains_modal.twig' %}
 {% endblock %}

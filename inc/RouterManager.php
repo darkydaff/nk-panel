@@ -353,4 +353,56 @@ class RouterManager {
             throw $e;
         }
     }
+
+    /**
+     * Push selected FQDN routing groups to Keenetic Router
+     */
+    public static function pushRoutingGroupsToRouter(int $routerId, array $groupIds): array {
+        $pdo = DB::conn();
+
+        // 1. Get router details
+        $stmt = $pdo->prepare("SELECT * FROM routers WHERE id = ?");
+        $stmt->execute([$routerId]);
+        $router = $stmt->fetch();
+
+        if (!$router) {
+            throw new Exception("Router not found.");
+        }
+
+        if (empty($router['wg_interface_id'])) {
+            throw new Exception("No active WireGuard interface configured on this router. Push configuration first.");
+        }
+
+        if (empty($groupIds)) {
+            throw new Exception("No routing groups selected.");
+        }
+
+        // 2. Get FQDN groups from database
+        $inQuery = implode(',', array_fill(0, count($groupIds), '?'));
+        $stmtGroups = $pdo->prepare("SELECT * FROM routing_groups WHERE id IN ($inQuery)");
+        $stmtGroups->execute($groupIds);
+        $groups = $stmtGroups->fetchAll();
+
+        if (empty($groups)) {
+            throw new Exception("Selected routing groups not found in database.");
+        }
+
+        // 3. Connect to the router
+        $login = $router['login'] ?: 'admin';
+        $adapter = new KeeneticRouter($router['domain'], $router['password'], $login);
+        $adapter->setTimeout(15); // Give it extra time for large arrays
+
+        $connTest = $adapter->testConnection();
+        if (!$connTest['success']) {
+            throw new Exception("Connection/Auth failed: " . ($connTest['error'] ?? 'Unknown error'));
+        }
+
+        // 4. Push FQDN groups
+        $adapter->pushRoutingGroups($groups, $router['wg_interface_id']);
+
+        return [
+            'success' => true,
+            'groups_count' => count($groups)
+        ];
+    }
 }

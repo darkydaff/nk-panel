@@ -183,9 +183,14 @@
                 {% endif %}
 
                 <!-- Footer actions -->
-                <div class="card-actions border-t border-base-300 pt-3">
-                    <a href="/clients?code={{ client.Code|url_encode }}" class="btn btn-ghost btn-sm flex-1 gap-2"><i class="fas fa-eye"></i>All Configs</a>
-                    <button onclick="openCreateForClient('{{ client.Code|e('js') }}')" class="btn btn-outline btn-primary btn-sm flex-1 gap-2"><i class="fas fa-plus"></i>New Config</button>
+                <div class="card-actions border-t border-base-300 pt-3 flex flex-wrap gap-2">
+                    <a href="/clients?code={{ client.Code|url_encode }}" class="btn btn-ghost btn-sm flex-1 gap-1.5 min-w-[100px]"><i class="fas fa-eye"></i>All Configs</a>
+                    <button onclick="openCreateForClient('{{ client.Code|e('js') }}')" class="btn btn-outline btn-primary btn-sm flex-1 gap-1.5 min-w-[100px]"><i class="fas fa-plus"></i>New Config</button>
+                    {% if client.router_id %}
+                    <button onclick="openPushDomainsModal({{ client.router_id }}, '{{ client.Router|default('Router')|escape('js') }}')" class="btn btn-outline btn-secondary btn-sm w-full gap-1.5">
+                        <i class="fas fa-route"></i>Push Domains
+                    </button>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -420,4 +425,6 @@ function triggerRouterCheck(routerId) {
         .catch(err => { alert('Error: ' + err.message); icon.className = oldClass; btn.disabled = false; });
 }
 </script>
+
+{% include 'push_domains_modal.twig' %}
 {% endblock %}

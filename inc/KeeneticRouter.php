@@ -713,6 +713,55 @@ class KeeneticRouter {
     }
 
     /**
+     * Push FQDN routing groups and route them via the given interface
+     */
+    public function pushRoutingGroups(array $groups, string $interfaceId): void {
+        foreach ($groups as $group) {
+            $name = trim($group['name']);
+            if (empty($name)) continue;
+
+            $description = trim($group['description'] ?? '');
+            $content = $group['content'] ?? '';
+
+            // Split by newline and comma
+            $items = preg_split('/[\r\n,]+/', $content);
+            $includeList = [];
+            foreach ($items as $item) {
+                $item = trim($item);
+                if (empty($item)) continue;
+                $includeList[] = ['address' => $item];
+            }
+
+            // 1. Clear any existing include list on the router for this group
+            try {
+                $this->request("rci/object-group/fqdn/{$name}/include", 'POST', [
+                    'no' => true
+                ]);
+            } catch (Throwable $e) {
+                // Ignore if group or include list didn't exist
+            }
+
+            // 2. Configure the group and its include list
+            $this->request("rci/object-group/fqdn", 'POST', [
+                $name => [
+                    'description' => $description,
+                    'include' => $includeList
+                ]
+            ]);
+
+            // 3. Create the DNS proxy route
+            $this->request("rci/dns-proxy/route", 'POST', [
+                'object-group' => $name,
+                'interface' => $interfaceId,
+                'auto' => true
+            ]);
+        }
+
+        // Save running-config
+        $this->saveConfig();
+    }
+
+    /**
      * Delete an interface
      */
     public function removeInterface(string $interfaceId): bool {
