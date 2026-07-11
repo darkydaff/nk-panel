@@ -72,6 +72,16 @@ class RouterManager {
             }
         }
         
+        // Prune routers that are no longer present or active in ext_clients
+        $pdo->exec("
+            DELETE FROM routers 
+            WHERE ext_client_code NOT IN (
+                SELECT code FROM ext_clients 
+                WHERE domain IS NOT NULL AND domain != '' 
+                  AND pass IS NOT NULL AND pass != ''
+            )
+        ");
+        
         return $syncedCount;
     }
 
