@@ -754,7 +754,30 @@ class KeeneticRouter {
             // Ignore error if dns-proxy has no routes configured or is not initialized
         }
 
-        // 2. Configure new groups and routes
+        // 2. Fetch and clean up any prior existing FQDN groups on the router that are not in our pushed groups list
+        try {
+            $pushedNames = [];
+            foreach ($groups as $group) {
+                $pushedNames[] = trim($group['name']);
+            }
+
+            $currentGroups = $this->request("rci/object-group/fqdn");
+            if ($currentGroups['code'] === 200 && is_array($currentGroups['body'])) {
+                foreach ($currentGroups['body'] as $groupName => $details) {
+                    if (!in_array($groupName, $pushedNames)) {
+                        // Delete this FQDN object-group from the router
+                        $res = $this->request("rci/object-group/fqdn/{$groupName}", 'POST', [
+                            'no' => true
+                        ]);
+                        // We do not throw an error here because if the group is still in use elsewhere, the router will reject it, which is fine
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            // Ignore error
+        }
+
+        // 3. Configure new groups and routes
         foreach ($groups as $group) {
             $name = trim($group['name']);
             if (empty($name)) continue;
