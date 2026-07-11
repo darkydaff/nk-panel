@@ -117,7 +117,7 @@
                         <div class="form-control">
                             <label class="label py-1">
                                 <span class="label-text font-semibold text-xs tracking-wide uppercase text-base-content/60">Domains & Subnets</span>
-                                <span class="label-text-alt text-xs text-base-content/40">One per line</span>
+                                <span id="contentCount" class="label-text-alt text-xs text-base-content/40 transition-colors duration-200">One per line</span>
                             </label>
                             <textarea id="groupContent" name="content" required rows="10" 
                                       placeholder="discord.gg&#10;discordapp.com&#10;149.154.164.0/22" 
@@ -152,6 +152,9 @@ function editGroup(group) {
     document.getElementById('submitBtn').innerHTML = '<i class="fas fa-save"></i> Update Group';
     document.getElementById('cancelBtn').classList.remove('hidden');
     
+    // Trigger count refresh
+    document.getElementById('groupContent').dispatchEvent(new Event('input'));
+    
     // Smooth scroll to form on mobile
     document.getElementById('groupForm').scrollIntoView({ behavior: 'smooth' });
 }
@@ -163,7 +166,70 @@ function resetForm() {
     document.getElementById('formTitle').innerHTML = '<i class="fas fa-plus-circle text-success"></i> Create New Group';
     document.getElementById('submitBtn').innerHTML = '<i class="fas fa-save"></i> Save Group';
     document.getElementById('cancelBtn').classList.add('hidden');
+    
+    // Trigger count refresh
+    document.getElementById('groupContent').dispatchEvent(new Event('input'));
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    const textarea = document.getElementById('groupContent');
+    const countLabel = document.getElementById('contentCount');
+    
+    function parseAndFormat(autoFormat = false) {
+        const text = textarea.value;
+        if (!text.trim()) {
+            countLabel.textContent = 'One per line';
+            countLabel.classList.add('text-base-content/40');
+            countLabel.classList.remove('text-success', 'font-semibold');
+            return;
+        }
+        
+        const lines = text.split(/[\r\n,]+/);
+        const seen = new Set();
+        const cleaned = [];
+        let duplicateCount = 0;
+        
+        lines.forEach(line => {
+            let item = line.trim().toLowerCase();
+            if (!item) return;
+            
+            // Clean up protocols and trailing slashes
+            item = item.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+            
+            if (item) {
+                if (seen.has(item)) {
+                    duplicateCount++;
+                } else {
+                    seen.add(item);
+                    cleaned.push(item);
+                }
+            }
+        });
+        
+        if (autoFormat && cleaned.length > 0) {
+            // Sort natural-like
+            cleaned.sort();
+            textarea.value = cleaned.join('\n');
+            duplicateCount = 0; // all duplicates are removed now
+        }
+        
+        if (cleaned.length > 0) {
+            countLabel.textContent = `${cleaned.length} item(s)` + (duplicateCount > 0 ? ` (${duplicateCount} duplicate(s) removed)` : '');
+            countLabel.classList.remove('text-base-content/40');
+            countLabel.classList.add('text-success', 'font-semibold');
+        } else {
+            countLabel.textContent = 'One per line';
+            countLabel.classList.add('text-base-content/40');
+            countLabel.classList.remove('text-success', 'font-semibold');
+        }
+    }
+    
+    textarea.addEventListener('input', () => parseAndFormat(false));
+    textarea.addEventListener('blur', () => parseAndFormat(true));
+    
+    // Run initial parse on page load
+    parseAndFormat(false);
+});
 
 async function saveGroup(event) {
     event.preventDefault();

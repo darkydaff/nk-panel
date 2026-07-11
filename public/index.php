@@ -3381,13 +3381,33 @@ Router::post('/api/routing-groups', function () {
     $id = isset($input['id']) && $input['id'] !== '' ? (int)$input['id'] : null;
     $name = trim($input['name'] ?? '');
     $description = trim($input['description'] ?? '');
-    $content = trim($input['content'] ?? '');
+    $contentRaw = trim($input['content'] ?? '');
     
     if (empty($name)) {
         http_response_code(400);
         echo json_encode(['error' => 'Group name is required.']);
         return;
     }
+
+    // Normalizing, deduplicating, and sorting the domain/CIDR list
+    $lines = preg_split('/[\r\n,]+/', $contentRaw);
+    $cleaned = [];
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if (empty($line)) continue;
+
+        // Strip http:// or https:// and trailing slash if accidentally pasted
+        $line = preg_replace('#^https?://#i', '', $line);
+        $line = rtrim($line, '/');
+        $line = strtolower($line);
+
+        if (!empty($line)) {
+            $cleaned[] = $line;
+        }
+    }
+    $cleaned = array_unique($cleaned);
+    natcasesort($cleaned);
+    $content = implode("\n", $cleaned);
     
     $pdo = DB::conn();
     try {
