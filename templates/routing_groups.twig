@@ -8,7 +8,7 @@
     <div class="text-sm breadcrumbs mb-6 text-base-content/60">
         <ul>
             <li><a href="/dashboard" class="hover:text-base-content transition-colors">Home</a></li>
-            <li>Routing Groups</li>
+            <li><span class="text-base-content/80 font-medium">Routing Groups</span></li>
         </ul>
     </div>
 
@@ -16,75 +16,147 @@
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
             <h1 class="text-3xl font-extrabold tracking-tight text-base-content flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-primary to-secondary flex items-center justify-center text-white shadow-lg shadow-primary/20">
-                    <i class="fas fa-route"></i>
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-primary to-secondary flex items-center justify-center text-white shadow-xl shadow-primary/20">
+                    <i class="fas fa-route text-xl"></i>
                 </div>
-                Routing Groups
+                <div>
+                    <span>Routing Groups</span>
+                    <span class="text-xs block font-normal text-base-content/50 mt-0.5">Manage domain and subnet lists for selective VPN routing</span>
+                </div>
             </h1>
-            <p class="text-base-content/60 mt-1">Manage domain lists and CIDR subnets to route through Keenetic VPN clients</p>
         </div>
     </div>
 
     <!-- Main Grid Layout -->
     <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
         
-        <!-- Left: List of Existing Groups (2 cols on large, 1 on small) -->
+        <!-- Left: List of Existing Groups (2 cols) -->
         <div class="xl:col-span-2 space-y-6">
-            <div class="card bg-base-300 border border-base-content/5 shadow-xl">
-                <div class="card-body p-6">
-                    <h2 class="card-title text-lg font-bold flex items-center gap-2 mb-4">
-                        <i class="fas fa-list text-primary"></i>
-                        Active Groups
-                        <span class="badge badge-primary badge-sm ml-2 font-mono">{{ groups|length }}</span>
-                    </h2>
-
-                    {% if groups is empty %}
-                        <div class="text-center py-12 border-2 border-dashed border-base-content/10 rounded-2xl">
-                            <div class="text-5xl text-base-content/20 mb-4">
-                                <i class="fas fa-folder-open"></i>
-                            </div>
-                            <h3 class="text-lg font-bold text-base-content/70">No routing groups created yet</h3>
-                            <p class="text-sm text-base-content/40 mt-1">Use the form on the right to add your first group.</p>
-                        </div>
-                    {% else %}
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {% for g in groups %}
-                                {% set items_count = g.content|split('\n')|filter(line => line|trim is not empty)|length %}
-                                <div class="card bg-base-200 border border-base-content/5 hover:border-primary/30 hover:bg-base-100/50 transition-all duration-300 group shadow-md">
-                                    <div class="card-body p-5 flex flex-col justify-between h-full">
-                                        <div>
-                                            <div class="flex items-start justify-between gap-2">
-                                                <h3 class="font-bold text-base-content group-hover:text-primary transition-colors text-base truncate" title="{{ g.name }}">
-                                                    {{ g.name }}
-                                                </h3>
-                                                <span class="badge badge-ghost font-mono text-xs">{{ items_count }} items</span>
-                                            </div>
-                                            
-                                            <p class="text-xs text-base-content/50 mt-2 line-clamp-2 min-h-[32px]">
-                                                {{ g.description ?: 'No description provided.' }}
-                                            </p>
-                                        </div>
-                                        
-                                        <div class="flex items-center justify-between gap-2 mt-4 pt-4 border-t border-base-content/5">
-                                            <button onclick="editGroup({{ g|json_encode }})" class="btn btn-ghost btn-xs text-info gap-1 normal-case">
-                                                <i class="fas fa-edit"></i> Edit
-                                            </button>
-                                            <button onclick="deleteGroup({{ g.id }}, '{{ g.name|escape('js') }}')" class="btn btn-ghost btn-xs text-error gap-1 normal-case">
-                                                <i class="fas fa-trash-alt"></i> Delete
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    {% endif %}
+            <!-- Search & Filter Header -->
+            <div class="flex flex-col sm:flex-row gap-4 items-center justify-between bg-base-300 border border-base-content/5 p-4 rounded-2xl shadow-lg">
+                <div class="relative w-full sm:max-w-xs">
+                    <label class="input input-bordered input-sm flex items-center gap-2 rounded-xl bg-base-200">
+                        <i class="fas fa-search text-base-content/30 text-xs"></i>
+                        <input type="text" id="groupSearchInput" oninput="filterGroups(this.value)" placeholder="Search groups..." class="grow text-xs">
+                    </label>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-base-content/50 font-mono">
+                    Total: <span class="badge badge-primary badge-sm font-bold" id="totalGroupsCount">{{ groups|length }}</span>
                 </div>
             </div>
+
+            <!-- Groups Grid -->
+            {% if groups is empty %}
+                <div class="text-center py-20 border-2 border-dashed border-base-content/10 rounded-3xl bg-base-300/40" id="emptyState">
+                    <div class="w-16 h-16 rounded-full bg-base-300 flex items-center justify-center mx-auto mb-4 text-base-content/30">
+                        <i class="fas fa-folder-open text-2xl"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-base-content/80">No routing groups found</h3>
+                    <p class="text-sm text-base-content/40 mt-1">Use the form on the right to build your first domain list.</p>
+                </div>
+            {% else %}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5" id="groupsGrid">
+                    {% for g in groups %}
+                        {% set domains_count = 0 %}
+                        {% set subnets_count = 0 %}
+                        {% set total_items = 0 %}
+                        {% for line in g.content|split('\n') %}
+                            {% set trimmed = line|trim %}
+                            {% if trimmed is not empty %}
+                                {% set total_items = total_items + 1 %}
+                                {% if '/' in trimmed %}
+                                    {% set subnets_count = subnets_count + 1 %}
+                                {% else %}
+                                    {% set domains_count = domains_count + 1 %}
+                                {% endif %}
+                            {% endif %}
+                        {% endfor %}
+
+                        {# Match icon class based on group name #}
+                        {% set icon_class = 'fa-solid fa-route text-neutral-content/60' %}
+                        {% set name_lower = g.name|lower %}
+                        {% if 'telegram' in name_lower or 'tg' in name_lower %}
+                            {% set icon_class = 'fa-brands fa-telegram text-sky-400' %}
+                        {% elseif 'discord' in name_lower or 'dis' in name_lower %}
+                            {% set icon_class = 'fa-brands fa-discord text-indigo-400' %}
+                        {% elseif 'youtube' in name_lower or 'yt' in name_lower %}
+                            {% set icon_class = 'fa-brands fa-youtube text-red-500' %}
+                        {% elseif 'instagram' in name_lower or 'insta' in name_lower or 'facebook' in name_lower or 'fb' in name_lower %}
+                            {% set icon_class = 'fa-brands fa-instagram text-pink-500' %}
+                        {% elseif 'spotify' in name_lower %}
+                            {% set icon_class = 'fa-brands fa-spotify text-emerald-400' %}
+                        {% elseif 'tiktok' in name_lower %}
+                            {% set icon_class = 'fa-brands fa-tiktok text-rose-500' %}
+                        {% elseif 'twitch' in name_lower %}
+                            {% set icon_class = 'fa-brands fa-twitch text-purple-400' %}
+                        {% elseif 'xbox' in name_lower or 'ubi' in name_lower or 'microsoft' in name_lower %}
+                            {% set icon_class = 'fa-brands fa-xbox text-success' %}
+                        {% elseif 'ai' in name_lower or 'chatgpt' in name_lower or 'openai' in name_lower or 'claude' in name_lower or 'gemini' in name_lower %}
+                            {% set icon_class = 'fa-solid fa-robot text-purple-400' %}
+                        {% endif %}
+
+                        <div class="card bg-base-300 border border-base-content/5 hover:border-primary/20 hover:bg-base-200/60 hover:-translate-y-1 transition-all duration-300 group shadow-lg rounded-2xl search-group-card" 
+                             data-name="{{ g.name|lower }}" data-desc="{{ g.description|lower }}">
+                            <div class="card-body p-6 flex flex-col justify-between h-full">
+                                <div>
+                                    <!-- Title & Icon row -->
+                                    <div class="flex items-start justify-between gap-4 mb-3">
+                                        <div class="flex items-center gap-3 min-w-0">
+                                            <div class="w-10 h-10 rounded-xl bg-base-200 flex items-center justify-center shrink-0 border border-base-content/5 group-hover:scale-110 transition-transform duration-300">
+                                                <i class="{{ icon_class }} text-lg"></i>
+                                            </div>
+                                            <div class="min-w-0">
+                                                <h3 class="font-bold text-base-content text-base truncate group-hover:text-primary transition-colors duration-200" title="{{ g.name }}">
+                                                    {{ g.name }}
+                                                </h3>
+                                                <p class="text-[10px] text-base-content/40 font-mono tracking-wider uppercase mt-0.5">FQDN Group</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Description -->
+                                    <p class="text-xs text-base-content/50 line-clamp-2 min-h-[32px] mb-4">
+                                        {{ g.description ?: 'No description provided.' }}
+                                    </p>
+
+                                    <!-- Breakdowns -->
+                                    <div class="flex flex-wrap gap-1.5 mb-4">
+                                        {% if domains_count > 0 %}
+                                            <span class="badge badge-info badge-outline font-semibold font-mono text-[10px] gap-1 px-2.5 py-2.5">
+                                                <i class="fas fa-globe text-[8px]"></i> {{ domains_count }} domains
+                                            </span>
+                                        {% endif %}
+                                        {% if subnets_count > 0 %}
+                                            <span class="badge badge-warning badge-outline font-semibold font-mono text-[10px] gap-1 px-2.5 py-2.5">
+                                                <i class="fas fa-network-wired text-[8px]"></i> {{ subnets_count }} subnets
+                                            </span>
+                                        {% endif %}
+                                        {% if total_items == 0 %}
+                                            <span class="badge badge-ghost font-mono text-[10px] px-2.5 py-2.5">Empty list</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                <!-- Actions -->
+                                <div class="flex items-center justify-end gap-2 border-t border-base-content/5 pt-4 mt-2">
+                                    <button onclick="editGroup({{ g|json_encode }})" class="btn btn-ghost btn-xs text-info gap-1 normal-case hover:bg-info/10">
+                                        <i class="fas fa-edit"></i> Edit
+                                    </button>
+                                    <div class="divider divider-horizontal mx-0"></div>
+                                    <button onclick="deleteGroup({{ g.id }}, '{{ g.name|escape('js') }}')" class="btn btn-ghost btn-xs text-error gap-1 normal-case hover:bg-error/10">
+                                        <i class="fas fa-trash-alt"></i> Delete
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
         </div>
 
         <!-- Right: Create/Edit Form (1 col) -->
         <div class="space-y-6">
-            <div class="card bg-base-300 border border-base-content/5 shadow-xl sticky top-6">
+            <div class="card bg-base-300 border border-base-content/5 shadow-xl sticky top-6 rounded-2xl overflow-hidden">
                 <div class="card-body p-6">
                     <h2 id="formTitle" class="card-title text-lg font-bold flex items-center gap-2 mb-4">
                         <i class="fas fa-plus-circle text-success"></i>
@@ -97,31 +169,37 @@
                         <!-- Group Name -->
                         <div class="form-control">
                             <label class="label py-1">
-                                <span class="label-text font-semibold text-xs tracking-wide uppercase text-base-content/60">Group Name</span>
+                                <span class="label-text font-bold text-xs uppercase tracking-wider text-base-content/60">Group Name</span>
                             </label>
-                            <input type="text" id="groupName" name="name" required placeholder="e.g. Discord" 
-                                   class="input input-bordered focus:input-primary w-full text-sm font-mono" 
-                                   pattern="^[a-zA-Z0-9_\-]+$" title="Letters, numbers, dashes and underscores only.">
+                            <div class="relative flex items-center">
+                                <span class="absolute left-3 text-base-content/40"><i class="fas fa-tag"></i></span>
+                                <input type="text" id="groupName" name="name" required placeholder="e.g. Discord" 
+                                       class="input input-bordered focus:input-primary w-full text-sm font-mono pl-9" 
+                                       pattern="^[a-zA-Z0-9_\-]+$" title="Letters, numbers, dashes and underscores only.">
+                            </div>
                         </div>
 
                         <!-- Description -->
                         <div class="form-control">
                             <label class="label py-1">
-                                <span class="label-text font-semibold text-xs tracking-wide uppercase text-base-content/60">Description</span>
+                                <span class="label-text font-bold text-xs uppercase tracking-wider text-base-content/60">Description</span>
                             </label>
-                            <input type="text" id="groupDescription" name="description" placeholder="e.g. Chat application servers" 
-                                   class="input input-bordered focus:input-primary w-full text-sm">
+                            <div class="relative flex items-center">
+                                <span class="absolute left-3 text-base-content/40"><i class="fas fa-align-left"></i></span>
+                                <input type="text" id="groupDescription" name="description" placeholder="e.g. Chat application servers" 
+                                       class="input input-bordered focus:input-primary w-full text-sm pl-9">
+                            </div>
                         </div>
 
                         <!-- Content List -->
                         <div class="form-control">
-                            <label class="label py-1">
-                                <span class="label-text font-semibold text-xs tracking-wide uppercase text-base-content/60">Domains & Subnets</span>
+                            <div class="flex items-center justify-between label py-1">
+                                <span class="label-text font-bold text-xs uppercase tracking-wider text-base-content/60">Domains & Subnets</span>
                                 <span id="contentCount" class="label-text-alt text-xs text-base-content/40 transition-colors duration-200">One per line</span>
-                            </label>
+                            </div>
                             <textarea id="groupContent" name="content" required rows="10" 
                                       placeholder="discord.gg&#10;discordapp.com&#10;149.154.164.0/22" 
-                                      class="textarea textarea-bordered focus:textarea-primary w-full font-mono text-xs leading-relaxed"></textarea>
+                                      class="textarea textarea-bordered focus:textarea-primary w-full font-mono text-xs leading-relaxed resize-y"></textarea>
                         </div>
 
                         <!-- Form Actions -->
@@ -142,6 +220,35 @@
 </div>
 
 <script>
+function filterGroups(query) {
+    const cards = document.querySelectorAll('.search-group-card');
+    const emptyState = document.getElementById('emptyState');
+    const normalizedQuery = query.toLowerCase().trim();
+    let visibleCount = 0;
+    
+    cards.forEach(card => {
+        const name = card.getAttribute('data-name');
+        const desc = card.getAttribute('data-desc');
+        if (name.includes(normalizedQuery) || desc.includes(normalizedQuery)) {
+            card.classList.remove('hidden');
+            visibleCount++;
+        } else {
+            card.classList.add('hidden');
+        }
+    });
+    
+    document.getElementById('totalGroupsCount').textContent = visibleCount;
+    
+    if (emptyState) {
+        // Handle empty state display
+        if (visibleCount === 0) {
+            emptyState.classList.remove('hidden');
+        } else {
+            emptyState.classList.add('hidden');
+        }
+    }
+}
+
 function editGroup(group) {
     document.getElementById('groupId').value = group.id;
     document.getElementById('groupName').value = group.name;
@@ -207,10 +314,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         if (autoFormat && cleaned.length > 0) {
-            // Sort natural-like
             cleaned.sort();
             textarea.value = cleaned.join('\n');
-            duplicateCount = 0; // all duplicates are removed now
+            duplicateCount = 0;
         }
         
         if (cleaned.length > 0) {
@@ -227,7 +333,6 @@ document.addEventListener('DOMContentLoaded', () => {
     textarea.addEventListener('input', () => parseAndFormat(false));
     textarea.addEventListener('blur', () => parseAndFormat(true));
     
-    // Run initial parse on page load
     parseAndFormat(false);
 });
 
