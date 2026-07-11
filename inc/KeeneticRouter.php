@@ -721,28 +721,34 @@ class KeeneticRouter {
             $current = $this->request("rci/dns-proxy/route");
             if ($current['code'] === 200 && is_array($current['body'])) {
                 $existingRoutes = [];
-                if (isset($current['body']['object-group'])) {
-                    $existingRoutes[] = $current['body'];
-                } else {
-                    foreach ($current['body'] as $key => $val) {
-                        if (is_array($val)) {
-                            $routeItem = $val;
-                            if (!isset($routeItem['object-group']) && is_string($key)) {
-                                $routeItem['object-group'] = $key;
+                $ogRoutes = $current['body']['object-group'] ?? [];
+                
+                if (is_array($ogRoutes)) {
+                    if (isset($ogRoutes['group'])) {
+                        $existingRoutes[] = $ogRoutes;
+                    } else {
+                        foreach ($ogRoutes as $key => $val) {
+                            if (is_array($val)) {
+                                $routeItem = $val;
+                                if (!isset($routeItem['group']) && is_string($key)) {
+                                    $routeItem['group'] = $key;
+                                }
+                                $existingRoutes[] = $routeItem;
                             }
-                            $existingRoutes[] = $routeItem;
                         }
                     }
                 }
 
                 foreach ($existingRoutes as $route) {
                     if (is_array($route) && ($route['interface'] ?? '') === $interfaceId) {
-                        $groupName = $route['object-group'] ?? '';
+                        $groupName = $route['group'] ?? '';
                         if (!empty($groupName)) {
                             $res = $this->request("rci/dns-proxy/route", 'POST', [
-                                'object-group' => $groupName,
-                                'interface' => $interfaceId,
-                                'no' => true
+                                'object-group' => [
+                                    'group' => $groupName,
+                                    'interface' => $interfaceId,
+                                    'no' => true
+                                ]
                             ]);
                             $this->checkResponseError($res, "Remove old dns-route {$groupName}");
                         }
@@ -791,9 +797,11 @@ class KeeneticRouter {
 
             // Create the DNS proxy route
             $res = $this->request("rci/dns-proxy/route", 'POST', [
-                'object-group' => $name,
-                'interface' => $interfaceId,
-                'auto' => true
+                'object-group' => [
+                    'group' => $name,
+                    'interface' => $interfaceId,
+                    'auto' => true
+                ]
             ]);
             $this->checkResponseError($res, "Add DNS proxy route for {$name}");
         }
