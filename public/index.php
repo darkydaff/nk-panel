@@ -3407,6 +3407,13 @@ Router::post('/api/routing-groups', function () {
     }
     $cleaned = array_unique($cleaned);
     natcasesort($cleaned);
+
+    if (count($cleaned) > 300) {
+        http_response_code(400);
+        echo json_encode(['error' => 'A routing group cannot contain more than 300 entries (domains/subnets). Current count: ' . count($cleaned)]);
+        return;
+    }
+
     $content = implode("\n", $cleaned);
     
     $pdo = DB::conn();

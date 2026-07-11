@@ -513,13 +513,37 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         if (cleaned.length > 0) {
-            countLabel.textContent = `${cleaned.length} item(s)` + (duplicateCount > 0 ? ` (${duplicateCount} duplicate(s) removed)` : '');
+            let msg = `${cleaned.length}/300 entries`;
+            if (duplicateCount > 0) {
+                msg += ` (${duplicateCount} duplicate(s) removed)`;
+            }
+            
+            countLabel.textContent = msg;
             countLabel.classList.remove('text-base-content/40');
-            countLabel.classList.add('text-success', 'font-semibold');
+            
+            const submitBtn = document.getElementById('submitBtn');
+            if (cleaned.length > 300) {
+                countLabel.textContent = `${msg} - Limit exceeded!`;
+                countLabel.classList.remove('text-success', 'font-semibold');
+                countLabel.classList.add('text-error', 'font-bold');
+                submitBtn.disabled = true;
+                submitBtn.classList.add('btn-disabled');
+            } else {
+                countLabel.classList.remove('text-error', 'font-bold');
+                countLabel.classList.add('text-success', 'font-semibold');
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('btn-disabled');
+            }
         } else {
-            countLabel.textContent = 'One per line';
+            countLabel.textContent = 'One per line (max 300)';
             countLabel.classList.add('text-base-content/40');
-            countLabel.classList.remove('text-success', 'font-semibold');
+            countLabel.classList.remove('text-success', 'font-semibold', 'text-error', 'font-bold');
+            
+            const submitBtn = document.getElementById('submitBtn');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('btn-disabled');
+            }
         }
     }
     
