@@ -32,6 +32,65 @@
         </div>
     </div>
 
+    <!-- Compute stats for display -->
+    {% set global_domains = 0 %}
+    {% set global_subnets = 0 %}
+    {% for g in groups %}
+        {% for line in g.content|split('\n') %}
+            {% set trimmed = line|trim %}
+            {% if trimmed is not empty %}
+                {% if '/' in trimmed %}
+                    {% set global_subnets = global_subnets + 1 %}
+                {% else %}
+                    {% set global_domains = global_domains + 1 %}
+                {% endif %}
+            {% endif %}
+        {% endfor %}
+    {% endfor %}
+
+    <!-- Stats Dashboard Row -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
+        <!-- Stat 1 -->
+        <div class="stats bg-base-300 border border-base-content/5 shadow-xl rounded-2xl overflow-hidden">
+            <div class="stat p-5">
+                <div class="stat-figure text-primary">
+                    <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                        <i class="fas fa-folder text-lg"></i>
+                    </div>
+                </div>
+                <div class="stat-title text-[10px] font-bold uppercase tracking-wider text-base-content/50">Total Groups</div>
+                <div class="stat-value text-3xl font-extrabold text-primary mt-1">{{ groups|length }}</div>
+                <div class="stat-desc text-xs text-base-content/40 mt-1">Configured domain lists</div>
+            </div>
+        </div>
+        <!-- Stat 2 -->
+        <div class="stats bg-base-300 border border-base-content/5 shadow-xl rounded-2xl overflow-hidden">
+            <div class="stat p-5">
+                <div class="stat-figure text-info">
+                    <div class="w-10 h-10 rounded-xl bg-info/10 flex items-center justify-center">
+                        <i class="fas fa-globe text-lg"></i>
+                    </div>
+                </div>
+                <div class="stat-title text-[10px] font-bold uppercase tracking-wider text-base-content/50">Domains</div>
+                <div class="stat-value text-3xl font-extrabold text-info mt-1">{{ global_domains }}</div>
+                <div class="stat-desc text-xs text-base-content/40 mt-1">Active domain routing rules</div>
+            </div>
+        </div>
+        <!-- Stat 3 -->
+        <div class="stats bg-base-300 border border-base-content/5 shadow-xl rounded-2xl overflow-hidden">
+            <div class="stat p-5">
+                <div class="stat-figure text-warning">
+                    <div class="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center">
+                        <i class="fas fa-network-wired text-lg"></i>
+                    </div>
+                </div>
+                <div class="stat-title text-[10px] font-bold uppercase tracking-wider text-base-content/50">Subnets (CIDR)</div>
+                <div class="stat-value text-3xl font-extrabold text-warning mt-1">{{ global_subnets }}</div>
+                <div class="stat-desc text-xs text-base-content/40 mt-1">Direct IP routing subnets</div>
+            </div>
+        </div>
+    </div>
+
     <!-- Search & Filter Header -->
     <div class="flex flex-col sm:flex-row gap-4 items-center justify-between bg-base-300 border border-base-content/5 p-4 rounded-2xl shadow-lg mb-8">
         <div class="relative w-full sm:max-w-md">
@@ -41,7 +100,7 @@
             </label>
         </div>
         <div class="flex items-center gap-2 text-xs text-base-content/50 font-mono">
-            Total Groups: <span class="badge badge-primary badge-sm font-bold" id="totalGroupsCount">{{ groups|length }}</span>
+            Filtered: <span class="badge badge-primary badge-sm font-bold" id="totalGroupsCount">{{ groups|length }}</span>
         </div>
     </div>
 
@@ -104,7 +163,7 @@
                                 <div class="w-10 h-10 rounded-xl bg-base-200 flex items-center justify-center shrink-0 border border-base-content/5 group-hover:scale-110 transition-transform duration-300">
                                     <i class="{{ icon_class }} text-lg"></i>
                                 </div>
-                                <div class="min-w-0">
+                                <div class="min-w-0 flex-1">
                                     <h3 class="font-bold text-base-content text-base truncate group-hover:text-primary transition-colors duration-200" title="{{ g.name }}">
                                         {{ g.name }}
                                     </h3>
@@ -119,20 +178,27 @@
                         </div>
 
                         <div>
-                            <!-- Stats Badges -->
-                            <div class="flex flex-wrap gap-1.5 mb-4">
-                                {% if domains_count > 0 %}
-                                    <span class="badge badge-info badge-outline font-semibold font-mono text-[10px] gap-1 px-2.5 py-2.5">
-                                        <i class="fas fa-globe text-[8px]"></i> {{ domains_count }}
-                                    </span>
-                                {% endif %}
-                                {% if subnets_count > 0 %}
-                                    <span class="badge badge-warning badge-outline font-semibold font-mono text-[10px] gap-1 px-2.5 py-2.5">
-                                        <i class="fas fa-network-wired text-[8px]"></i> {{ subnets_count }}
-                                    </span>
-                                {% endif %}
-                                {% if total_items == 0 %}
-                                    <span class="badge badge-ghost font-mono text-[10px] px-2.5 py-2.5">Empty</span>
+                            <!-- Stats Badges & View Content Action -->
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="flex flex-wrap gap-1.5">
+                                    {% if domains_count > 0 %}
+                                        <span class="badge badge-info badge-outline font-semibold font-mono text-[10px] gap-1 px-2.5 py-2.5">
+                                            <i class="fas fa-globe text-[8px]"></i> {{ domains_count }}
+                                        </span>
+                                    {% endif %}
+                                    {% if subnets_count > 0 %}
+                                        <span class="badge badge-warning badge-outline font-semibold font-mono text-[10px] gap-1 px-2.5 py-2.5">
+                                            <i class="fas fa-network-wired text-[8px]"></i> {{ subnets_count }}
+                                        </span>
+                                    {% endif %}
+                                    {% if total_items == 0 %}
+                                        <span class="badge badge-ghost font-mono text-[10px] px-2.5 py-2.5">Empty</span>
+                                    {% endif %}
+                                </div>
+                                {% if total_items > 0 %}
+                                    <button onclick="viewGroupDetails({{ g|json_encode }})" class="btn btn-ghost btn-circle btn-xs text-base-content/40 hover:text-primary tooltip tooltip-left" data-tip="Quick View Entries">
+                                        <i class="fas fa-eye text-xs"></i>
+                                    </button>
                                 {% endif %}
                             </div>
 
@@ -214,6 +280,48 @@
     </form>
 </dialog>
 
+<!-- Details / Content Viewer Modal -->
+<dialog id="details_modal" class="modal modal-bottom sm:modal-middle">
+    <div class="modal-box bg-base-300 border border-base-content/10 rounded-2xl p-6 shadow-2xl max-w-xl w-full">
+        <h3 id="detailsTitle" class="font-bold text-lg flex items-center gap-2 mb-2">
+            <i class="fas fa-folder-open text-info"></i> Group Details
+        </h3>
+        
+        <p id="detailsDesc" class="text-xs text-base-content/50 mb-6"></p>
+
+        <!-- Tabs -->
+        <div class="tabs tabs-boxed bg-base-200 mb-4 p-1 rounded-xl">
+            <button id="tabDomains" onclick="switchDetailsTab('domains')" class="tab tab-active flex-1 font-bold text-xs py-2">Domains</button>
+            <button id="tabSubnets" onclick="switchDetailsTab('subnets')" class="tab flex-1 font-bold text-xs py-2">Subnets (CIDR)</button>
+        </div>
+
+        <!-- Domains content -->
+        <div id="detailsDomainsContent" class="space-y-3">
+            <div class="relative">
+                <input type="text" id="detailsSearch" oninput="filterDetailsList(this.value)" placeholder="Search domains..." class="input input-bordered input-sm w-full rounded-xl bg-base-200 text-xs pl-8">
+                <span class="absolute left-3 top-2.5 text-base-content/30"><i class="fas fa-search text-xs"></i></span>
+            </div>
+            <div id="domainsList" class="max-h-60 overflow-y-auto flex flex-wrap gap-1.5 p-3 bg-base-200/50 rounded-xl border border-base-content/5">
+                <!-- populated dynamically -->
+            </div>
+        </div>
+
+        <!-- Subnets content -->
+        <div id="detailsSubnetsContent" class="space-y-3 hidden">
+            <div id="subnetsList" class="max-h-60 overflow-y-auto space-y-1 p-3 bg-base-200/50 rounded-xl border border-base-content/5 font-mono text-xs">
+                <!-- populated dynamically -->
+            </div>
+        </div>
+
+        <div class="modal-action mt-6">
+            <button onclick="closeDetailsModal()" class="btn btn-ghost btn-sm rounded-xl px-6">Close</button>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button onclick="closeDetailsModal()">close</button>
+    </form>
+</dialog>
+
 <script>
 function filterGroups(query) {
     const cards = document.querySelectorAll('.search-group-card');
@@ -250,14 +358,14 @@ function openGroupModal(group = null) {
         document.getElementById('groupDescription').value = group.description || '';
         document.getElementById('groupContent').value = group.content || '';
         
-        document.getElementById('modalTitle').innerHTML = '<i class="fas fa-edit text-info"></i> Edit Group';
-        document.getElementById('submitBtn').innerHTML = '<i class="fas fa-save"></i> Update Group';
+        document.getElementById('modalTitle').innerHTML = '<i class="fas fa-edit text-info mr-2"></i>Edit Group';
+        document.getElementById('submitBtn').innerHTML = '<i class="fas fa-save mr-2"></i>Update Group';
     } else {
         document.getElementById('groupId').value = '';
         document.getElementById('groupForm').reset();
         
-        document.getElementById('modalTitle').innerHTML = '<i class="fas fa-plus-circle text-success"></i> Create New Group';
-        document.getElementById('submitBtn').innerHTML = '<i class="fas fa-save"></i> Save Group';
+        document.getElementById('modalTitle').innerHTML = '<i class="fas fa-plus-circle text-success mr-2"></i>Create New Group';
+        document.getElementById('submitBtn').innerHTML = '<i class="fas fa-save mr-2"></i>Save Group';
     }
     
     // Trigger count refresh
@@ -267,6 +375,100 @@ function openGroupModal(group = null) {
 
 function closeGroupModal() {
     document.getElementById('group_modal').close();
+}
+
+/* Details Modal Functions */
+let currentDetailsGroup = null;
+
+function viewGroupDetails(group) {
+    currentDetailsGroup = group;
+    
+    document.getElementById('detailsTitle').innerHTML = `<i class="fas fa-folder-open text-info mr-2"></i>${group.name}`;
+    document.getElementById('detailsDesc').textContent = group.description || 'No description provided.';
+    document.getElementById('detailsSearch').value = '';
+    
+    const lines = (group.content || '').split(/[\r\n,]+/);
+    const domains = [];
+    const subnets = [];
+    
+    lines.forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        if (trimmed.includes('/')) {
+            subnets.push(trimmed);
+        } else {
+            domains.push(trimmed);
+        }
+    });
+    
+    // Populate domains
+    const domainsList = document.getElementById('domainsList');
+    domainsList.innerHTML = '';
+    if (domains.length === 0) {
+        domainsList.innerHTML = '<div class="text-xs text-base-content/40 p-4 mx-auto">No domains in this group</div>';
+    } else {
+        domains.forEach(d => {
+            const span = document.createElement('span');
+            span.className = 'badge badge-sm badge-info badge-outline font-mono py-2.5 px-3 search-detail-item';
+            span.textContent = d;
+            span.setAttribute('data-search', d.toLowerCase());
+            domainsList.appendChild(span);
+        });
+    }
+    
+    // Populate subnets
+    const subnetsList = document.getElementById('subnetsList');
+    subnetsList.innerHTML = '';
+    if (subnets.length === 0) {
+        subnetsList.innerHTML = '<div class="text-xs text-base-content/40 p-4 text-center">No subnets in this group</div>';
+    } else {
+        subnets.forEach(s => {
+            const div = document.createElement('div');
+            div.className = 'flex items-center gap-2 px-3 py-1.5 hover:bg-base-100 rounded-lg text-warning search-detail-item';
+            div.setAttribute('data-search', s.toLowerCase());
+            div.innerHTML = `<i class="fas fa-network-wired text-[10px]"></i> <span>${s}</span>`;
+            subnetsList.appendChild(div);
+        });
+    }
+    
+    switchDetailsTab('domains');
+    document.getElementById('details_modal').showModal();
+}
+
+function closeDetailsModal() {
+    document.getElementById('details_modal').close();
+}
+
+function switchDetailsTab(tab) {
+    const tabDomains = document.getElementById('tabDomains');
+    const tabSubnets = document.getElementById('tabSubnets');
+    const contentDomains = document.getElementById('detailsDomainsContent');
+    const contentSubnets = document.getElementById('detailsSubnetsContent');
+    
+    if (tab === 'domains') {
+        tabDomains.classList.add('tab-active');
+        tabSubnets.classList.remove('tab-active');
+        contentDomains.classList.remove('hidden');
+        contentSubnets.classList.add('hidden');
+    } else {
+        tabDomains.classList.remove('tab-active');
+        tabSubnets.classList.add('tab-active');
+        contentDomains.classList.add('hidden');
+        contentSubnets.classList.remove('hidden');
+    }
+}
+
+function filterDetailsList(query) {
+    const normalizedQuery = query.toLowerCase().trim();
+    const items = document.querySelectorAll('.search-detail-item');
+    items.forEach(item => {
+        const val = item.getAttribute('data-search');
+        if (val.includes(normalizedQuery)) {
+            item.classList.remove('hidden');
+        } else {
+            item.classList.add('hidden');
+        }
+    });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
