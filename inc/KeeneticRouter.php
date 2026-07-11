@@ -716,6 +716,44 @@ class KeeneticRouter {
      * Push FQDN routing groups and route them via the given interface
      */
     public function pushRoutingGroups(array $groups, string $interfaceId): void {
+        // 1. Fetch and clean up any existing dns-proxy routes for this interface
+        try {
+            $current = $this->request("rci/dns-proxy/route");
+            if ($current['code'] === 200 && is_array($current['body'])) {
+                $existingRoutes = [];
+                if (isset($current['body']['object-group'])) {
+                    $existingRoutes[] = $current['body'];
+                } else {
+                    foreach ($current['body'] as $key => $val) {
+                        if (is_array($val)) {
+                            $routeItem = $val;
+                            if (!isset($routeItem['object-group']) && is_string($key)) {
+                                $routeItem['object-group'] = $key;
+                            }
+                            $existingRoutes[] = $routeItem;
+                        }
+                    }
+                }
+
+                foreach ($existingRoutes as $route) {
+                    if (is_array($route) && ($route['interface'] ?? '') === $interfaceId) {
+                        $groupName = $route['object-group'] ?? '';
+                        if (!empty($groupName)) {
+                            $res = $this->request("rci/dns-proxy/route", 'POST', [
+                                'object-group' => $groupName,
+                                'interface' => $interfaceId,
+                                'no' => true
+                            ]);
+                            $this->checkResponseError($res, "Remove old dns-route {$groupName}");
+                        }
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            // Ignore error if dns-proxy has no routes configured or is not initialized
+        }
+
+        // 2. Configure new groups and routes
         foreach ($groups as $group) {
             $name = trim($group['name']);
             if (empty($name)) continue;
@@ -732,33 +770,67 @@ class KeeneticRouter {
                 $includeList[] = ['address' => $item];
             }
 
-            // 1. Clear any existing include list on the router for this group
+            // Clear any existing include list on the router for this group
             try {
-                $this->request("rci/object-group/fqdn/{$name}/include", 'POST', [
+                $res = $this->request("rci/object-group/fqdn/{$name}/include", 'POST', [
                     'no' => true
                 ]);
+                $this->checkResponseError($res, "Clear FQDN group {$name}");
             } catch (Throwable $e) {
                 // Ignore if group or include list didn't exist
             }
 
-            // 2. Configure the group and its include list
-            $this->request("rci/object-group/fqdn", 'POST', [
+            // Configure the group and its include list
+            $res = $this->request("rci/object-group/fqdn", 'POST', [
                 $name => [
                     'description' => $description,
                     'include' => $includeList
                 ]
             ]);
+            $this->checkResponseError($res, "Configure FQDN group {$name}");
 
-            // 3. Create the DNS proxy route
-            $this->request("rci/dns-proxy/route", 'POST', [
+            // Create the DNS proxy route
+            $res = $this->request("rci/dns-proxy/route", 'POST', [
                 'object-group' => $name,
                 'interface' => $interfaceId,
                 'auto' => true
             ]);
+            $this->checkResponseError($res, "Add DNS proxy route for {$name}");
         }
 
         // Save running-config
         $this->saveConfig();
+    }
+
+    /**
+     * Check RCI response for errors and throw Exception if found
+     */
+    private function checkResponseError(array $res, string $context): void {
+        if ($res['code'] !== 200 && $res['code'] !== 201) {
+            $msg = is_array($res['body']) ? json_encode($res['body']) : $res['body'];
+            throw new Exception("[$context] HTTP error {$res['code']}: $msg");
+        }
+        
+        $body = $res['body'];
+        if (is_array($body)) {
+            $checkError = function($item) use (&$checkError) {
+                if (isset($item['status']) && $item['status'] === 'error') {
+                    return $item['message'] ?? 'Unknown RCI error';
+                }
+                if (is_array($item)) {
+                    foreach ($item as $val) {
+                        $err = $checkError($val);
+                        if ($err) return $err;
+                    }
+                }
+                return null;
+            };
+            
+            $err = $checkError($body);
+            if ($err) {
+                throw new Exception("[$context] Router rejected command: $err");
+            }
+        }
     }
 
     /**
