@@ -890,6 +890,18 @@ public static function getMimicryPresets(): array
         }
 
         $pdo = DB::conn();
+        if ($userId <= 0) {
+            $stmtUser = $pdo->query("SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1");
+            $adminId = $stmtUser->fetchColumn();
+            if ($adminId) {
+                $userId = (int)$adminId;
+            } else {
+                $stmtUser = $pdo->query("SELECT id FROM users ORDER BY id ASC LIMIT 1");
+                $firstId = $stmtUser->fetchColumn();
+                $userId = $firstId ? (int)$firstId : 1;
+            }
+        }
+
         $safeServerName = preg_replace('/[^a-zA-Z0-9_-]/', '_', $this->data['name']);
         $backupName = $safeServerName . '_backup_' . $this->serverId . '_' . date('Y-m-d_His') . '.json';
         $backupDir = '/var/www/html/backups';

@@ -13,6 +13,18 @@ class BackupManager {
      * environment configuration, and individual server backups.
      */
     public function createPanelBackup(int $userId, string $type = 'manual'): string {
+        if ($userId <= 0) {
+            $stmtUser = $this->pdo->query("SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1");
+            $adminId = $stmtUser->fetchColumn();
+            if ($adminId) {
+                $userId = (int)$adminId;
+            } else {
+                $stmtUser = $this->pdo->query("SELECT id FROM users ORDER BY id ASC LIMIT 1");
+                $firstId = $stmtUser->fetchColumn();
+                $userId = $firstId ? (int)$firstId : 1;
+            }
+        }
+
         $timestamp = date('Y-m-d_His');
         $tempDir = "/tmp/panel_backup_{$timestamp}";
         if (!is_dir($tempDir)) {
