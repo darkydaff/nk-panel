@@ -94,7 +94,7 @@ class BackupManager {
                 $containerName = $sData['container_name'];
                 $privKey = trim($server->executeCommand("docker exec -i {$containerName} cat /opt/amnezia/awg/server_private.key 2>/dev/null", true));
                 
-                $stmtClients = $this->pdo->prepare("SELECT name, client_ip, public_key, private_key, preshared_key, config, status, expires_at FROM vpn_clients WHERE server_id = ?");
+                $stmtClients = $this->pdo->prepare("SELECT user_id, name, client_ip, public_key, private_key, preshared_key, config, status, expires_at, traffic_limit, ext_client_code, created_at FROM vpn_clients WHERE server_id = ?");
                 $stmtClients->execute([$s['id']]);
                 $clients = $stmtClients->fetchAll(PDO::FETCH_ASSOC);
 
