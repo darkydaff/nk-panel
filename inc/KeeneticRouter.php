@@ -261,33 +261,47 @@ class KeeneticRouter {
         return [];
     }
 
-    /**
-     * Find a WireGuard interface by its description
-     */
     public function findWgInterface(?string $description): ?array {
-        if (empty($description)) return null;
-
-        // Extract client code digits if possible (e.g. #0999 -> 0999)
-        $clientCode = '';
-        if (preg_match('/#?(\d+)/', $description, $m)) {
-            $clientCode = $m[1];
+        $interfaces = $this->getInterfaces();
+        
+        $wgInterfaces = [];
+        foreach ($interfaces as $name => $info) {
+            if (str_starts_with(strtolower($name), 'wireguard')) {
+                $wgInterfaces[$name] = $info;
+            }
         }
 
-        $interfaces = $this->getInterfaces();
-        foreach ($interfaces as $name => $info) {
-            if (str_starts_with($name, 'Wireguard') && isset($info['description'])) {
-                $desc = $info['description'];
-                if ($desc === $description) {
-                    $info['id'] = $name;
-                    return $info;
-                }
-                // Fallback: match by client code digits to cleanly transition existing interfaces
-                if (!empty($clientCode) && str_contains($desc, $clientCode)) {
-                    $info['id'] = $name;
-                    return $info;
+        if (!empty($description)) {
+            // Extract client code digits if possible (e.g. #0999 -> 0999)
+            $clientCode = '';
+            if (preg_match('/#?(\d+)/', $description, $m)) {
+                $clientCode = $m[1];
+            }
+
+            foreach ($wgInterfaces as $name => $info) {
+                if (isset($info['description'])) {
+                    $desc = $info['description'];
+                    if ($desc === $description) {
+                        $info['id'] = $name;
+                        return $info;
+                    }
+                    // Fallback: match by client code digits to cleanly transition existing interfaces
+                    if (!empty($clientCode) && str_contains($desc, $clientCode)) {
+                        $info['id'] = $name;
+                        return $info;
+                    }
                 }
             }
         }
+
+        // Final fallback: if no description match, check if there is exactly one WireGuard interface configured on the router
+        if (count($wgInterfaces) === 1) {
+            $name = array_key_first($wgInterfaces);
+            $info = $wgInterfaces[$name];
+            $info['id'] = $name;
+            return $info;
+        }
+
         return null;
     }
 
@@ -374,8 +388,9 @@ class KeeneticRouter {
             } else {
                 // Find next free Wireguard index
                 $interfaces = $this->getInterfaces();
+                $existingNames = array_map('strtolower', array_keys($interfaces));
                 $idx = 0;
-                while (isset($interfaces["Wireguard{$idx}"])) {
+                while (in_array("wireguard{$idx}", $existingNames)) {
                     $idx++;
                 }
                 $interfaceId = "Wireguard{$idx}";
@@ -474,11 +489,43 @@ class KeeneticRouter {
             ];
         }
 
-        // Remove existing peer to avoid duplicate / collision (no wireguard peer <key>)
-        $this->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', [
-            'key' => $pubKey,
-            'no' => true
-        ]);
+        // Remove any existing peers on this interface to avoid duplicate / collision
+        $existingPeers = [];
+        try {
+            $currentConfig = $this->request("rci/interface/{$interfaceId}");
+            if ($currentConfig['code'] === 200 && is_array($currentConfig['body'])) {
+                $wgConf = $currentConfig['body']['wireguard'] ?? [];
+                $peerConf = $wgConf['peer'] ?? [];
+                if (is_array($peerConf)) {
+                    foreach ($peerConf as $k => $v) {
+                        if (is_array($v) && isset($v['key'])) {
+                            $existingPeers[] = $v['key'];
+                        } elseif (is_string($v)) {
+                            $existingPeers[] = $v;
+                        } elseif (is_string($k) && strlen($k) === 44) {
+                            $existingPeers[] = $k;
+                        }
+                    }
+                    if (isset($peerConf['key']) && is_string($peerConf['key'])) {
+                        $existingPeers[] = $peerConf['key'];
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            // Ignore if interface configuration doesn't exist yet
+        }
+        $existingPeers = array_unique(array_filter($existingPeers));
+
+        foreach ($existingPeers as $oldKey) {
+            try {
+                $this->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', [
+                    'key' => $oldKey,
+                    'no' => true
+                ]);
+            } catch (Throwable $e) {
+                // Ignore failure to delete a specific peer
+            }
+        }
 
         // Configure peer settings
         $peerConfig = [
@@ -497,19 +544,7 @@ class KeeneticRouter {
             $peerConfig['comment'] = $peerDesc;
         }
 
-        $hasDefaultRoute = false;
-        foreach ($allowedIpsList as $item) {
-            if ($item['address'] === '0.0.0.0' && $item['mask'] === '0.0.0.0') {
-                $hasDefaultRoute = true;
-                break;
-            }
-        }
 
-        if ($hasDefaultRoute) {
-            $peerConfig['connect'] = [
-                'via' => 'ISP'
-            ];
-        }
 
         if (!empty($psk)) {
             $peerConfig['preshared-key'] = $psk;

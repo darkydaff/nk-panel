@@ -98,8 +98,9 @@ try {
             $interfaceId = $existing['id'];
         } else {
             $interfaces = $adapter->getInterfaces();
+            $existingNames = array_map('strtolower', array_keys($interfaces));
             $idx = 0;
-            while (isset($interfaces["Wireguard{$idx}"])) {
+            while (in_array("wireguard{$idx}", $existingNames)) {
                 $idx++;
             }
             $interfaceId = "Wireguard{$idx}";
@@ -215,18 +216,7 @@ try {
     if (!empty($peerDesc)) {
         $peerConfig['comment'] = $peerDesc;
     }
-    $hasDefaultRoute = false;
-    foreach ($allowedIpsList as $item) {
-        if ($item['address'] === '0.0.0.0' && $item['mask'] === '0.0.0.0') {
-            $hasDefaultRoute = true;
-            break;
-        }
-    }
-    if ($hasDefaultRoute) {
-        $peerConfig['connect'] = [
-            'via' => 'ISP'
-        ];
-    }
+
     if (!empty($psk)) {
         $peerConfig['preshared-key'] = $psk;
     }

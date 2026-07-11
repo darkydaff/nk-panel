@@ -25,12 +25,30 @@ if (!$router) {
 $login = $router['login'] ?: 'admin';
 $adapter = new KeeneticRouter($router['domain'], $router['password'], $login);
 
-echo "Querying interface Wireguard0...\n";
-$res1 = $adapter->request("rci/interface/Wireguard0");
+$interfaceId = $router['wg_interface_id'];
+if (empty($interfaceId)) {
+    try {
+        $interfaces = $adapter->getInterfaces();
+        foreach (array_keys($interfaces) as $name) {
+            if (str_starts_with(strtolower($name), 'wireguard')) {
+                $interfaceId = $name;
+                break;
+            }
+        }
+    } catch (Throwable $e) {
+        // Ignore
+    }
+}
+if (empty($interfaceId)) {
+    $interfaceId = 'Wireguard0';
+}
+
+echo "Querying interface {$interfaceId}...\n";
+$res1 = $adapter->request("rci/interface/{$interfaceId}");
 echo "Interface config GET Result:\n" . json_encode($res1['body'], JSON_PRETTY_PRINT) . "\n";
 
-echo "Querying show interface Wireguard0...\n";
-$res2 = $adapter->request("rci/show/interface/Wireguard0");
+echo "Querying show interface {$interfaceId}...\n";
+$res2 = $adapter->request("rci/show/interface/{$interfaceId}");
 echo "Show Interface GET Result:\n" . json_encode($res2['body'], JSON_PRETTY_PRINT) . "\n";
 
 echo "Querying ip policy config...\n";
