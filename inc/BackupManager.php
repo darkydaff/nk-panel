@@ -362,7 +362,7 @@ class BackupManager {
                   SET name = ?, host = ?, port = ?, username = ?, password = ?, 
                       container_name = ?, vpn_port = ?, vpn_subnet = ?, 
                       server_public_key = ?, server_private_key = ?, preshared_key = ?, 
-                      awg_params = ?, status = 'deploying'
+                      awg_params = ?, status = 'deploying', secret_token = COALESCE(?, secret_token)
                   WHERE id = ?
               ");
               $stmt->execute([
@@ -370,6 +370,7 @@ class BackupManager {
                   $s['container_name'], $s['vpn_port'], $s['vpn_subnet'],
                   $s['server_public_key'], $s['server_private_key'] ?? null, $s['preshared_key'],
                   is_array($s['awg_params']) ? json_encode($s['awg_params']) : $s['awg_params'],
+                  $s['secret_token'] ?? null,
                   $targetServerId
               ]);
               $serverId = $targetServerId;
@@ -378,15 +379,16 @@ class BackupManager {
               $stmt = $this->pdo->prepare("
                   INSERT INTO vpn_servers 
                   (user_id, name, host, port, username, password, container_name, vpn_port, vpn_subnet, 
-                   server_public_key, server_private_key, preshared_key, awg_params, status)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'deploying')
+                   server_public_key, server_private_key, preshared_key, awg_params, status, secret_token)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'deploying', ?)
               ");
               $stmt->execute([
                   $s['user_id'] ?? 1, $s['name'], $s['host'], $s['port'],
                   $s['username'] ?? null, $s['password'] ?? null,
                   $s['container_name'], $s['vpn_port'], $s['vpn_subnet'],
                   $s['server_public_key'], $s['server_private_key'] ?? null, $s['preshared_key'],
-                  is_array($s['awg_params']) ? json_encode($s['awg_params']) : $s['awg_params']
+                  is_array($s['awg_params']) ? json_encode($s['awg_params']) : $s['awg_params'],
+                  $s['secret_token'] ?? bin2hex(random_bytes(32))
               ]);
               $serverId = (int)$this->pdo->lastInsertId();
           }
@@ -396,19 +398,44 @@ class BackupManager {
           foreach ($clients as $c) {
               $stmt = $this->pdo->prepare("SELECT id FROM vpn_clients WHERE server_id = ? AND client_ip = ?");
               $stmt->execute([$serverId, $c['client_ip']]);
-              if ($stmt->fetch()) continue; // skip duplicates
+              $existing = $stmt->fetch();
+              
+              if ($existing) {
+                  $clientId = (int)$existing['id'];
+              } else {
+                  $ins = $this->pdo->prepare("
+                      INSERT INTO vpn_clients 
+                      (server_id, user_id, name, client_ip, public_key, private_key, preshared_key, config, status, expires_at, traffic_limit, ext_client_code, created_at)
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  ");
+                  $ins->execute([
+                      $serverId,
+                      $c['user_id'] ?? $s['user_id'] ?? 1,
+                      $c['name'],
+                      $c['client_ip'],
+                      $c['public_key'],
+                      $c['private_key'],
+                      $c['preshared_key'],
+                      $c['config'],
+                      $c['status'] ?? 'active',
+                      $c['expires_at'] ?? null,
+                      $c['traffic_limit'] ?? null,
+                      $c['ext_client_code'] ?? null,
+                      $c['created_at'] ?? date('Y-m-d H:i:s')
+                  ]);
+                  $clientId = (int)$this->pdo->lastInsertId();
+                  $restoredClientsCount++;
+              }
 
-              $ins = $this->pdo->prepare("
-                  INSERT INTO vpn_clients 
-                  (server_id, user_id, name, client_ip, public_key, private_key, preshared_key, config, status, expires_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-              ");
-              $ins->execute([
-                  $serverId, $s['user_id'] ?? 1, $c['name'], $c['client_ip'],
-                  $c['public_key'], $c['private_key'], $c['preshared_key'],
-                  $c['config'], $c['status'] ?? 'active', $c['expires_at']
-              ]);
-              $restoredClientsCount++;
+              // Update router link if ext_client_code exists
+              if (!empty($c['ext_client_code'])) {
+                  $updRouter = $this->pdo->prepare("
+                      UPDATE routers 
+                      SET vpn_client_id = ?, server_id = ? 
+                      WHERE ext_client_code = ?
+                  ");
+                  $updRouter->execute([$clientId, $serverId, $c['ext_client_code']]);
+              }
           }
 
           return [
