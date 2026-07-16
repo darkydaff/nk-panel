@@ -90,8 +90,47 @@ class TelegramClientBot {
         $text = "👋 **Приветствуем, {$tgName}!**\n\n";
         $text .= "**Ваши подписки:**\n";
         foreach ($clients as $client) {
-            $status = ($client['func'] === 'active' || (int)$client['sub'] > 0) ? '🟢 Активна' : '🔴 Приостановлена';
-            $exp = $client['start_date'] ? date('d.m.Y', strtotime($client['start_date'] . " + " . ($client['sub'] ?? 0) . " days")) : 'Без лимита';
+            $func = strtoupper(trim($client['func'] ?? ''));
+            $startDateStr = $client['start_date'] ?? null;
+            $subMonths = (int)($client['sub'] ?? 0);
+            
+            $status = '⚪ Неизвестно';
+            $exp = 'Без лимита';
+            
+            if ($func === 'PAUSE') {
+                $status = '🔴 Приостановлена';
+                if ($startDateStr) {
+                    $daysToAdd = $subMonths * 30;
+                    $exp = date('d.m.Y', strtotime($startDateStr . " + {$daysToAdd} days"));
+                }
+            } elseif ($func === 'WORK') {
+                if ($startDateStr && $subMonths > 0) {
+                    $daysToAdd = $subMonths * 30;
+                    $expTime = strtotime($startDateStr . " + {$daysToAdd} days");
+                    $exp = date('d.m.Y', $expTime);
+                    
+                    $now = time();
+                    $tenDaysFromNow = $now + (10 * 24 * 60 * 60);
+                    
+                    if ($expTime <= $now) {
+                        $status = '🔴 Истекла';
+                    } elseif ($expTime <= $tenDaysFromNow) {
+                        $status = '🟡 Истекает скоро';
+                    } else {
+                        $status = '🟢 Активна';
+                    }
+                } else {
+                    $status = '🟢 Активна';
+                    $exp = 'Без лимита';
+                }
+            } else {
+                // Fallback
+                $status = '⚪ Неизвестно';
+                if ($startDateStr) {
+                    $daysToAdd = $subMonths * 30;
+                    $exp = date('d.m.Y', strtotime($startDateStr . " + {$daysToAdd} days"));
+                }
+            }
             $text .= "🔑 Код: `{$client['code']}` | {$status} | До: {$exp}\n";
         }
 
