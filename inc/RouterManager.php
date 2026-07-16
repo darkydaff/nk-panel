@@ -232,7 +232,7 @@ class RouterManager {
         try {
             $login = $router['login'] ?: 'admin';
             $adapter = new KeeneticRouter($router['domain'], $router['password'], $login);
-            $adapter->setTimeout(3);
+            $adapter->setTimeout(5);
             
             $connTest = $adapter->testConnection();
             if (!$connTest['success']) {
