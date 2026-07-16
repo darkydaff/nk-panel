@@ -248,9 +248,10 @@ class TelegramClientBot {
 
                 if (!$clientId) {
                     // Create new client config
-                    // Sanitize and clean client code for safe naming standard
+                    // Sanitize and clean client code and server name for safe naming standard
                     $safeCode = preg_replace('/[^a-zA-Z0-9.-]/', '_', $extCode);
-                    $clientName = 'tg_' . $safeCode . '_' . $serverId;
+                    $safeServerName = preg_replace('/[^a-zA-Z0-9.-]/', '_', $server['name']);
+                    $clientName = 'tg_' . $safeCode . '_' . $safeServerName;
                     
                     $userId = (int)$server['user_id'];
                     $clientId = VpnClient::create($serverId, $userId, $clientName, null);
