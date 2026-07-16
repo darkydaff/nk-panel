@@ -970,15 +970,15 @@ Router::post('/api/ext-clients/sync', function () {
         $pgPdo = ExtDB::conn();
         $table = Config::get('EXT_PG_CLIENTS_TABLE', 'Clients');
 
-        $stmt = $pgPdo->query("SELECT \"Code\", \"Name\", \"Start_Date\", \"Sub\", \"Func\", \"Router\", \"Domain\", \"Pass\" FROM \"{$table}\" WHERE \"Code\" IS NOT NULL");
+        $stmt = $pgPdo->query("SELECT \"Code\", \"Name\", \"Start_Date\", \"Sub\", \"Func\", \"Router\", \"Domain\", \"Pass\", \"tgid\" FROM \"{$table}\" WHERE \"Code\" IS NOT NULL");
         $rawClients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $myPdo = DB::conn();
         $myPdo->beginTransaction();
         if (!empty($rawClients)) {
             $insertStmt = $myPdo->prepare('
-                INSERT INTO ext_clients (code, name, start_date, sub, func, router, domain, pass) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO ext_clients (code, name, start_date, sub, func, router, domain, pass, tgid) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE 
                     name = VALUES(name), 
                     start_date = VALUES(start_date), 
@@ -986,7 +986,8 @@ Router::post('/api/ext-clients/sync', function () {
                     func = VALUES(func), 
                     router = VALUES(router),
                     domain = VALUES(domain),
-                    pass = VALUES(pass)
+                    pass = VALUES(pass),
+                    tgid = VALUES(tgid)
             ');
             $syncedCount = 0;
             $activeCodes = [];
@@ -1002,8 +1003,10 @@ Router::post('/api/ext-clients/sync', function () {
                 $router = isset($row['Router']) ? trim($row['Router']) : null;
                 $domain = isset($row['Domain']) ? trim($row['Domain']) : null;
                 $pass = isset($row['Pass']) ? trim($row['Pass']) : null;
+                $tgid = isset($row['tgid']) ? trim($row['tgid']) : null;
+                if ($tgid === '') $tgid = null;
 
-                $insertStmt->execute([$code, $name, $startDate, $sub, $func, $router, $domain, $pass]);
+                $insertStmt->execute([$code, $name, $startDate, $sub, $func, $router, $domain, $pass, $tgid]);
                 $syncedCount++;
             }
             
