@@ -255,6 +255,22 @@ class DB {
         $sql = file_get_contents($sqlPath);
         $pdo->exec($sql);
       }
+
+      // Check if last_notified_status column exists in ext_clients
+      try {
+        $stmtExtCols6 = $pdo->query("SHOW COLUMNS FROM ext_clients LIKE 'last_notified_status'");
+        $hasLastNotifiedStatus = $stmtExtCols6->rowCount() > 0;
+      } catch (Throwable $e) {
+        $hasLastNotifiedStatus = false;
+      }
+
+      if (!$hasLastNotifiedStatus) {
+        $sqlPath = __DIR__ . '/../migrations/033_add_last_notified_status_to_ext_clients.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
     } catch (Throwable $e) {
       error_log("Database self-healing migration failed: " . $e->getMessage());
     }

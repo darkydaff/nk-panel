@@ -318,7 +318,7 @@ class TelegramClientBot {
         }
     }
 
-    private static function sendMessage(int $chatId, string $text, string $token, ?array $replyMarkup = null): int {
+    public static function sendMessage(int $chatId, string $text, string $token, ?array $replyMarkup = null): int {
         $url = "https://api.telegram.org/bot{$token}/sendMessage";
         $params = [
             'chat_id' => $chatId,
