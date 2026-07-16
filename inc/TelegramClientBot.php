@@ -148,6 +148,13 @@ class TelegramClientBot {
             $text .= "\nЗа вашими кодами подписок не закреплено ни одного настроенного роутера.";
         }
 
+        // Add permanent Support/Renew button
+        $renewUrl = "https://t.me/pod_vpn_nk?text=" . urlencode("Здравствуйте 👋 \nХочу продлить VPN!");
+        $keyboard['inline_keyboard'][] = [[
+            'text' => '💬 Поддержка / Продлить подписку',
+            'url' => $renewUrl
+        ]];
+
         if ($messageId) {
             self::editMessageText($chatId, $messageId, $text, $token, $keyboard);
         } else {
