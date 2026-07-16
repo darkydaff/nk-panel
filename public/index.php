@@ -1677,7 +1677,31 @@ Router::post('/api/servers/report-metrics', function () {
         }
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
+});
+
+// API: Telegram Client Bot Webhook
+Router::post('/api/telegram-bot/webhook', function () {
+    header('Content-Type: application/json');
+    
+    require_once __DIR__ . '/../inc/TelegramClientBot.php';
+    if (!TelegramClientBot::isEnabled()) {
+        http_response_code(403);
+        echo json_encode(['error' => 'Bot is disabled']);
+        return;
     }
+    
+    $input = file_get_contents('php://input');
+    $update = json_decode($input, true);
+    
+    if ($update) {
+        try {
+            TelegramClientBot::handleUpdate($update);
+        } catch (Throwable $e) {
+            error_log("Telegram webhook handling error: " . $e->getMessage());
+        }
+    }
+    
+    echo json_encode(['success' => true]);
 });
 
 /**
