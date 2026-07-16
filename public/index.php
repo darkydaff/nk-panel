@@ -2894,8 +2894,98 @@ Router::post('/settings/backup-config', function () {
     $stmt = $pdo->prepare("INSERT INTO settings (namespace, `key`, value) VALUES ('backup', 'retention_days', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)");
     $stmt->execute([$retVal]);
 
-    $_SESSION['settings_success'] = 'Backup configuration saved successfully';
-    redirect('/settings#backups');
+});
+
+// Save Client Bot settings
+Router::post('/settings/client-bot-config', function () {
+    requireAdmin();
+    $pdo = DB::conn();
+    $enabled = isset($_POST['enabled']) ? true : false;
+    $botToken = trim($_POST['bot_token'] ?? '');
+    $webhookUrl = trim($_POST['webhook_url'] ?? '');
+
+    $stmt = $pdo->prepare("INSERT INTO settings (namespace, `key`, value) VALUES ('client_bot', 'enabled', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)");
+    $stmt->execute([json_encode($enabled)]);
+
+    $stmt = $pdo->prepare("INSERT INTO settings (namespace, `key`, value) VALUES ('client_bot', 'bot_token', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)");
+    $stmt->execute([json_encode($botToken)]);
+
+    $stmt = $pdo->prepare("INSERT INTO settings (namespace, `key`, value) VALUES ('client_bot', 'webhook_url', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)");
+    $stmt->execute([json_encode($webhookUrl)]);
+
+    $_SESSION['settings_success'] = 'Telegram bot settings saved successfully';
+    redirect('/settings#telegram-bot');
+});
+
+// Set Webhook on Telegram API
+Router::post('/settings/client-bot-webhook-set', function () {
+    requireAdmin();
+    header('Content-Type: application/json');
+    
+    $pdo = DB::conn();
+    
+    // Get Bot Token
+    $stmt = $pdo->prepare("SELECT value FROM settings WHERE namespace = 'client_bot' AND `key` = 'bot_token'");
+    $stmt->execute();
+    $botToken = json_decode($stmt->fetchColumn() ?: '""', true);
+
+    // Get Webhook URL
+    $stmt = $pdo->prepare("SELECT value FROM settings WHERE namespace = 'client_bot' AND `key` = 'webhook_url'");
+    $stmt->execute();
+    $webhookUrl = json_decode($stmt->fetchColumn() ?: '""', true);
+
+    if (empty($botToken) || empty($webhookUrl)) {
+        echo json_encode(['error' => 'Bot Token and Webhook URL are required to set a webhook.']);
+        return;
+    }
+
+    $url = "https://api.telegram.org/bot{$botToken}/setWebhook?url=" . urlencode($webhookUrl);
+    
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    $res = curl_exec($ch);
+    curl_close($ch);
+
+    $data = json_decode($res, true);
+    if ($data && isset($data['ok']) && $data['ok'] === true) {
+        echo json_encode(['success' => true, 'message' => $data['description']]);
+    } else {
+        echo json_encode(['error' => $data['description'] ?? 'Telegram API error']);
+    }
+});
+
+// Delete Webhook on Telegram API
+Router::post('/settings/client-bot-webhook-delete', function () {
+    requireAdmin();
+    header('Content-Type: application/json');
+    
+    $pdo = DB::conn();
+    
+    // Get Bot Token
+    $stmt = $pdo->prepare("SELECT value FROM settings WHERE namespace = 'client_bot' AND `key` = 'bot_token'");
+    $stmt->execute();
+    $botToken = json_decode($stmt->fetchColumn() ?: '""', true);
+
+    if (empty($botToken)) {
+        echo json_encode(['error' => 'Bot Token is required to delete a webhook.']);
+        return;
+    }
+
+    $url = "https://api.telegram.org/bot{$botToken}/deleteWebhook";
+    
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    $res = curl_exec($ch);
+    curl_close($ch);
+
+    $data = json_decode($res, true);
+    if ($data && isset($data['ok']) && $data['ok'] === true) {
+        echo json_encode(['success' => true, 'message' => $data['description']]);
+    } else {
+        echo json_encode(['error' => $data['description'] ?? 'Telegram API error']);
+    }
 });
 
 // Save Monitoring Config
