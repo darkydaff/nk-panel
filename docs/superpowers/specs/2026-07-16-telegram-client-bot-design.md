@@ -72,8 +72,8 @@ On `/start` or `/help` command:
   > Ваш Telegram ID: `{TGID}`
   > Данный ID не привязан ни к одному клиенту в биллинге. Пожалуйста, сообщите этот ID администратору для привязки к вашей подписке.
 - **Accepted:**
-  List subscription details and offer inline buttons for associated routers:
-  > 👋 **Приветствуем, {Client Name}!**
+  Retrieve the client's Telegram display name (using `$update['message']['from']['first_name']` or similar fields from the update payload) and greet them using their Telegram name:
+  > 👋 **Приветствуем, {Telegram Name}!**
   >
   > **Ваши подписки:**
   > 🔑 Код: `{code}` | Статус: `{status}`
