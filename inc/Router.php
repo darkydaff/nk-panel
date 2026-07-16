@@ -22,6 +22,7 @@ class Router {
   public static function dispatch(string $method, string $uri): void {
     $path = parse_url($uri, PHP_URL_PATH) ?: '/';
     $path = '/' . trim($path, '/');
+    error_log("Router Dispatch - Method: " . $method . ", URI: " . $uri . ", Path: " . $path);
     foreach (self::$routes as $route) {
       if ($route['method'] !== strtoupper($method)) continue;
       if (preg_match($route['pattern'], $path, $matches)) {
