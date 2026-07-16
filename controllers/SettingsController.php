@@ -43,6 +43,23 @@ class SettingsController {
             }
         }
 
+        // Load client bot settings
+        $stmtClientBot = $this->pdo->prepare("SELECT `key`, value FROM settings WHERE namespace = 'client_bot'");
+        $stmtClientBot->execute();
+        $clientBotRows = $stmtClientBot->fetchAll(PDO::FETCH_ASSOC);
+        $clientBotSettings = ['enabled' => false, 'bot_token' => '', 'webhook_url' => ''];
+        foreach ($clientBotRows as $r) {
+            if ($r['key'] === 'enabled') {
+                $clientBotSettings['enabled'] = (bool)json_decode($r['value'], true);
+            }
+            if ($r['key'] === 'bot_token') {
+                $clientBotSettings['bot_token'] = json_decode($r['value'], true);
+            }
+            if ($r['key'] === 'webhook_url') {
+                $clientBotSettings['webhook_url'] = json_decode($r['value'], true);
+            }
+        }
+
         $data = [
             'translation_stats' => $stats,
             'users' => $users,
@@ -50,7 +67,8 @@ class SettingsController {
             'backup_settings' => $backupSettings,
             'backups' => $backups,
             'servers' => $serversList,
-            'metrics_interval' => $metricsInterval
+            'metrics_interval' => $metricsInterval,
+            'client_bot_settings' => $clientBotSettings
         ];
         
         // Check for session messages
