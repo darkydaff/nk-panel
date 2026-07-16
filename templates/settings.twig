@@ -41,6 +41,9 @@
         <button role="tab" onclick="showTab('monitoring')" id="tab-monitoring" class="tab gap-2">
             <i class="fas fa-chart-line"></i>Monitoring
         </button>
+        <button role="tab" onclick="showTab('telegram-bot')" id="tab-telegram-bot" class="tab gap-2">
+            <i class="fab fa-telegram text-sky-400"></i>Telegram Bot
+        </button>
         {% endif %}
     </div>
 
@@ -331,6 +334,67 @@
             </div>
         </div>
     </div>
+
+    <!-- Telegram Bot Tab -->
+    <div id="content-telegram-bot" class="hidden space-y-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Bot Config Settings Card -->
+            <div class="card bg-base-200 border border-base-300 shadow overflow-hidden lg:col-span-1">
+                <div class="px-5 py-4 border-b border-base-300 bg-base-300/30">
+                    <h2 class="font-semibold flex items-center gap-2"><i class="fab fa-telegram text-primary"></i>Bot Settings</h2>
+                </div>
+                <div class="card-body p-5">
+                    <form method="POST" action="/settings/client-bot-config" class="space-y-4">
+                        <div class="form-control">
+                            <label class="label cursor-pointer justify-start gap-3">
+                                <input type="checkbox" name="enabled" value="1" {% if client_bot_settings.enabled %}checked{% endif %} class="toggle toggle-primary toggle-sm">
+                                <span class="label-text font-medium">Enable Client Bot</span>
+                            </label>
+                        </div>
+                        <div class="form-control">
+                            <label class="label py-1"><span class="label-text text-xs font-medium">Bot Token (Separate Token)</span></label>
+                            <input type="password" name="bot_token" id="client-bot-token" value="{{ client_bot_settings.bot_token }}" class="input input-bordered input-sm">
+                        </div>
+                        <div class="form-control">
+                            <label class="label py-1"><span class="label-text text-xs font-medium">Webhook URL</span></label>
+                            <input type="text" name="webhook_url" id="client-bot-webhook-url" value="{{ client_bot_settings.webhook_url }}" class="input input-bordered input-sm">
+                            <label class="label py-0.5"><span class="label-text-alt text-base-content/40">Suggested: <span class="cursor-pointer underline text-primary" onclick="document.getElementById('client-bot-webhook-url').value = window.location.origin + '/api/telegram-bot/webhook'">click to auto-fill</span></span></label>
+                        </div>
+                        <div class="flex flex-col gap-2 pt-2">
+                            <button type="submit" class="btn btn-primary btn-sm w-full gap-2"><i class="fas fa-save"></i>Save Config</button>
+                            <div class="flex gap-2">
+                                <button type="button" onclick="setClientBotWebhook()" class="btn btn-xs btn-outline flex-1 gap-1">Set Webhook</button>
+                                <button type="button" onclick="deleteClientBotWebhook()" class="btn btn-xs btn-outline btn-error flex-1 gap-1">Delete Webhook</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Explanation and Guide Card -->
+            <div class="card bg-base-200 border border-base-300 shadow overflow-hidden lg:col-span-2">
+                <div class="px-5 py-4 border-b border-base-300 bg-base-300/30">
+                    <h2 class="font-semibold flex items-center gap-2"><i class="fas fa-info-circle text-primary"></i>Client Bot Instructions</h2>
+                </div>
+                <div class="card-body p-5 space-y-4 text-sm">
+                    <p class="leading-relaxed">Nk-VPN client bot enables end-users to change active VPN servers on their routers using Telegram.</p>
+                    
+                    <h3 class="font-bold text-base border-b border-base-300 pb-1 mt-4">Setup Guide:</h3>
+                    <ol class="list-decimal pl-5 space-y-2">
+                        <li>Create a new bot via <b>@BotFather</b> on Telegram.</li>
+                        <li>Paste the token here, enable the Bot, and click <b>Save Config</b>.</li>
+                        <li>If your panel is exposed on a public domain with HTTPS, fill the <b>Webhook URL</b> and click <b>Set Webhook</b>.</li>
+                        <li>If you are running the panel locally or inside a private network, run the daemon inside the container:
+                            <div class="mockup-code mt-2 text-xs">
+                                <pre data-prefix="$"><code>php bin/telegram_bot_daemon.php</code></pre>
+                            </div>
+                        </li>
+                        <li>Add a <code>tgid</code> to clients in your external database (e.g. using @userinfobot to find Telegram IDs). The changes will sync automatically.</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
     {% endif %}
 </div>
 
@@ -524,6 +588,34 @@ async function testTelegramConnection() {
         if (data.success) alert('Success! Check your Telegram chat for the test notification.');
         else alert('Failed: ' + data.error);
     } catch (err) { alert('Connection test failed: ' + err); }
+}
+
+async function setClientBotWebhook() {
+    try {
+        const res = await fetch('/settings/client-bot-webhook-set', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            alert('Success: ' + data.message);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (err) {
+        alert('Request failed: ' + err.message);
+    }
+}
+
+async function deleteClientBotWebhook() {
+    try {
+        const res = await fetch('/settings/client-bot-webhook-delete', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            alert('Success: ' + data.message);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (err) {
+        alert('Request failed: ' + err.message);
+    }
 }
 </script>
 {% endblock %}
