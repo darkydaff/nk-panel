@@ -232,6 +232,22 @@ class DB {
           $pdo->exec($sql);
         }
       }
+
+      // Check if tgid column exists in ext_clients
+      try {
+        $stmtExtCols5 = $pdo->query("SHOW COLUMNS FROM ext_clients LIKE 'tgid'");
+        $hasTgidCol = $stmtExtCols5->rowCount() > 0;
+      } catch (Throwable $e) {
+        $hasTgidCol = false;
+      }
+
+      if (!$hasTgidCol) {
+        $sqlPath = __DIR__ . '/../migrations/031_add_tgid_to_ext_clients.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
     } catch (Throwable $e) {
       error_log("Database self-healing migration failed: " . $e->getMessage());
     }
