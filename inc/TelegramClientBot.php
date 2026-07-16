@@ -64,7 +64,8 @@ class TelegramClientBot {
 
         // Handle Callback Query (Buttons)
         if ($callbackData) {
-            self::handleCallback($chatId, $tgId, $tgName, $callbackQueryId, $callbackData, $clients, $token);
+            $messageId = $update['callback_query']['message']['message_id'] ?? null;
+            self::handleCallback($chatId, $messageId, $tgId, $tgName, $callbackQueryId, $callbackData, $clients, $token);
             return;
         }
 
@@ -76,7 +77,7 @@ class TelegramClientBot {
         }
     }
 
-    private static function showMainMenu(int $chatId, string $tgName, array $clients, string $token): void {
+    private static function showMainMenu(int $chatId, string $tgName, array $clients, string $token, ?int $messageId = null): void {
         $clientCodes = array_column($clients, 'code');
         
         $pdo = DB::conn();
@@ -90,7 +91,7 @@ class TelegramClientBot {
         $text .= "**Ваши подписки:**\n";
         foreach ($clients as $client) {
             $status = ($client['func'] === 'active' || (int)$client['sub'] > 0) ? '🟢 Активна' : '🔴 Приостановлена';
-            $exp = $client['start_date'] ? date('Y-m-d', strtotime($client['start_date'] . " + " . ($client['sub'] ?? 0) . " days")) : 'Без лимита';
+            $exp = $client['start_date'] ? date('d.m.Y', strtotime($client['start_date'] . " + " . ($client['sub'] ?? 0) . " days")) : 'Без лимита';
             $text .= "🔑 Код: `{$client['code']}` | {$status} | До: {$exp}\n";
         }
 
@@ -108,10 +109,14 @@ class TelegramClientBot {
             $text .= "\nЗа вашими кодами подписок не закреплено ни одного настроенного роутера.";
         }
 
-        self::sendMessage($chatId, $text, $token, $keyboard);
+        if ($messageId) {
+            self::editMessageText($chatId, $messageId, $text, $token, $keyboard);
+        } else {
+            self::sendMessage($chatId, $text, $token, $keyboard);
+        }
     }
 
-    private static function handleCallback(int $chatId, string $tgId, string $tgName, string $callbackQueryId, string $callbackData, array $clients, string $token): void {
+    private static function handleCallback(int $chatId, ?int $messageId, string $tgId, string $tgName, string $callbackQueryId, string $callbackData, array $clients, string $token): void {
         $parts = explode(':', $callbackData);
         $action = $parts[0];
         $routerId = isset($parts[1]) ? (int)$parts[1] : null;
@@ -132,7 +137,7 @@ class TelegramClientBot {
 
         if ($action === 'main_list') {
             self::answerCallbackQuery($callbackQueryId, "", false, $token);
-            self::showMainMenu($chatId, $tgName, $clients, $token);
+            self::showMainMenu($chatId, $tgName, $clients, $token, $messageId);
             return;
         }
 
@@ -174,7 +179,11 @@ class TelegramClientBot {
                 ]
             ]];
 
-            self::sendMessage($chatId, $text, $token, $keyboard);
+            if ($messageId) {
+                self::editMessageText($chatId, $messageId, $text, $token, $keyboard);
+            } else {
+                self::sendMessage($chatId, $text, $token, $keyboard);
+            }
             self::answerCallbackQuery($callbackQueryId, "Обновлено", false, $token);
             return;
         }
@@ -197,61 +206,76 @@ class TelegramClientBot {
                 'callback_data' => "select_router:{$routerId}"
             ]];
 
-            self::sendMessage($chatId, $text, $token, $keyboard);
+            if ($messageId) {
+                self::editMessageText($chatId, $messageId, $text, $token, $keyboard);
+            } else {
+                self::sendMessage($chatId, $text, $token, $keyboard);
+            }
             self::answerCallbackQuery($callbackQueryId, "", false, $token);
             return;
         }
 
-          if ($action === 'set_server') {
-              $serverId = (int)$parts[2];
-              
-              $stmt = $pdo->prepare("SELECT * FROM vpn_servers WHERE id = ? AND status = 'active'");
-              $stmt->execute([$serverId]);
-              $server = $stmt->fetch();
-              
-              if (!$server) {
-                  self::answerCallbackQuery($callbackQueryId, "Выбранный сервер недоступен", true, $token);
-                  return;
-              }
+        if ($action === 'set_server') {
+            $serverId = (int)$parts[2];
+            
+            $stmt = $pdo->prepare("SELECT * FROM vpn_servers WHERE id = ? AND status = 'active'");
+            $stmt->execute([$serverId]);
+            $server = $stmt->fetch();
+            
+            if (!$server) {
+                self::answerCallbackQuery($callbackQueryId, "Выбранный сервер недоступен", true, $token);
+                return;
+            }
 
-              self::answerCallbackQuery($callbackQueryId, "", false, $token);
-              $progressMsgId = self::sendMessage($chatId, "🔄 *Переключаем сервер на {$server['name']}... Пожалуйста, подождите, это может занять до 15 секунд.*", $token);
+            self::answerCallbackQuery($callbackQueryId, "", false, $token);
+            
+            if ($messageId) {
+                self::editMessageText($chatId, $messageId, "🔄 *Переключаем сервер на {$server['name']}... Пожалуйста, подождите, это может занять до 15 секунд.*", $token);
+            } else {
+                $messageId = self::sendMessage($chatId, "🔄 *Переключаем сервер на {$server['name']}... Пожалуйста, подождите, это может занять до 15 секунд.*", $token);
+            }
 
-              try {
-                  require_once __DIR__ . '/VpnClient.php';
-                  require_once __DIR__ . '/RouterManager.php';
+            try {
+                require_once __DIR__ . '/VpnClient.php';
+                require_once __DIR__ . '/RouterManager.php';
 
-                  $extCode = $router['ext_client_code'];
-                  
-                  // Check if a client configuration already exists on the server
-                  $stmtClient = $pdo->prepare("SELECT id FROM vpn_clients WHERE ext_client_code = ? AND server_id = ? AND status = 'active' LIMIT 1");
-                  $stmtClient->execute([$extCode, $serverId]);
-                  $clientId = $stmtClient->fetchColumn();
+                $extCode = $router['ext_client_code'];
+                
+                // Check if a client configuration already exists on the server
+                $stmtClient = $pdo->prepare("SELECT id FROM vpn_clients WHERE ext_client_code = ? AND server_id = ? AND status = 'active' LIMIT 1");
+                $stmtClient->execute([$extCode, $serverId]);
+                $clientId = $stmtClient->fetchColumn();
 
-                  if (!$clientId) {
-                      // Create new client config
-                      // Sanitize and clean client code for safe naming standard
-                      $safeCode = preg_replace('/[^a-zA-Z0-9.-]/', '_', $extCode);
-                      $clientName = 'tg_' . $safeCode . '_' . $serverId;
-                      
-                      $userId = (int)$server['user_id'];
-                      $clientId = VpnClient::create($serverId, $userId, $clientName, null);
-                      
-                      // Explicitly link config to client code
-                      $vpnClient = new VpnClient($clientId);
-                      $vpnClient->linkToExtClient($extCode);
-                  }
+                if (!$clientId) {
+                    // Create new client config
+                    // Sanitize and clean client code for safe naming standard
+                    $safeCode = preg_replace('/[^a-zA-Z0-9.-]/', '_', $extCode);
+                    $clientName = 'tg_' . $safeCode . '_' . $serverId;
+                    
+                    $userId = (int)$server['user_id'];
+                    $clientId = VpnClient::create($serverId, $userId, $clientName, null);
+                    
+                    // Explicitly link config to client code
+                    $vpnClient = new VpnClient($clientId);
+                    $vpnClient->linkToExtClient($extCode);
+                }
 
-                  // Push to Router
-                  RouterManager::pushConfigToRouter($routerId, $clientId);
+                // Push to Router
+                RouterManager::pushConfigToRouter($routerId, $clientId);
 
-                  // Update progress message to success
-                  self::editMessageText($chatId, $progressMsgId, "✅ **Сервер успешно изменен!** Роутер переключен на сервер **{$server['name']}**.", $token);
-              } catch (Throwable $e) {
-                  self::editMessageText($chatId, $progressMsgId, "❌ **Ошибка при переключении сервера:** " . $e->getMessage(), $token);
-              }
-              return;
-          }
+                // Update progress message to success
+                $backKeyboard = ['inline_keyboard' => [[
+                    ['text' => '🔙 К роутеру', 'callback_data' => "select_router:{$routerId}"]
+                ]]];
+                self::editMessageText($chatId, $messageId, "✅ **Сервер успешно изменен!** Роутер переключен на сервер **{$server['name']}**.", $token, $backKeyboard);
+            } catch (Throwable $e) {
+                $errKeyboard = ['inline_keyboard' => [[
+                    ['text' => '🔙 К роутеру', 'callback_data' => "select_router:{$routerId}"]
+                ]]];
+                self::editMessageText($chatId, $messageId, "❌ **Ошибка при переключении сервера:** " . $e->getMessage(), $token, $errKeyboard);
+            }
+            return;
+        }
     }
 
     private static function sendMessage(int $chatId, string $text, string $token, ?array $replyMarkup = null): int {
@@ -277,7 +301,7 @@ class TelegramClientBot {
         return $data['result']['message_id'] ?? 0;
     }
 
-    private static function editMessageText(int $chatId, int $messageId, string $text, string $token): void {
+    private static function editMessageText(int $chatId, int $messageId, string $text, string $token, ?array $replyMarkup = null): void {
         $url = "https://api.telegram.org/bot{$token}/editMessageText";
         $params = [
             'chat_id' => $chatId,
@@ -285,6 +309,9 @@ class TelegramClientBot {
             'text' => $text,
             'parse_mode' => 'Markdown'
         ];
+        if ($replyMarkup) {
+            $params['reply_markup'] = json_encode($replyMarkup);
+        }
 
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
