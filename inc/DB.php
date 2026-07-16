@@ -248,6 +248,13 @@ class DB {
           $pdo->exec($sql);
         }
       }
+
+      // Always run clean duplicate settings migration on startup
+      $sqlPath = __DIR__ . '/../migrations/032_clean_duplicate_settings.sql';
+      if (file_exists($sqlPath)) {
+        $sql = file_get_contents($sqlPath);
+        $pdo->exec($sql);
+      }
     } catch (Throwable $e) {
       error_log("Database self-healing migration failed: " . $e->getMessage());
     }

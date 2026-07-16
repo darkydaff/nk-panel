@@ -95,6 +95,21 @@ function redirect(string $to): void {
     exit;
 }
 
+// Helper function to save a global setting uniquely (handling NULL user_id index gotchas)
+function saveGlobalSetting(string $namespace, string $key, $value): void {
+    $pdo = DB::conn();
+    $stmt = $pdo->prepare("SELECT id FROM settings WHERE user_id IS NULL AND namespace = ? AND `key` = ?");
+    $stmt->execute([$namespace, $key]);
+    $id = $stmt->fetchColumn();
+    if ($id) {
+        $stmt = $pdo->prepare("UPDATE settings SET value = ? WHERE id = ?");
+        $stmt->execute([json_encode($value), $id]);
+    } else {
+        $stmt = $pdo->prepare("INSERT INTO settings (user_id, namespace, `key`, value) VALUES (NULL, ?, ?, ?)");
+        $stmt->execute([$namespace, $key, json_encode($value)]);
+    }
+}
+
 function isJsonRequest(): bool {
     $accept = $_SERVER['HTTP_ACCEPT'] ?? '';
     $requestedWith = strtolower($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '');
@@ -2879,40 +2894,34 @@ Router::post('/settings/delete-user/{id}', function ($params) {
 // Save Backup Config
 Router::post('/settings/backup-config', function () {
     requireAdmin();
-    $pdo = DB::conn();
     $enabled = isset($_POST['enabled']) ? true : false;
     $botToken = trim($_POST['bot_token'] ?? '');
     $chatId = trim($_POST['chat_id'] ?? '');
     $schedule = $_POST['schedule'] ?? 'disabled';
     $retentionDays = (int)($_POST['retention_days'] ?? 7);
 
-    $tgVal = json_encode(['enabled' => $enabled, 'bot_token' => $botToken, 'chat_id' => $chatId, 'schedule' => $schedule]);
-    $retVal = json_encode($retentionDays);
+    saveGlobalSetting('backup', 'telegram_settings', [
+        'enabled' => $enabled,
+        'bot_token' => $botToken,
+        'chat_id' => $chatId,
+        'schedule' => $schedule
+    ]);
+    saveGlobalSetting('backup', 'retention_days', $retentionDays);
 
-    $stmt = $pdo->prepare("INSERT INTO settings (namespace, `key`, value) VALUES ('backup', 'telegram_settings', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)");
-    $stmt->execute([$tgVal]);
-
-    $stmt = $pdo->prepare("INSERT INTO settings (namespace, `key`, value) VALUES ('backup', 'retention_days', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)");
-    $stmt->execute([$retVal]);
-
+    $_SESSION['settings_success'] = 'Backup configuration saved successfully';
+    redirect('/settings#backups');
 });
 
 // Save Client Bot settings
 Router::post('/settings/client-bot-config', function () {
     requireAdmin();
-    $pdo = DB::conn();
     $enabled = isset($_POST['enabled']) ? true : false;
     $botToken = trim($_POST['bot_token'] ?? '');
     $webhookUrl = trim($_POST['webhook_url'] ?? '');
 
-    $stmt = $pdo->prepare("INSERT INTO settings (namespace, `key`, value) VALUES ('client_bot', 'enabled', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)");
-    $stmt->execute([json_encode($enabled)]);
-
-    $stmt = $pdo->prepare("INSERT INTO settings (namespace, `key`, value) VALUES ('client_bot', 'bot_token', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)");
-    $stmt->execute([json_encode($botToken)]);
-
-    $stmt = $pdo->prepare("INSERT INTO settings (namespace, `key`, value) VALUES ('client_bot', 'webhook_url', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)");
-    $stmt->execute([json_encode($webhookUrl)]);
+    saveGlobalSetting('client_bot', 'enabled', $enabled);
+    saveGlobalSetting('client_bot', 'bot_token', $botToken);
+    saveGlobalSetting('client_bot', 'webhook_url', $webhookUrl);
 
     $_SESSION['settings_success'] = 'Telegram bot settings saved successfully';
     redirect('/settings#telegram-bot');
@@ -2992,7 +3001,6 @@ Router::post('/settings/client-bot-webhook-delete', function () {
 // Save Monitoring Config
 Router::post('/settings/monitoring-config', function () {
     requireAdmin();
-    $pdo = DB::conn();
     $interval = (int)($_POST['interval'] ?? 30);
 
     // Validate interval to prevent invalid configurations
@@ -3001,9 +3009,7 @@ Router::post('/settings/monitoring-config', function () {
         $interval = 30;
     }
 
-    $val = json_encode($interval);
-    $stmt = $pdo->prepare("INSERT INTO settings (namespace, `key`, value) VALUES ('monitoring', 'interval', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)");
-    $stmt->execute([$val]);
+    saveGlobalSetting('monitoring', 'interval', $interval);
 
     $_SESSION['settings_success'] = 'Monitoring configuration saved successfully';
     redirect('/settings#monitoring');
