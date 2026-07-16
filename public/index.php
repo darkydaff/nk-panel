@@ -1677,6 +1677,7 @@ Router::post('/api/servers/report-metrics', function () {
         }
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
+    }
 });
 
 // API: Telegram Client Bot Webhook
