@@ -169,6 +169,11 @@ class RouterManager {
             $obfuscationResult = $adapter->applyObfuscation($interfaceId, $parsedConf['interface']);
             
             // 6. Update database record on success
+            $currentModel = $router['router_model'] ?? '';
+            $newModel = $connTest['router_model'] ?? '';
+            $modelToSave = (!empty($newModel) && ($newModel !== 'Keenetic' || empty($currentModel))) ? $newModel : $currentModel;
+            $firmwareToSave = $connTest['firmware_version'] ?: ($router['firmware_version'] ?? null);
+
             $stmtSuccess = $pdo->prepare("
                 UPDATE routers 
                 SET vpn_client_id = ?, 
@@ -191,16 +196,16 @@ class RouterManager {
                 $interfaceId,
                 $description,
                 json_encode($obfuscationResult['applied']),
-                $connTest['router_model'],
-                $connTest['firmware_version'],
+                $modelToSave,
+                $firmwareToSave,
                 $routerId
             ]);
             
             return [
                 'success' => true,
                 'interface_id' => $interfaceId,
-                'router_model' => $connTest['router_model'] ?: 'Keenetic',
-                'firmware_version' => $connTest['firmware_version'] ?: 'Unknown',
+                'router_model' => $modelToSave ?: 'Keenetic',
+                'firmware_version' => $firmwareToSave ?: 'Unknown',
                 'obfuscation' => $obfuscationResult
             ];
             
@@ -274,28 +279,37 @@ class RouterManager {
             }
             
             // Update database
-            $stmtUpdate = $pdo->prepare("
+            $updateSql = "
                 UPDATE routers 
                 SET status = ?, 
                     error_message = ?, 
-                    router_model = ?,
-                    firmware_version = ?,
-                    last_check_at = NOW() 
-                WHERE id = ?
-            ");
-            $stmtUpdate->execute([
-                $status,
-                $errorMsg,
-                $connTest['router_model'],
-                $connTest['firmware_version'],
-                $routerId
-            ]);
+                    last_check_at = NOW()
+            ";
+            $updateParams = [$status, $errorMsg];
+            
+            $currentModel = $router['router_model'] ?? '';
+            $newModel = $connTest['router_model'] ?? '';
+            $modelToSave = (!empty($newModel) && ($newModel !== 'Keenetic' || empty($currentModel))) ? $newModel : $currentModel;
+            if (!empty($modelToSave)) {
+                $updateSql .= ", router_model = ?";
+                $updateParams[] = $modelToSave;
+            }
+            
+            if (!empty($connTest['firmware_version'])) {
+                $updateSql .= ", firmware_version = ?";
+                $updateParams[] = $connTest['firmware_version'];
+            }
+            $updateSql .= " WHERE id = ?";
+            $updateParams[] = $routerId;
+            
+            $stmtUpdate = $pdo->prepare($updateSql);
+            $stmtUpdate->execute($updateParams);
             
             return [
                 'success' => true,
                 'status' => $status,
-                'router_model' => $connTest['router_model'] ?: 'Keenetic',
-                'firmware_version' => $connTest['firmware_version'] ?: 'Unknown',
+                'router_model' => $modelToSave ?: 'Keenetic',
+                'firmware_version' => ($connTest['firmware_version'] ?: ($router['firmware_version'] ?: 'Unknown')),
                 'error' => $errorMsg
             ];
             

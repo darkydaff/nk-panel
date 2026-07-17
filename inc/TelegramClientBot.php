@@ -213,6 +213,9 @@ class TelegramClientBot {
 
             $routerName = $router['router_model'] ?: $router['domain'];
             $text = "📶 **Роутер: {$routerName}**\n";
+            if ($router['firmware_version']) {
+                $text .= "🔹 Версия OS: `{$router['firmware_version']}`\n";
+            }
             $text .= "🔹 Статус: `{$statusStr}`\n";
             $text .= "🔹 Текущий сервер: **{$serverName}**\n";
             if ($router['error_message']) {
