@@ -540,6 +540,32 @@ Router::post('/servers/{id}/deploy', function ($params) {
     }
 });
 
+// Update server bot access control settings
+Router::post('/servers/{id}/access-control', function ($params) {
+    requireAdmin();
+    $serverId = (int)$params['id'];
+    
+    $showInBot = isset($_POST['show_in_bot']) ? 1 : 0;
+    $allowedClients = trim($_POST['allowed_clients'] ?? '');
+    $blockedClients = trim($_POST['blocked_clients'] ?? '');
+    
+    try {
+        $pdo = DB::conn();
+        $stmt = $pdo->prepare("
+            UPDATE vpn_servers 
+            SET show_in_bot = ?, allowed_clients = ?, blocked_clients = ? 
+            WHERE id = ?
+        ");
+        $stmt->execute([$showInBot, $allowedClients, $blockedClients, $serverId]);
+        
+        $_SESSION['success_message'] = 'Bot access control settings updated successfully';
+        redirect('/servers/' . $serverId);
+    } catch (Exception $e) {
+        $_SESSION['error_message'] = 'Error: ' . $e->getMessage();
+        redirect('/servers/' . $serverId);
+    }
+});
+
 // View server
 Router::get('/servers/{id}', function ($params) {
     requireAuth();

@@ -271,6 +271,22 @@ class DB {
           $pdo->exec($sql);
         }
       }
+
+      // Check if show_in_bot column exists in vpn_servers
+      try {
+        $stmtServerCols = $pdo->query("SHOW COLUMNS FROM vpn_servers LIKE 'show_in_bot'");
+        $hasShowInBot = $stmtServerCols->rowCount() > 0;
+      } catch (Throwable $e) {
+        $hasShowInBot = false;
+      }
+
+      if (!$hasShowInBot) {
+        $sqlPath = __DIR__ . '/../migrations/034_add_bot_access_control_to_vpn_servers.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
     } catch (Throwable $e) {
       error_log("Database self-healing migration failed: " . $e->getMessage());
     }

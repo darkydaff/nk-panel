@@ -242,9 +242,33 @@ class TelegramClientBot {
         }
 
         if ($action === 'change_server') {
-            // List all active servers
-            $stmt = $pdo->query("SELECT id, name FROM vpn_servers WHERE status = 'active' ORDER BY name ASC");
-            $servers = $stmt->fetchAll();
+            // List all active servers and apply access control filters
+            $stmt = $pdo->query("SELECT id, name, show_in_bot, allowed_clients, blocked_clients FROM vpn_servers WHERE status = 'active' ORDER BY name ASC");
+            $allServers = $stmt->fetchAll();
+
+            $servers = [];
+            $clientCode = trim($router['ext_client_code'] ?? '');
+            foreach ($allServers as $s) {
+                // 1. Global visibility check
+                if (isset($s['show_in_bot']) && !(bool)$s['show_in_bot']) {
+                    continue;
+                }
+                // 2. Whitelist check
+                if (!empty($s['allowed_clients'])) {
+                    $allowed = array_filter(array_map('trim', explode(',', $s['allowed_clients'])));
+                    if (!empty($allowed) && !in_array($clientCode, $allowed)) {
+                        continue;
+                    }
+                }
+                // 3. Blacklist check
+                if (!empty($s['blocked_clients'])) {
+                    $blocked = array_filter(array_map('trim', explode(',', $s['blocked_clients'])));
+                    if (!empty($blocked) && in_array($clientCode, $blocked)) {
+                        continue;
+                    }
+                }
+                $servers[] = $s;
+            }
 
             $routerName = $router['router_model'] ?: $router['domain'];
             $text = "🌍 **Выберите новый сервер для роутера {$routerName}:**";
@@ -278,6 +302,34 @@ class TelegramClientBot {
             
             if (!$server) {
                 self::answerCallbackQuery($callbackQueryId, "Выбранный сервер недоступен", true, $token);
+                return;
+            }
+
+            // Access Control checks
+            $clientCode = trim($router['ext_client_code'] ?? '');
+            $isAllowed = true;
+            
+            // 1. Global visibility check
+            if (isset($server['show_in_bot']) && !(bool)$server['show_in_bot']) {
+                $isAllowed = false;
+            }
+            // 2. Whitelist check
+            if ($isAllowed && !empty($server['allowed_clients'])) {
+                $allowed = array_filter(array_map('trim', explode(',', $server['allowed_clients'])));
+                if (!empty($allowed) && !in_array($clientCode, $allowed)) {
+                    $isAllowed = false;
+                }
+            }
+            // 3. Blacklist check
+            if ($isAllowed && !empty($server['blocked_clients'])) {
+                $blocked = array_filter(array_map('trim', explode(',', $server['blocked_clients'])));
+                if (!empty($blocked) && in_array($clientCode, $blocked)) {
+                    $isAllowed = false;
+                }
+            }
+
+            if (!$isAllowed) {
+                self::answerCallbackQuery($callbackQueryId, "Вы не имеете доступа к этому серверу", true, $token);
                 return;
             }
 
