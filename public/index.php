@@ -3448,7 +3448,7 @@ Router::get('/bot-logs', function () {
 
     // Trend data (last 7 days)
     $stmtTrend = $pdo->query("
-        SELECT DATE_FORMAT(created_at, '%d.%m') as day_label, COUNT(*) as count 
+        SELECT DATE_FORMAT(MIN(created_at), '%d.%m') as day_label, COUNT(*) as count 
         FROM bot_activity_logs 
         WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
         GROUP BY DATE(created_at)
