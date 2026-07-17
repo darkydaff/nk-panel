@@ -188,36 +188,65 @@
     <!-- Bot Access Control Settings (Admins only) -->
     {% if user.role == 'admin' %}
     <div class="card bg-base-200 border border-base-300 shadow mb-6">
-        <div class="card-body p-5">
-            <h3 class="card-title text-sm mb-4">
-                <i class="fas fa-robot text-primary"></i>Telegram Bot Access Control
+        <div class="card-body p-5 md:p-6 space-y-4">
+            <h3 class="font-semibold text-sm text-base-content flex items-center gap-2">
+                <i class="fas fa-robot text-indigo-400"></i>
+                Telegram Bot Access Control
             </h3>
-            <form method="POST" action="/servers/{{ server.id }}/access-control" class="space-y-4">
-                <div class="form-control">
-                    <label class="label cursor-pointer justify-start gap-3 py-1">
-                        <input type="checkbox" name="show_in_bot" class="toggle toggle-primary" {% if server.show_in_bot %}checked{% endif %}>
-                        <span class="label-text font-medium">Show in Telegram Bot</span>
-                    </label>
-                    <span class="text-xs text-base-content/40 ml-13">If disabled, this server will be hidden globally from the bot menu.</span>
+            
+            <form method="POST" action="/servers/{{ server.id }}/access-control" class="space-y-5">
+                <!-- Toggle -->
+                <div class="flex items-center justify-between bg-base-300/30 p-3.5 rounded-xl border border-base-300">
+                    <div class="space-y-0.5 pr-4">
+                        <span class="text-sm font-medium block">Show Server in Bot</span>
+                        <span class="text-xs text-base-content/40">Allows clients to see and select this server in their Telegram bot menu.</span>
+                    </div>
+                    <input type="checkbox" name="show_in_bot" class="toggle toggle-primary" {% if server.show_in_bot %}checked{% endif %}>
                 </div>
                 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="form-control">
-                        <label class="label py-1"><span class="label-text font-medium text-xs">Allowed Client Codes (Whitelist)</span></label>
-                        <textarea name="allowed_clients" class="textarea textarea-bordered h-20 text-sm font-mono" placeholder="e.g. #0001, #0002 (comma separated)">{{ server.allowed_clients }}</textarea>
-                        <span class="text-xs text-base-content/40 mt-1">If filled, ONLY these client codes will see this server in the bot. Leave empty for all.</span>
+                <!-- Client Access Lists -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <!-- Whitelist (Allowed) -->
+                    <div class="form-control bg-base-300/30 p-4 rounded-xl border border-base-300 space-y-2">
+                        <label class="label p-0"><span class="label-text font-medium text-xs uppercase tracking-wider text-base-content/60">Allowed Client Codes (Whitelist)</span></label>
+                        <div class="relative">
+                            <label class="input input-bordered input-sm flex items-center gap-2 bg-base-200">
+                                <i class="fas fa-search text-base-content/30 text-xs"></i>
+                                <input type="text" id="allowedSearch" placeholder="Type to search and add..." autocomplete="off" class="grow text-sm">
+                            </label>
+                            <div id="allowedDropdown" class="hidden absolute z-50 mt-1 w-full bg-base-300 border border-base-300 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto text-sm"></div>
+                        </div>
+                        <input type="hidden" name="allowed_clients" id="allowedClientsInput" value="{{ server.allowed_clients }}">
+                        
+                        <div id="allowedTags" class="flex flex-wrap gap-1.5 min-h-[2rem] p-1 border border-dashed border-base-300/50 rounded-lg">
+                            <!-- JS will render tags here -->
+                        </div>
+                        <span class="text-[10px] text-base-content/40 leading-relaxed block">If empty, this server is accessible to all clients. If filled, only whitelisted codes will see it.</span>
                     </div>
                     
-                    <div class="form-control">
-                        <label class="label py-1"><span class="label-text font-medium text-xs font-semibold text-error/80">Blocked Client Codes (Blacklist)</span></label>
-                        <textarea name="blocked_clients" class="textarea textarea-bordered h-20 text-sm font-mono border-error/20 focus:border-error" placeholder="e.g. #0003, #0004 (comma separated)">{{ server.blocked_clients }}</textarea>
-                        <span class="text-xs text-base-content/40 mt-1">These client codes will NEVER see this server in the bot.</span>
+                    <!-- Blacklist (Blocked) -->
+                    <div class="form-control bg-base-300/30 p-4 rounded-xl border border-base-300 space-y-2">
+                        <label class="label p-0"><span class="label-text font-medium text-xs uppercase tracking-wider text-error/70">Blocked Client Codes (Blacklist)</span></label>
+                        <div class="relative">
+                            <label class="input input-bordered input-sm flex items-center gap-2 bg-base-200">
+                                <i class="fas fa-search text-base-content/30 text-xs"></i>
+                                <input type="text" id="blockedSearch" placeholder="Type to search and add..." autocomplete="off" class="grow text-sm">
+                            </label>
+                            <div id="blockedDropdown" class="hidden absolute z-50 mt-1 w-full bg-base-300 border border-base-300 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto text-sm"></div>
+                        </div>
+                        <input type="hidden" name="blocked_clients" id="blockedClientsInput" value="{{ server.blocked_clients }}">
+                        
+                        <div id="blockedTags" class="flex flex-wrap gap-1.5 min-h-[2rem] p-1 border border-dashed border-base-300/50 rounded-lg">
+                            <!-- JS will render tags here -->
+                        </div>
+                        <span class="text-[10px] text-base-content/40 leading-relaxed block">These client codes will never be able to see or select this server in their bot.</span>
                     </div>
                 </div>
                 
-                <div class="flex justify-end pt-2 border-t border-base-300/50">
-                    <button type="submit" class="btn btn-primary btn-sm gap-2">
-                        <i class="fas fa-save"></i>Save Bot Settings
+                <!-- Save Button -->
+                <div class="flex justify-end pt-3 border-t border-base-300/70">
+                    <button type="submit" class="btn btn-primary btn-sm px-4 gap-1.5">
+                        <i class="fas fa-save text-xs"></i>Save Bot Settings
                     </button>
                 </div>
             </form>
@@ -989,6 +1018,124 @@ function handleDeleteServerSubmit(e) {
 function showDeleteServerError(msg) {
     document.getElementById('deleteServerErrorMsg').textContent = msg;
     document.getElementById('deleteServerError').classList.remove('hidden');
+}
+
+function setupTagInput(inputId, dropdownId, hiddenInputId, tagsContainerId) {
+    const input = document.getElementById(inputId);
+    const dropdown = document.getElementById(dropdownId);
+    const hiddenInput = document.getElementById(hiddenInputId);
+    const tagsContainer = document.getElementById(tagsContainerId);
+    if (!input || !dropdown || !hiddenInput || !tagsContainer) return;
+
+    let tags = [];
+    const rawVal = hiddenInput.value.trim();
+    if (rawVal) {
+        tags = rawVal.split(',').map(t => t.trim()).filter(Boolean);
+    }
+
+    function renderTags() {
+        tagsContainer.innerHTML = '';
+        if (tags.length === 0) {
+            tagsContainer.innerHTML = '<span class="text-xs text-base-content/20 italic p-1">No restrictions</span>';
+        } else {
+            tags.forEach(tag => {
+                const badge = document.createElement('span');
+                badge.className = 'badge badge-sm badge-secondary gap-1.5 font-mono pl-2 pr-1.5 py-2.5';
+                
+                const textSpan = document.createElement('span');
+                textSpan.textContent = tag;
+                badge.appendChild(textSpan);
+                
+                const closeBtn = document.createElement('button');
+                closeBtn.type = 'button';
+                closeBtn.className = 'btn btn-ghost btn-xs p-0 min-h-0 h-4 w-4 hover:bg-neutral/20 transition-colors flex items-center justify-center rounded-full';
+                closeBtn.innerHTML = '<i class="fas fa-times text-[9px]"></i>';
+                closeBtn.addEventListener('click', () => {
+                    tags = tags.filter(t => t !== tag);
+                    renderTags();
+                });
+                
+                badge.appendChild(closeBtn);
+                tagsContainer.appendChild(badge);
+            });
+        }
+        hiddenInput.value = tags.join(', ');
+    }
+
+    let searchTimer = null;
+    input.addEventListener('input', function(e) {
+        const val = e.target.value.trim();
+        clearTimeout(searchTimer);
+        if (val.length < 1) { dropdown.classList.add('hidden'); return; }
+        
+        searchTimer = setTimeout(() => {
+            fetch('/api/ext-clients/search?q=' + encodeURIComponent(val))
+                .then(r => r.json())
+                .then(data => {
+                    dropdown.innerHTML = '';
+                    const codes = data.codes || [];
+                    
+                    // Filter out already selected tags
+                    const availableCodes = codes.filter(code => !tags.includes(code));
+                    
+                    if (!availableCodes.length) {
+                        dropdown.innerHTML = '<div class="px-4 py-3 text-base-content/40 text-xs">No matches</div>';
+                        dropdown.classList.remove('hidden');
+                        return;
+                    }
+                    
+                    availableCodes.forEach(code => {
+                        const item = document.createElement('button');
+                        item.type = 'button';
+                        item.className = 'w-full text-left px-4 py-2.5 hover:bg-base-200 transition-colors font-mono text-xs flex items-center gap-2';
+                        item.innerHTML = '<i class="fas fa-user text-base-content/30"></i>' + escapeHtml(code);
+                        item.addEventListener('mousedown', () => {
+                            if (!tags.includes(code)) {
+                                tags.push(code);
+                                renderTags();
+                            }
+                            input.value = '';
+                            dropdown.classList.add('hidden');
+                        });
+                        dropdown.appendChild(item);
+                    });
+                    dropdown.classList.remove('hidden');
+                })
+                .catch(() => {
+                    dropdown.classList.add('hidden');
+                });
+        }, 200);
+    });
+
+    // Support typing arbitrary code and pressing Enter
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const val = e.target.value.trim();
+            if (val && !tags.includes(val)) {
+                tags.push(val);
+                renderTags();
+            }
+            e.target.value = '';
+            dropdown.classList.add('hidden');
+        }
+    });
+
+    // Close dropdown on focus loss or clicking outside
+    document.addEventListener('click', function(e) {
+        if (!input.closest('.relative').contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.classList.add('hidden');
+        }
+    });
+
+    // Initialize tags rendering
+    renderTags();
+}
+
+// Initialize tag inputs
+if (document.getElementById('allowedSearch')) {
+    setupTagInput('allowedSearch', 'allowedDropdown', 'allowedClientsInput', 'allowedTags');
+    setupTagInput('blockedSearch', 'blockedDropdown', 'blockedClientsInput', 'blockedTags');
 }
 
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeDeleteServerModal(); });
