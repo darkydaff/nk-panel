@@ -3428,6 +3428,98 @@ Router::get('/routing-groups', function () {
     ]);
 });
 
+// Telegram Bot Activity Logs page
+Router::get('/bot-logs', function () {
+    requireAdmin();
+    
+    $pdo = DB::conn();
+    
+    $search = trim($_GET['search'] ?? '');
+    $filter = trim($_GET['filter'] ?? 'all');
+    $page = max(1, (int)($_GET['page'] ?? 1));
+    $perPage = 25;
+    $offset = ($page - 1) * $perPage;
+
+    // Stats counts
+    $totalCount = (int)$pdo->query("SELECT COUNT(*) FROM bot_activity_logs")->fetchColumn();
+    $uniqueUsers = (int)$pdo->query("SELECT COUNT(DISTINCT tg_id) FROM bot_activity_logs")->fetchColumn();
+    $serverSwitches = (int)$pdo->query("SELECT COUNT(*) FROM bot_activity_logs WHERE action = 'change_server_success'")->fetchColumn();
+    $errorsCount = (int)$pdo->query("SELECT COUNT(*) FROM bot_activity_logs WHERE action IN ('unauthorized', 'change_server_error')")->fetchColumn();
+
+    // Trend data (last 7 days)
+    $stmtTrend = $pdo->query("
+        SELECT DATE_FORMAT(created_at, '%d.%m') as day_label, COUNT(*) as count 
+        FROM bot_activity_logs 
+        WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+        GROUP BY DATE(created_at)
+        ORDER BY DATE(created_at) ASC
+    ");
+    $trendData = $stmtTrend->fetchAll();
+
+    // Action distribution
+    $stmtDist = $pdo->query("
+        SELECT action, COUNT(*) as count 
+        FROM bot_activity_logs 
+        GROUP BY action
+    ");
+    $distData = $stmtDist->fetchAll();
+
+    // Logs table filtering
+    $whereClauses = [];
+    $params = [];
+    
+    if ($filter === 'switches') {
+        $whereClauses[] = "action LIKE 'change_server%'";
+    } elseif ($filter === 'access') {
+        $whereClauses[] = "action IN ('unauthorized', 'view_menu')";
+    } elseif ($filter === 'errors') {
+        $whereClauses[] = "action IN ('unauthorized', 'change_server_error')";
+    }
+
+    if ($search !== '') {
+        $whereClauses[] = "(tg_name LIKE ? OR tg_id LIKE ? OR client_code LIKE ? OR details LIKE ?)";
+        $like = '%' . $search . '%';
+        $params = array_merge($params, [$like, $like, $like, $like]);
+    }
+
+    $whereSql = !empty($whereClauses) ? 'WHERE ' . implode(' AND ', $whereClauses) : '';
+    
+    $stmtFilteredCount = $pdo->prepare("SELECT COUNT(*) FROM bot_activity_logs {$whereSql}");
+    $stmtFilteredCount->execute($params);
+    $filteredCount = (int)$stmtFilteredCount->fetchColumn();
+    $totalPages = max(1, (int)ceil($filteredCount / $perPage));
+
+    $selectSql = "
+        SELECT * FROM bot_activity_logs 
+        {$whereSql} 
+        ORDER BY created_at DESC 
+        LIMIT ? OFFSET ?
+    ";
+    $stmtLogs = $pdo->prepare($selectSql);
+    $paramIndex = 1;
+    foreach ($params as $p) {
+        $stmtLogs->bindValue($paramIndex++, $p, PDO::PARAM_STR);
+    }
+    $stmtLogs->bindValue($paramIndex++, $perPage, PDO::PARAM_INT);
+    $stmtLogs->bindValue($paramIndex++, $offset, PDO::PARAM_INT);
+    $stmtLogs->execute();
+    $logs = $stmtLogs->fetchAll();
+
+    View::render('bot_logs.twig', [
+        'total_count'     => $totalCount,
+        'unique_users'    => $uniqueUsers,
+        'server_switches' => $serverSwitches,
+        'errors_count'    => $errorsCount,
+        'trend_data'      => $trendData,
+        'dist_data'       => $distData,
+        'logs'            => $logs,
+        'current_page'    => $page,
+        'total_pages'     => $totalPages,
+        'search'          => $search,
+        'filter'          => $filter,
+    ]);
+});
+
 // API: List all routers
 Router::get('/api/routers', function () {
     header('Content-Type: application/json');
