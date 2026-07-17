@@ -287,6 +287,22 @@ class DB {
           $pdo->exec($sql);
         }
       }
+
+      // Check if bot_activity_logs table exists
+      try {
+        $pdo->query("SELECT 1 FROM bot_activity_logs LIMIT 1");
+        $hasLogsTable = true;
+      } catch (Throwable $e) {
+        $hasLogsTable = false;
+      }
+
+      if (!$hasLogsTable) {
+        $sqlPath = __DIR__ . '/../migrations/035_create_bot_activity_logs_table.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
     } catch (Throwable $e) {
       error_log("Database self-healing migration failed: " . $e->getMessage());
     }
