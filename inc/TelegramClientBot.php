@@ -365,11 +365,10 @@ class TelegramClientBot {
                     $adapter = new KeeneticRouter($domain, $password, $login);
                     $adapter->setTimeout(5);
                     
-                    $res = $adapter->request('rci/show/system');
-                    if ($res['code'] === 200 && is_array($res['body'])) {
-                        $sys = $res['body'];
-                        $description = $sys['description'] ?? ($sys['model'] ?? 'Неизвестно');
-                        $osVersion = $sys['title'] ?? ($sys['release'] ?? ($sys['version'] ?? 'Неизвестно'));
+                    $connTest = $adapter->testConnection();
+                    if ($connTest['success']) {
+                        $description = $connTest['router_model'];
+                        $osVersion = $connTest['firmware_version'];
                         
                         // Save to database
                         $stmtUpdate = $pdo->prepare("UPDATE routers SET router_model = ?, firmware_version = ?, last_check_at = NOW() WHERE id = ?");
@@ -379,7 +378,7 @@ class TelegramClientBot {
                         $response .= "🔹 Версия OS: `{$osVersion}`\n\n";
                     } else {
                         $response .= "📶 **Роутер: {$domain}**\n";
-                        $response .= "❌ Не удалось получить данные от роутера (HTTP Code: {$res['code']})\n\n";
+                        $response .= "❌ Не удалось получить данные от роутера: " . ($connTest['error'] ?? 'Unknown error') . "\n\n";
                     }
                 } catch (Throwable $e) {
                     $response .= "📶 **Роутер: {$domain}**\n";

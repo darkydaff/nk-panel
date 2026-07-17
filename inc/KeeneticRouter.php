@@ -218,7 +218,11 @@ class KeeneticRouter {
      */
     public function testConnection(): array {
         try {
-            $res = $this->request('rci/show/system');
+            $res = $this->request('rci/show/version');
+            if ($res['code'] !== 200 || !is_array($res['body'])) {
+                $res = $this->request('rci/show/system');
+            }
+            
             if ($res['code'] !== 200 || !is_array($res['body'])) {
                 return ['success' => false, 'error' => 'Invalid router response'];
             }
