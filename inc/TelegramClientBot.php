@@ -191,6 +191,7 @@ class TelegramClientBot {
         }
 
         if ($action === 'main_list') {
+            self::logActivity($tgId, $tgName, implode(',', $clientCodes), 'view_menu', 'Opened main menu via callback', json_encode($update));
             self::answerCallbackQuery($callbackQueryId, "", false, $token);
             self::showMainMenu($chatId, $tgName, $clients, $token, $messageId);
             return;
@@ -217,6 +218,8 @@ class TelegramClientBot {
             $serverName = $router['server_name'] ?: 'Не назначен';
 
             $routerName = $router['router_model'] ?: $router['domain'];
+            self::logActivity($tgId, $tgName, $router['ext_client_code'], 'select_router', "Selected router: {$routerName} (ID: {$routerId}), Status: {$statusStr}", json_encode($update));
+
             $text = "📶 **Роутер: {$routerName}**\n";
             if ($router['firmware_version']) {
                 $text .= "🔹 Версия OS: `{$router['firmware_version']}`\n";
@@ -276,6 +279,8 @@ class TelegramClientBot {
             }
 
             $routerName = $router['router_model'] ?: $router['domain'];
+            self::logActivity($tgId, $tgName, $router['ext_client_code'], 'view_servers', "Requested server list for router: {$routerName} (ID: {$routerId})", json_encode($update));
+
             $text = "🌍 **Выберите новый сервер для роутера {$routerName}:**";
             $keyboard = ['inline_keyboard' => []];
             foreach ($servers as $s) {
@@ -300,12 +305,14 @@ class TelegramClientBot {
 
         if ($action === 'set_server') {
             $serverId = (int)$parts[2];
+            $routerName = $router['router_model'] ?: $router['domain'];
             
             $stmt = $pdo->prepare("SELECT * FROM vpn_servers WHERE id = ? AND status = 'active'");
             $stmt->execute([$serverId]);
             $server = $stmt->fetch();
             
             if (!$server) {
+                self::logActivity($tgId, $tgName, $router['ext_client_code'], 'change_server_error', "Failed to switch server for router: {$routerName} (ID: {$routerId}). Error: Selected server ID {$serverId} is unavailable.", json_encode($update));
                 self::answerCallbackQuery($callbackQueryId, "Выбранный сервер недоступен", true, $token);
                 return;
             }
@@ -334,10 +341,12 @@ class TelegramClientBot {
             }
 
             if (!$isAllowed) {
+                self::logActivity($tgId, $tgName, $router['ext_client_code'], 'unauthorized', "Access Denied: User has no access to server '{$server['name']}' (ID: {$serverId}) for router: {$routerName} (ID: {$routerId})", json_encode($update));
                 self::answerCallbackQuery($callbackQueryId, "Вы не имеете доступа к этому серверу", true, $token);
                 return;
             }
 
+            self::logActivity($tgId, $tgName, $router['ext_client_code'], 'change_server', "Initiating server switch for router: {$routerName} (ID: {$routerId}) to server: {$server['name']} (ID: {$serverId})", json_encode($update));
             self::answerCallbackQuery($callbackQueryId, "", false, $token);
             
             if ($messageId) {
@@ -380,11 +389,13 @@ class TelegramClientBot {
                     ['text' => '🔙 К роутеру', 'callback_data' => "select_router:{$routerId}"]
                 ]]];
                 self::editMessageText($chatId, $messageId, "✅ **Сервер успешно изменен!** Роутер переключен на сервер **{$server['name']}**.", $token, $backKeyboard);
+                self::logActivity($tgId, $tgName, $router['ext_client_code'], 'change_server_success', "Successfully switched router: {$routerName} (ID: {$routerId}) to server: {$server['name']}", json_encode($update));
             } catch (Throwable $e) {
                 $errKeyboard = ['inline_keyboard' => [[
                     ['text' => '🔙 К роутеру', 'callback_data' => "select_router:{$routerId}"]
                 ]]];
                 self::editMessageText($chatId, $messageId, "❌ **Ошибка при переключении сервера:** " . $e->getMessage(), $token, $errKeyboard);
+                self::logActivity($tgId, $tgName, $router['ext_client_code'], 'change_server_error', "Error switching router: {$routerName} (ID: {$routerId}) to server: {$server['name']}. Error: " . $e->getMessage(), json_encode($update));
             }
             return;
         }
