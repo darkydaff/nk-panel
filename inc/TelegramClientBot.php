@@ -70,8 +70,11 @@ class TelegramClientBot {
         }
 
         // Handle Command
+        $normalizedText = strtolower($messageText);
         if (strpos($messageText, '/start') === 0 || strpos($messageText, '/help') === 0) {
             self::showMainMenu($chatId, $tgName, $clients, $token);
+        } elseif ($normalizedText === 'show version' || $normalizedText === 'rci show/version' || $normalizedText === '/show_version' || $normalizedText === '/version' || $normalizedText === '/showversion') {
+            self::handleShowVersion($chatId, $clients, $token);
         } else {
             self::sendMessage($chatId, "Пожалуйста, используйте кнопки меню для управления серверами роутеров.", $token);
         }
@@ -139,8 +142,9 @@ class TelegramClientBot {
             $text .= "\nПожалуйста, выберите роутер для управления:";
             foreach ($routers as $r) {
                 $statusIcon = ($r['status'] === 'connected') ? '🟢' : (($r['status'] === 'offline') ? '⚪' : '⚠️');
+                $routerName = $r['router_model'] ?: $r['domain'];
                 $keyboard['inline_keyboard'][] = [[
-                    'text' => "{$statusIcon} Роутер: {$r['domain']}",
+                    'text' => "{$statusIcon} Роутер: {$routerName}",
                     'callback_data' => "select_router:{$r['id']}"
                 ]];
             }
@@ -207,8 +211,8 @@ class TelegramClientBot {
             $statusStr = $statusMap[$router['status']] ?? $router['status'];
             $serverName = $router['server_name'] ?: 'Не назначен';
 
-            $text = "📶 **Роутер: {$router['domain']}**\n";
-            $text .= "🔹 Модель: " . ($router['router_model'] ?: 'Keenetic') . "\n";
+            $routerName = $router['router_model'] ?: $router['domain'];
+            $text = "📶 **Роутер: {$routerName}**\n";
             $text .= "🔹 Статус: `{$statusStr}`\n";
             $text .= "🔹 Текущий сервер: **{$serverName}**\n";
             if ($router['error_message']) {
@@ -239,7 +243,8 @@ class TelegramClientBot {
             $stmt = $pdo->query("SELECT id, name FROM vpn_servers WHERE status = 'active' ORDER BY name ASC");
             $servers = $stmt->fetchAll();
 
-            $text = "🌍 **Выберите новый сервер для роутера {$router['domain']}:**";
+            $routerName = $router['router_model'] ?: $router['domain'];
+            $text = "🌍 **Выберите новый сервер для роутера {$routerName}:**";
             $keyboard = ['inline_keyboard' => []];
             foreach ($servers as $s) {
                 $keyboard['inline_keyboard'][] = [[
@@ -323,6 +328,64 @@ class TelegramClientBot {
             }
             return;
         }
+    }
+
+    private static function handleShowVersion(int $chatId, array $clients, string $token): void {
+        $clientCodes = array_column($clients, 'code');
+        
+        $pdo = DB::conn();
+        // Find routers linked to these clients
+        $inQuery = implode(',', array_fill(0, count($clientCodes), '?'));
+        $stmt = $pdo->prepare("SELECT * FROM routers WHERE ext_client_code IN ($inQuery)");
+        $stmt->execute($clientCodes);
+        $routers = $stmt->fetchAll();
+
+        if (empty($routers)) {
+            self::sendMessage($chatId, "За вашими кодами подписок не закреплено ни одного настроенного роутера.", $token);
+            return;
+        }
+
+        $response = "";
+        foreach ($routers as $r) {
+            $domain = $r['domain'];
+            $description = $r['router_model'] ?? '';
+            $osVersion = $r['firmware_version'] ?? '';
+            
+            if (!empty($description) && !empty($osVersion)) {
+                $response .= "📶 **Роутер: {$description}**\n";
+                $response .= "🔹 Версия OS: `{$osVersion}`\n\n";
+            } else {
+                require_once __DIR__ . '/KeeneticRouter.php';
+                try {
+                    $login = $r['login'] ?: 'admin';
+                    $password = $r['password'];
+                    $adapter = new KeeneticRouter($domain, $password, $login);
+                    $adapter->setTimeout(5);
+                    
+                    $res = $adapter->request('rci/show/system');
+                    if ($res['code'] === 200 && is_array($res['body'])) {
+                        $sys = $res['body'];
+                        $description = $sys['description'] ?? ($sys['model'] ?? 'Неизвестно');
+                        $osVersion = $sys['title'] ?? ($sys['release'] ?? ($sys['version'] ?? 'Неизвестно'));
+                        
+                        // Save to database
+                        $stmtUpdate = $pdo->prepare("UPDATE routers SET router_model = ?, firmware_version = ?, last_check_at = NOW() WHERE id = ?");
+                        $stmtUpdate->execute([$description, $osVersion, $r['id']]);
+                        
+                        $response .= "📶 **Роутер: {$description}**\n";
+                        $response .= "🔹 Версия OS: `{$osVersion}`\n\n";
+                    } else {
+                        $response .= "📶 **Роутер: {$domain}**\n";
+                        $response .= "❌ Не удалось получить данные от роутера (HTTP Code: {$res['code']})\n\n";
+                    }
+                } catch (Throwable $e) {
+                    $response .= "📶 **Роутер: {$domain}**\n";
+                    $response .= "❌ Ошибка подключения: " . $e->getMessage() . "\n\n";
+                }
+            }
+        }
+        
+        self::sendMessage($chatId, rtrim($response), $token);
     }
 
     public static function sendMessage(int $chatId, string $text, string $token, ?array $replyMarkup = null): int {

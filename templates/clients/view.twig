@@ -282,6 +282,12 @@
                         <span class="text-xs text-base-content/50 uppercase tracking-wide">Router Model</span>
                         <span class="text-sm text-base-content font-medium">{{ router.router_model|default('Keenetic (Generic)') }}</span>
                     </div>
+                    {% if router.firmware_version %}
+                    <div class="flex justify-between items-center border-b border-base-300/50 pb-2">
+                        <span class="text-xs text-base-content/50 uppercase tracking-wide">OS Version</span>
+                        <span class="text-sm text-base-content font-medium">{{ router.firmware_version }}</span>
+                    </div>
+                    {% endif %}
                     {% if router.wg_interface_id %}
                     <div class="flex justify-between items-center border-b border-base-300/50 pb-2">
                         <span class="text-xs text-base-content/50 uppercase tracking-wide">WG Interface</span>

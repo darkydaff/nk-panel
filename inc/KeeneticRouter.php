@@ -230,7 +230,9 @@ class KeeneticRouter {
             }
             
             $version = 'Unknown';
-            if (isset($sys['release']) && trim($sys['release']) !== '') {
+            if (isset($sys['title']) && trim($sys['title']) !== '') {
+                $version = trim($sys['title']);
+            } elseif (isset($sys['release']) && trim($sys['release']) !== '') {
                 $version = trim($sys['release']);
             } elseif (isset($sys['version']) && trim($sys['version']) !== '') {
                 $version = trim($sys['version']);

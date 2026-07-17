@@ -177,6 +177,8 @@ class RouterManager {
                     wg_interface_name = ?, 
                     pushed_awg_params = ?, 
                     status = 'connected', 
+                    router_model = ?,
+                    firmware_version = ?,
                     last_push_at = NOW(), 
                     last_check_at = NOW(), 
                     error_message = NULL 
@@ -189,14 +191,16 @@ class RouterManager {
                 $interfaceId,
                 $description,
                 json_encode($obfuscationResult['applied']),
+                $connTest['router_model'],
+                $connTest['firmware_version'],
                 $routerId
             ]);
             
             return [
                 'success' => true,
                 'interface_id' => $interfaceId,
-                'router_model' => $router['router_model'] ?: 'Keenetic',
-                'firmware_version' => $router['firmware_version'] ?: 'Unknown',
+                'router_model' => $connTest['router_model'] ?: 'Keenetic',
+                'firmware_version' => $connTest['firmware_version'] ?: 'Unknown',
                 'obfuscation' => $obfuscationResult
             ];
             
@@ -274,20 +278,24 @@ class RouterManager {
                 UPDATE routers 
                 SET status = ?, 
                     error_message = ?, 
+                    router_model = ?,
+                    firmware_version = ?,
                     last_check_at = NOW() 
                 WHERE id = ?
             ");
             $stmtUpdate->execute([
                 $status,
                 $errorMsg,
+                $connTest['router_model'],
+                $connTest['firmware_version'],
                 $routerId
             ]);
             
             return [
                 'success' => true,
                 'status' => $status,
-                'router_model' => $router['router_model'] ?: 'Keenetic',
-                'firmware_version' => $router['firmware_version'] ?: 'Unknown',
+                'router_model' => $connTest['router_model'] ?: 'Keenetic',
+                'firmware_version' => $connTest['firmware_version'] ?: 'Unknown',
                 'error' => $errorMsg
             ];
             
