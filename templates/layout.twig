@@ -246,6 +246,31 @@
     });
 </script>
 
+{% if needs_db_sync %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Perform silent background synchronization of external database clients
+        fetch('/api/ext-clients/sync', { 
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                console.log('[Sync] Background client synchronization completed. ' + (data.message || ('Synced ' + (data.count || 0) + ' records.')));
+            } else {
+                console.warn('[Sync] Background sync failed: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('[Sync] Error during background synchronization request: ', error);
+        });
+    });
+</script>
+{% endif %}
+
 {% block scripts %}{% endblock %}
 </body>
 </html>

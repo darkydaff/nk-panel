@@ -78,12 +78,27 @@ function authenticateRequest(): ?array {
     return null;
 }
 
+$needsDbSync = false;
+if ($user && Auth::isAdmin()) {
+    try {
+        $pdo = DB::conn();
+        $stmtSync = $pdo->query("SELECT `value` FROM system_settings WHERE `key` = 'last_ext_clients_sync' LIMIT 1");
+        $lastSyncVal = $stmtSync->fetchColumn();
+        if (!$lastSyncVal || (time() - strtotime($lastSyncVal)) > 86400) {
+            $needsDbSync = true;
+        }
+    } catch (Throwable $e) {
+        // Table doesn't exist yet
+    }
+}
+
 View::init(__DIR__ . '/../templates', [
     'app_name' => $appName,
     'user' => $user,
     'current_language' => Translator::getCurrentLanguage(),
     'languages' => Translator::getSupportedLanguages(),
     'current_uri' => $_SERVER['REQUEST_URI'] ?? '/dashboard',
+    'needs_db_sync' => $needsDbSync,
     't' => function($key, $params = []) {
         return Translator::t($key, $params);
     }
