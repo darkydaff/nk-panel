@@ -113,6 +113,136 @@ class ExtDB {
 
         return (int)$stmt->fetchColumn();
     }
+
+    /**
+     * Synchronize external Postgres database clients to local MySQL ext_clients table.
+     * Implements locking to prevent concurrent sync executions.
+     * 
+     * @return array Array containing success status, records synced count, and warning/error messages.
+     * @throws Exception If PostgreSQL connection fails.
+     */
+    public static function sync(): array {
+        $pdo = DB::conn();
+
+        // 1. Acquire execution lock
+        $stmtLock = $pdo->prepare("SELECT `value` FROM system_settings WHERE `key` = 'ext_clients_sync_running' LIMIT 1");
+        $stmtLock->execute();
+        $lockVal = $stmtLock->fetchColumn();
+        if ($lockVal && (time() - strtotime($lockVal)) < 300) {
+            return [
+                'success' => true,
+                'message' => 'Sync already in progress.',
+                'count' => 0
+            ];
+        }
+
+        $pdo->prepare("INSERT INTO system_settings (`key`, `value`) VALUES ('ext_clients_sync_running', ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)")
+            ->execute([date('Y-m-d H:i:s')]);
+
+        try {
+            // 2. Fetch records from PostgreSQL
+            if (!self::isAvailable()) {
+                throw new Exception("External PostgreSQL database is unreachable.");
+            }
+
+            $pgPdo = self::conn();
+            $table = Config::get('EXT_PG_CLIENTS_TABLE', 'Clients');
+            $stmt = $pgPdo->query("SELECT \"Code\", \"Name\", \"Start_Date\", \"Sub\", \"Func\", \"Router\", \"Domain\", \"Pass\", \"tgid\" FROM \"{$table}\" WHERE \"Code\" IS NOT NULL");
+            $rawClients = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // 3. Import to MySQL in transaction
+            $pdo->beginTransaction();
+            $syncedCount = 0;
+            $activeCodes = [];
+
+            if (!empty($rawClients)) {
+                $insertStmt = $pdo->prepare('
+                    INSERT INTO ext_clients (code, name, start_date, sub, func, router, domain, pass, tgid) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE 
+                        name = VALUES(name), 
+                        start_date = VALUES(start_date), 
+                        sub = VALUES(sub), 
+                        func = VALUES(func), 
+                        router = VALUES(router),
+                        domain = VALUES(domain),
+                        pass = VALUES(pass),
+                        tgid = VALUES(tgid)
+                ');
+
+                foreach ($rawClients as $row) {
+                    $code = trim($row['Code'] ?? '');
+                    if ($code === '') continue;
+                    $activeCodes[] = $code;
+                    
+                    $name = isset($row['Name']) ? trim($row['Name']) : null;
+                    $startDate = isset($row['Start_Date']) ? trim($row['Start_Date']) : null;
+                    if ($startDate === '') $startDate = null;
+                    $sub = isset($row['Sub']) ? (int)$row['Sub'] : null;
+                    $func = isset($row['Func']) ? trim($row['Func']) : null;
+                    $router = isset($row['Router']) ? trim($row['Router']) : null;
+                    $domain = isset($row['Domain']) ? trim($row['Domain']) : null;
+                    $pass = isset($row['Pass']) ? trim($row['Pass']) : null;
+                    $tgid = isset($row['tgid']) ? trim($row['tgid']) : null;
+                    if ($tgid === '') $tgid = null;
+
+                    $insertStmt->execute([$code, $name, $startDate, $sub, $func, $router, $domain, $pass, $tgid]);
+                    $syncedCount++;
+                }
+
+                // Remove deprecated clients
+                if (!empty($activeCodes)) {
+                    $placeholders = implode(',', array_fill(0, count($activeCodes), '?'));
+                    $deleteStmt = $pdo->prepare("DELETE FROM ext_clients WHERE code NOT IN ($placeholders)");
+                    $deleteStmt->execute($activeCodes);
+                } else {
+                    $pdo->exec('DELETE FROM ext_clients');
+                }
+            } else {
+                $pdo->exec('DELETE FROM ext_clients');
+            }
+            $pdo->commit();
+
+            // 4. Auto-link and Router synchronization hooks
+            $warnings = [];
+            try {
+                VpnClient::autoLinkAll();
+            } catch (Throwable $e) {
+                $warnings[] = 'Auto-linking clients failed: ' . $e->getMessage();
+            }
+
+            try {
+                require_once __DIR__ . '/RouterManager.php';
+                RouterManager::syncRoutersFromExtClients();
+            } catch (Throwable $e) {
+                $warnings[] = 'Router connections sync failed: ' . $e->getMessage();
+            }
+
+            // 5. Update last sync timestamp
+            $pdo->prepare("INSERT INTO system_settings (`key`, `value`) VALUES ('last_ext_clients_sync', ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)")
+                ->execute([date('Y-m-d H:i:s')]);
+
+            // 6. Release execution lock
+            $pdo->prepare("DELETE FROM system_settings WHERE `key` = 'ext_clients_sync_running'")->execute();
+
+            return [
+                'success' => true,
+                'count' => $syncedCount,
+                'warnings' => $warnings
+            ];
+
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            // Cleanup lock on failure
+            try {
+                $pdo->prepare("DELETE FROM system_settings WHERE `key` = 'ext_clients_sync_running'")->execute();
+            } catch (Throwable $lockEx) {}
+            
+            throw $e;
+        }
+    }
 }
 
 /**
