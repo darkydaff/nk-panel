@@ -55,6 +55,7 @@ class TelegramClientBot {
         $clients = $stmt->fetchAll();
 
         if (empty($clients)) {
+            self::logActivity($tgId, $tgName, null, 'unauthorized', "Access Denied. Message: '" . ($messageText ?? '') . "' Callback: '" . ($callbackData ?? '') . "'", json_encode($update));
             self::sendMessage($chatId, "❌ **Доступ запрещен**\n\nВаш Telegram ID: `{$tgId}`\nДанный ID не привязан ни к одному клиенту в биллинге. Пожалуйста, сообщите этот ID администратору для привязки к вашей подписке.", $token);
             if ($callbackQueryId) {
                 self::answerCallbackQuery($callbackQueryId, "Доступ запрещен", false, $token);
@@ -71,11 +72,15 @@ class TelegramClientBot {
 
         // Handle Command
         $normalizedText = strtolower($messageText);
+        $clientCodesStr = implode(',', array_column($clients, 'code'));
         if (strpos($messageText, '/start') === 0 || strpos($messageText, '/help') === 0) {
+            self::logActivity($tgId, $tgName, $clientCodesStr, 'view_menu', 'Opened main menu via start/help command', json_encode($update));
             self::showMainMenu($chatId, $tgName, $clients, $token);
         } elseif ($normalizedText === 'show version' || $normalizedText === 'rci show/version' || $normalizedText === '/show_version' || $normalizedText === '/version' || $normalizedText === '/showversion') {
+            self::logActivity($tgId, $tgName, $clientCodesStr, 'show_version', 'Checked router firmware versions', json_encode($update));
             self::handleShowVersion($chatId, $clients, $token);
         } else {
+            self::logActivity($tgId, $tgName, $clientCodesStr, 'unknown_command', "Sent unknown message: '" . ($messageText ?? '') . "'", json_encode($update));
             self::sendMessage($chatId, "Пожалуйста, используйте кнопки меню для управления серверами роутеров.", $token);
         }
     }
@@ -500,6 +505,20 @@ class TelegramClientBot {
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
         curl_setopt($ch, CURLOPT_TIMEOUT, 5);
         curl_exec($ch);
-        curl_close($ch);
+        $res = curl_close($ch);
+    }
+
+    public static function logActivity(int $tgId, string $tgName, ?string $clientCode, string $action, ?string $details = null, ?string $rawData = null): void {
+        try {
+            $pdo = DB::conn();
+            $stmt = $pdo->prepare("
+                INSERT INTO bot_activity_logs (tg_id, tg_name, client_code, action, details, raw_data)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ");
+            $stmt->execute([$tgId, $tgName, $clientCode, $action, $details, $rawData]);
+        } catch (Throwable $e) {
+            error_log("Failed to log bot activity: " . $e->getMessage());
+        }
     }
 }
+
