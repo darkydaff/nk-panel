@@ -1004,94 +1004,9 @@ Router::post('/api/ext-clients/sync', function () {
     header('Content-Type: application/json');
 
     try {
-        if (!ExtDB::isAvailable()) {
-            throw new Exception("External PostgreSQL database is unreachable.");
-        }
-
-        $pgPdo = ExtDB::conn();
-        $table = Config::get('EXT_PG_CLIENTS_TABLE', 'Clients');
-
-        $stmt = $pgPdo->query("SELECT \"Code\", \"Name\", \"Start_Date\", \"Sub\", \"Func\", \"Router\", \"Domain\", \"Pass\", \"tgid\" FROM \"{$table}\" WHERE \"Code\" IS NOT NULL");
-        $rawClients = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        $myPdo = DB::conn();
-        $myPdo->beginTransaction();
-        if (!empty($rawClients)) {
-            $insertStmt = $myPdo->prepare('
-                INSERT INTO ext_clients (code, name, start_date, sub, func, router, domain, pass, tgid) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE 
-                    name = VALUES(name), 
-                    start_date = VALUES(start_date), 
-                    sub = VALUES(sub), 
-                    func = VALUES(func), 
-                    router = VALUES(router),
-                    domain = VALUES(domain),
-                    pass = VALUES(pass),
-                    tgid = VALUES(tgid)
-            ');
-            $syncedCount = 0;
-            $activeCodes = [];
-            foreach ($rawClients as $row) {
-                $code = trim($row['Code'] ?? '');
-                if ($code === '') continue;
-                $activeCodes[] = $code;
-                $name = isset($row['Name']) ? trim($row['Name']) : null;
-                $startDate = isset($row['Start_Date']) ? trim($row['Start_Date']) : null;
-                if ($startDate === '') $startDate = null;
-                $sub = isset($row['Sub']) ? (int)$row['Sub'] : null;
-                $func = isset($row['Func']) ? trim($row['Func']) : null;
-                $router = isset($row['Router']) ? trim($row['Router']) : null;
-                $domain = isset($row['Domain']) ? trim($row['Domain']) : null;
-                $pass = isset($row['Pass']) ? trim($row['Pass']) : null;
-                $tgid = isset($row['tgid']) ? trim($row['tgid']) : null;
-                if ($tgid === '') $tgid = null;
-
-                $insertStmt->execute([$code, $name, $startDate, $sub, $func, $router, $domain, $pass, $tgid]);
-                $syncedCount++;
-            }
-            
-            // Delete clients that are no longer in the external database
-            if (!empty($activeCodes)) {
-                $placeholders = implode(',', array_fill(0, count($activeCodes), '?'));
-                $deleteStmt = $myPdo->prepare("DELETE FROM ext_clients WHERE code NOT IN ($placeholders)");
-                $deleteStmt->execute($activeCodes);
-            } else {
-                $myPdo->exec('DELETE FROM ext_clients');
-            }
-        } else {
-            $myPdo->exec('DELETE FROM ext_clients');
-            $syncedCount = 0;
-        }
-        $myPdo->commit();
-
-        // Run automatic client linking
-        try {
-            VpnClient::autoLinkAll();
-        } catch (Throwable $e) {
-            error_log('Automatic client linking failed during manual sync: ' . $e->getMessage());
-        }
-
-        // Run router synchronization
-        try {
-            require_once __DIR__ . '/../inc/KeeneticRouter.php';
-            require_once __DIR__ . '/../inc/RouterManager.php';
-            RouterManager::syncRoutersFromExtClients();
-        } catch (Throwable $e) {
-            error_log('Automatic router synchronization failed during manual sync: ' . $e->getMessage());
-        }
-
-        // Store last sync timestamp
-        try {
-            $myPdo->prepare("INSERT INTO system_settings (`key`, `value`) VALUES ('last_ext_clients_sync', ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)")
-                  ->execute([date('Y-m-d H:i:s')]);
-        } catch (Throwable $e) {}
-
-        echo json_encode(['success' => true, 'count' => $syncedCount]);
+        $result = ExtDB::sync();
+        echo json_encode($result);
     } catch (Throwable $e) {
-        if (isset($myPdo) && $myPdo->inTransaction()) {
-            $myPdo->rollBack();
-        }
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => $e->getMessage()]);
     }
