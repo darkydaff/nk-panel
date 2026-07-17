@@ -1,0 +1,293 @@
+{% extends "layout.twig" %}
+{% block title %}Bot Logs{% endblock %}
+
+{% block breadcrumbs %}
+    <li><a href="/dashboard" class="hover:text-base-content transition-colors">Home</a></li>
+    <li><span class="text-base-content/70">Bot Logs</span></li>
+{% endblock %}
+
+{% block content %}
+<div class="w-full space-y-6">
+    <!-- Header -->
+    <div>
+        <h1 class="text-2xl font-bold flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                <i class="fas fa-robot"></i>
+            </div>
+            Telegram Bot Log
+        </h1>
+        <p class="text-sm text-base-content/50 mt-1">Monitor who is using the self-service bot, what they are doing, and switch performance/errors.</p>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="stats shadow bg-base-200 border border-base-300">
+            <div class="stat">
+                <div class="stat-figure text-primary">
+                    <i class="fas fa-fingerprint text-2xl opacity-80"></i>
+                </div>
+                <div class="stat-title text-xs font-semibold uppercase tracking-wider opacity-60">Total Actions</div>
+                <div class="stat-value text-primary text-2xl mt-1">{{ total_count }}</div>
+                <div class="stat-desc mt-1 text-xs opacity-40">Cumulative logs count</div>
+            </div>
+        </div>
+
+        <div class="stats shadow bg-base-200 border border-base-300">
+            <div class="stat">
+                <div class="stat-figure text-success">
+                    <i class="fas fa-users text-2xl opacity-80"></i>
+                </div>
+                <div class="stat-title text-xs font-semibold uppercase tracking-wider opacity-60">Active Clients</div>
+                <div class="stat-value text-success text-2xl mt-1">{{ unique_users }}</div>
+                <div class="stat-desc mt-1 text-xs opacity-40">Unique TG Users</div>
+            </div>
+        </div>
+
+        <div class="stats shadow bg-base-200 border border-base-300">
+            <div class="stat">
+                <div class="stat-figure text-info">
+                    <i class="fas fa-exchange-alt text-2xl opacity-80"></i>
+                </div>
+                <div class="stat-title text-xs font-semibold uppercase tracking-wider opacity-60">Server Switches</div>
+                <div class="stat-value text-info text-2xl mt-1">{{ server_switches }}</div>
+                <div class="stat-desc mt-1 text-xs opacity-40">Successful changes</div>
+            </div>
+        </div>
+
+        <div class="stats shadow bg-base-200 border border-base-300">
+            <div class="stat">
+                <div class="stat-figure text-error">
+                    <i class="fas fa-exclamation-triangle text-2xl opacity-80"></i>
+                </div>
+                <div class="stat-title text-xs font-semibold uppercase tracking-wider opacity-60">Blocked / Errors</div>
+                <div class="stat-value text-error text-2xl mt-1">{{ errors_count }}</div>
+                <div class="stat-desc mt-1 text-xs opacity-40">Access denied or config errors</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Analytics Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="card bg-base-200 border border-base-300 lg:col-span-2 shadow">
+            <div class="card-body p-5">
+                <h3 class="font-bold text-sm mb-4 flex items-center gap-2">
+                    <i class="fas fa-chart-line text-primary"></i> Activity Trend (Last 7 Days)
+                </h3>
+                <div class="h-48 relative">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="card bg-base-200 border border-base-300 shadow">
+            <div class="card-body p-5">
+                <h3 class="font-bold text-sm mb-4 flex items-center gap-2">
+                    <i class="fas fa-chart-pie text-secondary"></i> Action Types
+                </h3>
+                <div class="h-48 relative flex justify-center">
+                    <canvas id="distributionChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Log Table Card -->
+    <div class="card bg-base-200 border border-base-300 shadow">
+        <div class="card-body p-5">
+            <!-- Filters and Search -->
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                <div class="flex flex-wrap gap-2 items-center">
+                    <h3 class="font-bold text-sm mr-2">Activity Stream</h3>
+                    <div class="join font-sans">
+                        <a href="/bot-logs?search={{ search|url_encode }}&filter=all" class="btn btn-xs join-item {% if filter == 'all' or filter == '' or filter == 'all' %}btn-primary{% else %}btn-ghost{% endif %}">All</a>
+                        <a href="/bot-logs?search={{ search|url_encode }}&filter=switches" class="btn btn-xs join-item {% if filter == 'switches' %}btn-primary{% else %}btn-ghost{% endif %}">Server Switches</a>
+                        <a href="/bot-logs?search={{ search|url_encode }}&filter=access" class="btn btn-xs join-item {% if filter == 'access' %}btn-primary{% else %}btn-ghost{% endif %}">Access Checks</a>
+                        <a href="/bot-logs?search={{ search|url_encode }}&filter=errors" class="btn btn-xs join-item {% if filter == 'errors' %}btn-primary{% else %}btn-ghost{% endif %}">Errors</a>
+                    </div>
+                </div>
+
+                <form method="GET" action="/bot-logs" class="flex gap-2">
+                    <input type="hidden" name="filter" value="{{ filter }}" />
+                    <label class="input input-bordered input-sm flex items-center gap-2 bg-base-300/50">
+                        <i class="fas fa-search text-xs opacity-50"></i>
+                        <input type="text" name="search" value="{{ search }}" placeholder="Search user/code..." class="grow text-xs" />
+                    </label>
+                    <button type="submit" class="btn btn-sm btn-primary px-3">Search</button>
+                    {% if search %}<a href="/bot-logs?filter={{ filter }}" class="btn btn-sm btn-ghost px-2"><i class="fas fa-times"></i></a>{% endif %}
+                </form>
+            </div>
+
+            <!-- Log Table -->
+            <div class="overflow-x-auto">
+                <table class="table table-zebra table-sm w-full">
+                    <thead>
+                        <tr class="text-xs uppercase tracking-wider opacity-60">
+                            <th>User</th>
+                            <th>Client Code</th>
+                            <th>Action</th>
+                            <th>Details</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-xs font-mono">
+                        {% if logs is empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-8 text-base-content/40 italic font-sans">No logs found</td>
+                        </tr>
+                        {% else %}
+                            {% for log in logs %}
+                            <tr>
+                                <td>
+                                    <div class="font-sans font-semibold text-base-content/90">{% if log.tg_name starts with '@' or log.tg_name != 'Пользователь' %}{{ log.tg_name }}{% else %}TG User: {{ log.tg_id }}{% endif %}</div>
+                                    <div class="opacity-40 text-[10px]">ID: {{ log.tg_id }}</div>
+                                </td>
+                                <td>
+                                    {% if log.client_code %}
+                                        {% set codes = log.client_code|split(',') %}
+                                        <div class="flex flex-wrap gap-1">
+                                            {% for c in codes %}
+                                                <span class="badge badge-ghost badge-sm font-mono text-[10px]">{{ c }}</span>
+                                            {% endfor %}
+                                        </div>
+                                    {% else %}
+                                        <span class="text-error font-sans italic opacity-60">Not Bound</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if log.action == 'change_server_success' %}
+                                        <span class="badge badge-success badge-outline font-semibold uppercase text-[9px] px-1.5 py-0.5">success</span>
+                                    {% elseif log.action == 'change_server_error' %}
+                                        <span class="badge badge-error badge-outline font-semibold uppercase text-[9px] px-1.5 py-0.5">switch_err</span>
+                                    {% elseif log.action == 'unauthorized' %}
+                                        <span class="badge badge-error badge-outline font-semibold uppercase text-[9px] px-1.5 py-0.5">blocked</span>
+                                    {% elseif log.action == 'change_server' %}
+                                        <span class="badge badge-info badge-outline font-semibold uppercase text-[9px] px-1.5 py-0.5">switching</span>
+                                    {% elseif log.action == 'show_version' %}
+                                        <span class="badge badge-ghost badge-outline font-semibold uppercase text-[9px] px-1.5 py-0.5">version</span>
+                                    {% else %}
+                                        <span class="badge badge-ghost badge-outline font-semibold uppercase text-[9px] px-1.5 py-0.5">{{ log.action }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="font-sans whitespace-normal break-all max-w-lg">{{ log.details }}</td>
+                                <td class="opacity-60 font-sans whitespace-nowrap">{{ log.created_at|date('d.m.Y H:i:s') }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if total_pages > 1 %}
+            <div class="join flex justify-center mt-6">
+                {% if current_page > 1 %}
+                <a href="/bot-logs?search={{ search|url_encode }}&filter={{ filter }}&page={{ current_page - 1 }}" class="join-item btn btn-xs">&laquo;</a>
+                {% endif %}
+
+                {% for p in 1..total_pages %}
+                    <a href="/bot-logs?search={{ search|url_encode }}&filter={{ filter }}&page={{ p }}" class="join-item btn btn-xs {% if p == current_page %}btn-primary btn-active{% endif %}">{{ p }}</a>
+                {% endfor %}
+
+                {% if current_page < total_pages %}
+                <a href="/bot-logs?search={{ search|url_encode }}&filter={{ filter }}&page={{ current_page + 1 }}" class="join-item btn btn-xs">&raquo;</a>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const chartTextColors = '#9ca3af'; // slate-400
+        const chartGridColors = '#374151'; // slate-700
+
+        // Prepare trend data from twig
+        const trendLabels = [];
+        const trendValues = [];
+        {% for day in trend_data %}
+            trendLabels.push("{{ day.day_label }}");
+            trendValues.push({{ day.count }});
+        {% endfor %}
+
+        if (trendLabels.length === 0) {
+            trendLabels.push("No Data");
+            trendValues.push(0);
+        }
+
+        // Trend Chart
+        const ctxTrend = document.getElementById('trendChart').getContext('2d');
+        new Chart(ctxTrend, {
+            type: 'line',
+            data: {
+                labels: trendLabels,
+                datasets: [{
+                    label: 'Actions',
+                    data: trendValues,
+                    borderColor: '#661ae6',
+                    backgroundColor: 'rgba(102, 26, 230, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { color: chartGridColors }, ticks: { color: chartTextColors } },
+                    y: { grid: { color: chartGridColors }, ticks: { color: chartTextColors } }
+                }
+            }
+        });
+
+        // Prepare distribution data
+        const distLabels = [];
+        const distValues = [];
+        {% for act in dist_data %}
+            distLabels.push("{{ act.action }}");
+            distValues.push({{ act.count }});
+        {% endfor %}
+
+        if (distLabels.length === 0) {
+            distLabels.push("No Data");
+            distValues.push(0);
+        }
+
+        // Distribution Chart
+        const ctxDist = document.getElementById('distributionChart').getContext('2d');
+        new Chart(ctxDist, {
+            type: 'doughnut',
+            data: {
+                labels: distLabels,
+                datasets: [{
+                    data: distValues,
+                    backgroundColor: [
+                        '#661ae6', // primary
+                        '#d926a9', // secondary
+                        '#00d2ff', // info
+                        '#ff5722', // error
+                        '#3abff8',
+                        '#36d399',
+                        '#fbbd23',
+                        '#ef6060'
+                      ],
+                      borderWidth: 0
+                  }]
+              },
+              options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                      legend: {
+                          position: 'bottom',
+                          labels: { color: chartTextColors, boxWidth: 10, font: { size: 9 } }
+                      }
+                  }
+              }
+          });
+      });
+  </script>
+  {% endblock %}
+  
