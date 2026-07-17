@@ -131,6 +131,14 @@
                             <span>Routing Groups</span>
                         </a>
                     </li>
+                    {% if user.role == 'admin' %}
+                    <li>
+                        <a href="/bot-logs" class="{% if '/bot-logs' in current_uri %}active{% endif %}">
+                            <i class="fas fa-robot w-4 text-center"></i>
+                            <span>Bot Log</span>
+                        </a>
+                    </li>
+                    {% endif %}
                 </ul>
             </nav>
 
