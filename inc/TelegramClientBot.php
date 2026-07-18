@@ -203,7 +203,7 @@ class TelegramClientBot {
             $statusInfo = RouterManager::checkRouterStatus($routerId);
             
             // Refetch router to get updated check timestamp and status
-            $stmt = $pdo->prepare("SELECT r.*, s.name as server_name FROM routers r LEFT JOIN vpn_servers s ON r.server_id = s.id WHERE r.id = ?");
+            $stmt = $pdo->prepare("SELECT r.*, s.name as server_name, s.description as server_desc FROM routers r LEFT JOIN vpn_servers s ON r.server_id = s.id WHERE r.id = ?");
             $stmt->execute([$routerId]);
             $router = $stmt->fetch();
 
@@ -216,6 +216,9 @@ class TelegramClientBot {
             ];
             $statusStr = $statusMap[$router['status']] ?? $router['status'];
             $serverName = $router['server_name'] ?: 'Не назначен';
+            if ($router['server_name'] && !empty($router['server_desc'])) {
+                $serverName = $router['server_desc'] . " [" . $router['server_name'] . "]";
+            }
 
             $routerName = $router['router_model'] ?: $router['domain'];
             self::logActivity($tgId, $tgName, $router['ext_client_code'], 'select_router', "Selected router: {$routerName} (ID: {$routerId}), Status: {$statusStr}", json_encode($update));
@@ -251,7 +254,7 @@ class TelegramClientBot {
 
         if ($action === 'change_server') {
             // List all active servers and apply access control filters
-            $stmt = $pdo->query("SELECT id, name, show_in_bot, allowed_clients, blocked_clients FROM vpn_servers WHERE status = 'active' ORDER BY name ASC");
+            $stmt = $pdo->query("SELECT id, name, description, show_in_bot, allowed_clients, blocked_clients FROM vpn_servers WHERE status = 'active' ORDER BY name ASC");
             $allServers = $stmt->fetchAll();
 
             $servers = [];
@@ -284,8 +287,12 @@ class TelegramClientBot {
             $text = "🌍 **Выберите новый сервер для роутера {$routerName}:**";
             $keyboard = ['inline_keyboard' => []];
             foreach ($servers as $s) {
+                $displayText = $s['name'];
+                if (!empty($s['description'])) {
+                    $displayText = $s['description'] . " [" . $s['name'] . "]";
+                }
                 $keyboard['inline_keyboard'][] = [[
-                    'text' => $s['name'],
+                    'text' => $displayText,
                     'callback_data' => "set_server:{$routerId}:{$s['id']}"
                 ]];
             }
@@ -346,13 +353,18 @@ class TelegramClientBot {
                 return;
             }
 
-            self::logActivity($tgId, $tgName, $router['ext_client_code'], 'change_server', "Initiating server switch for router: {$routerName} (ID: {$routerId}) to server: {$server['name']} (ID: {$serverId})", json_encode($update));
+            $serverLabel = $server['name'];
+            if (!empty($server['description'])) {
+                $serverLabel = $server['description'] . " [" . $server['name'] . "]";
+            }
+
+            self::logActivity($tgId, $tgName, $router['ext_client_code'], 'change_server', "Initiating server switch for router: {$routerName} (ID: {$routerId}) to server: {$serverLabel} (ID: {$serverId})", json_encode($update));
             self::answerCallbackQuery($callbackQueryId, "", false, $token);
             
             if ($messageId) {
-                self::editMessageText($chatId, $messageId, "🔄 *Переключаем сервер на {$server['name']}... Пожалуйста, подождите, это может занять до 15 секунд.*", $token);
+                self::editMessageText($chatId, $messageId, "🔄 *Переключаем сервер на {$serverLabel}... Пожалуйста, подождите, это может занять до 15 секунд.*", $token);
             } else {
-                $messageId = self::sendMessage($chatId, "🔄 *Переключаем сервер на {$server['name']}... Пожалуйста, подождите, это может занять до 15 секунд.*", $token);
+                $messageId = self::sendMessage($chatId, "🔄 *Переключаем сервер на {$serverLabel}... Пожалуйста, подождите, это может занять до 15 секунд.*", $token);
             }
 
             try {
@@ -388,14 +400,14 @@ class TelegramClientBot {
                 $backKeyboard = ['inline_keyboard' => [[
                     ['text' => '🔙 К роутеру', 'callback_data' => "select_router:{$routerId}"]
                 ]]];
-                self::editMessageText($chatId, $messageId, "✅ **Сервер успешно изменен!** Роутер переключен на сервер **{$server['name']}**.", $token, $backKeyboard);
-                self::logActivity($tgId, $tgName, $router['ext_client_code'], 'change_server_success', "Successfully switched router: {$routerName} (ID: {$routerId}) to server: {$server['name']}", json_encode($update));
+                self::editMessageText($chatId, $messageId, "✅ **Сервер успешно изменен!** Роутер переключен на сервер **{$serverLabel}**.", $token, $backKeyboard);
+                self::logActivity($tgId, $tgName, $router['ext_client_code'], 'change_server_success', "Successfully switched router: {$routerName} (ID: {$routerId}) to server: {$serverLabel}", json_encode($update));
             } catch (Throwable $e) {
                 $errKeyboard = ['inline_keyboard' => [[
                     ['text' => '🔙 К роутеру', 'callback_data' => "select_router:{$routerId}"]
                 ]]];
                 self::editMessageText($chatId, $messageId, "❌ **Ошибка при переключении сервера:** " . $e->getMessage(), $token, $errKeyboard);
-                self::logActivity($tgId, $tgName, $router['ext_client_code'], 'change_server_error', "Error switching router: {$routerName} (ID: {$routerId}) to server: {$server['name']}. Error: " . $e->getMessage(), json_encode($update));
+                self::logActivity($tgId, $tgName, $router['ext_client_code'], 'change_server_error', "Error switching router: {$routerName} (ID: {$routerId}) to server: {$serverLabel}. Error: " . $e->getMessage(), json_encode($update));
             }
             return;
         }

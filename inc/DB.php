@@ -288,6 +288,22 @@ class DB {
         }
       }
 
+      // Check if description column exists in vpn_servers
+      try {
+        $stmtDescCol = $pdo->query("SHOW COLUMNS FROM vpn_servers LIKE 'description'");
+        $hasDescription = $stmtDescCol->rowCount() > 0;
+      } catch (Throwable $e) {
+        $hasDescription = false;
+      }
+
+      if (!$hasDescription) {
+        $sqlPath = __DIR__ . '/../migrations/036_add_description_to_vpn_servers.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
+
       // Check if bot_activity_logs table exists
       try {
         $pdo->query("SELECT 1 FROM bot_activity_logs LIMIT 1");

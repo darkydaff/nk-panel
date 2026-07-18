@@ -563,15 +563,16 @@ Router::post('/servers/{id}/access-control', function ($params) {
     $showInBot = isset($_POST['show_in_bot']) ? 1 : 0;
     $allowedClients = trim($_POST['allowed_clients'] ?? '');
     $blockedClients = trim($_POST['blocked_clients'] ?? '');
+    $description = trim($_POST['description'] ?? '');
     
     try {
         $pdo = DB::conn();
         $stmt = $pdo->prepare("
             UPDATE vpn_servers 
-            SET show_in_bot = ?, allowed_clients = ?, blocked_clients = ? 
+            SET show_in_bot = ?, allowed_clients = ?, blocked_clients = ?, description = ? 
             WHERE id = ?
         ");
-        $stmt->execute([$showInBot, $allowedClients, $blockedClients, $serverId]);
+        $stmt->execute([$showInBot, $allowedClients, $blockedClients, $description, $serverId]);
         
         $_SESSION['success_message'] = 'Bot access control settings updated successfully';
         redirect('/servers/' . $serverId);

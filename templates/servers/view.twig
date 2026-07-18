@@ -203,6 +203,15 @@
                     </div>
                     <input type="checkbox" name="show_in_bot" class="toggle toggle-primary" {% if server.show_in_bot %}checked{% endif %}>
                 </div>
+
+                <!-- Display Name / Description -->
+                <div class="form-control bg-base-300/30 p-4 rounded-xl border border-base-300 space-y-2">
+                    <label class="label p-0">
+                        <span class="label-text font-medium text-xs uppercase tracking-wider text-base-content/60">Server Display Name in Bot</span>
+                    </label>
+                    <input type="text" name="description" placeholder="e.g. 🇳🇱 Амстердам" class="input input-bordered input-sm bg-base-200 text-sm w-full" value="{{ server.description }}">
+                    <span class="text-[10px] text-base-content/40 leading-relaxed block">If set, this custom name will be shown in the Telegram bot (e.g. <code>🇳🇱 Амстердам [{{ server.name }}]</code>). If empty, only the internal name <code>{{ server.name }}</code> will be shown.</span>
+                </div>
                 
                 <!-- Client Access Lists -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-5">

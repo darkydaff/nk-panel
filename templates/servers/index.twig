@@ -34,6 +34,9 @@
                         </div>
                         <div>
                             <h3 class="font-semibold text-base-content">{{ server.name }}</h3>
+                            {% if server.description %}
+                                <span class="text-xs text-base-content/50 block font-medium">{{ server.description }}</span>
+                            {% endif %}
                             <code class="text-xs text-base-content/50">{{ server.host }}</code>
                         </div>
                     </div>
