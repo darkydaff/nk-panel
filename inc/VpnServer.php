@@ -1318,7 +1318,7 @@ EOF
 )
 
     # POST to panel and read dynamic interval
-    response=\$(curl -s -X POST \
+    response=\$(curl -s -k -L -X POST \
          -H "Content-Type: application/json" \
          -d "\$payload" \
          "\${PANEL_URL}/api/servers/report-metrics")
