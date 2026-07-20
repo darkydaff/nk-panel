@@ -3333,12 +3333,19 @@ Router::get('/routers', function () {
     
     $pdo = DB::conn();
     $stmt = $pdo->query("
-        SELECT r.*, ec.name AS client_name, COALESCE(s.name, s2.name) AS server_name 
+        SELECT r.*, 
+               ec.name AS client_name, 
+               COALESCE(s.name, (
+                   SELECT s2.name 
+                   FROM vpn_clients c 
+                   JOIN vpn_servers s2 ON c.server_id = s2.id 
+                   WHERE c.ext_client_code = r.ext_client_code AND c.status = 'active' 
+                   ORDER BY c.created_at DESC 
+                   LIMIT 1
+               )) AS server_name 
         FROM routers r
         LEFT JOIN ext_clients ec ON r.ext_client_code = ec.code
         LEFT JOIN vpn_servers s ON r.server_id = s.id
-        LEFT JOIN vpn_clients c ON r.ext_client_code = c.ext_client_code AND c.status = 'active'
-        LEFT JOIN vpn_servers s2 ON c.server_id = s2.id
         ORDER BY r.created_at DESC
     ");
     $routers = $stmt->fetchAll();

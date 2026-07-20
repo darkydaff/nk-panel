@@ -205,15 +205,25 @@ class TelegramClientBot {
             // Refetch router to get updated check timestamp and status
             $stmt = $pdo->prepare("
                 SELECT r.*, 
-                       COALESCE(s.name, s2.name) as server_name, 
-                       COALESCE(s.description, s2.description) as server_desc 
+                       COALESCE(s.name, (
+                           SELECT s2.name 
+                           FROM vpn_clients c 
+                           JOIN vpn_servers s2 ON c.server_id = s2.id 
+                           WHERE c.ext_client_code = r.ext_client_code AND c.status = 'active' 
+                           ORDER BY c.created_at DESC 
+                           LIMIT 1
+                       )) as server_name, 
+                       COALESCE(s.description, (
+                           SELECT s2.description 
+                           FROM vpn_clients c 
+                           JOIN vpn_servers s2 ON c.server_id = s2.id 
+                           WHERE c.ext_client_code = r.ext_client_code AND c.status = 'active' 
+                           ORDER BY c.created_at DESC 
+                           LIMIT 1
+                       )) as server_desc 
                 FROM routers r 
                 LEFT JOIN vpn_servers s ON r.server_id = s.id 
-                LEFT JOIN vpn_clients c ON r.ext_client_code = c.ext_client_code AND c.status = 'active'
-                LEFT JOIN vpn_servers s2 ON c.server_id = s2.id
                 WHERE r.id = ?
-                ORDER BY c.created_at DESC
-                LIMIT 1
             ");
             $stmt->execute([$routerId]);
             $router = $stmt->fetch();
