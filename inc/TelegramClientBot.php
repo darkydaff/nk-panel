@@ -191,18 +191,20 @@ class TelegramClientBot {
         }
 
         if ($action === 'main_list') {
-            self::logActivity($tgId, $tgName, implode(',', $clientCodes), 'view_menu', 'Opened main menu via callback', json_encode($update));
-            self::answerCallbackQuery($callbackQueryId, "", false, $token);
             self::showMainMenu($chatId, $tgName, $clients, $token, $messageId);
             return;
         }
 
-        if ($action === 'select_router') {
+        if ($action === 'select_router' || $action === 'refresh_router') {
             require_once __DIR__ . '/RouterManager.php';
-            // Check current router status asynchronously if needed, or get from DB
-            $statusInfo = RouterManager::checkRouterStatus($routerId);
             
-            // Refetch router to get updated check timestamp and status
+            // Only poll router over network when user explicitly taps '⚡ Обновить'
+            if ($action === 'refresh_router') {
+                RouterManager::checkRouterStatus($routerId);
+                self::answerCallbackQuery($callbackQueryId, "Статус обновлен ⚡", false, $token);
+            }
+            
+            // Fetch router directly from DB for instant response
             $stmt = $pdo->prepare("
                 SELECT r.*, 
                        COALESCE(s.name, (
@@ -242,14 +244,7 @@ class TelegramClientBot {
             }
 
             $routerName = $router['router_model'] ?: $router['domain'];
-            self::logActivity($tgId, $tgName, $router['ext_client_code'], 'select_router', "Selected router: {$routerName} (ID: {$routerId}), Status: {$statusStr}", json_encode($update));
-
-            $pingStr = null;
-            if (isset($router['last_ping_ms']) && $router['last_ping_ms'] !== null) {
-                $ping = (int)$router['last_ping_ms'];
-                $pingIcon = ($ping < 50) ? '🟢' : (($ping < 150) ? '🟡' : '🔴');
-                $pingStr = "`{$ping} ms` {$pingIcon}";
-            }
+            self::logActivity($tgId, $tgName, $router['ext_client_code'], $action, "Selected router: {$routerName} (ID: {$routerId}), Status: {$statusStr}", json_encode($update));
 
             $text = "📶 **Роутер: {$routerName}**\n";
             if ($router['firmware_version']) {
@@ -257,9 +252,6 @@ class TelegramClientBot {
             }
             $text .= "🔹 Статус: `{$statusStr}`\n";
             $text .= "🔹 Текущий сервер: **{$serverName}**\n";
-            if ($pingStr) {
-                $text .= "⚡ Пинг до сервера: {$pingStr}\n";
-            }
             if ($router['error_message']) {
                 $text .= "⚠️ Ошибка: _" . htmlspecialchars($router['error_message']) . "_\n";
             }
