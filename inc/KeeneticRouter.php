@@ -277,9 +277,18 @@ class KeeneticRouter {
             return null;
         }
 
-        // Clean host if URL was provided (e.g. extract domain/IP from http(s)://...)
-        if (preg_match('/^https?:\/\/([^\/:]+)/i', $host, $m)) {
-            $host = $m[1];
+        // Clean host: extract domain or IP from any URL or Host:Port format
+        if (str_starts_with($host, 'http://') || str_starts_with($host, 'https://')) {
+            $parsedHost = parse_url($host, PHP_URL_HOST);
+            if ($parsedHost) {
+                $host = $parsedHost;
+            }
+        }
+        $host = preg_replace('/:[0-9]+$/', '', trim($host));
+        $host = trim($host, '/ ');
+
+        if (empty($host)) {
+            return null;
         }
 
         try {
@@ -288,41 +297,41 @@ class KeeneticRouter {
                 'count' => $count
             ]);
 
-            if ($res['code'] !== 200 || !is_array($res['body'])) {
+            if ($res['code'] !== 200 || empty($res['body'])) {
                 $res = $this->request('rci/ping', 'POST', [
                     'host' => $host,
                     'count' => $count
                 ]);
             }
 
-            if ($res['code'] === 200) {
+            if ($res['code'] === 200 && !empty($res['body'])) {
                 $body = $res['body'];
                 $contentStr = is_string($body) ? $body : json_encode($body, JSON_UNESCAPED_UNICODE);
 
                 // 1. Structured field extraction
                 if (is_array($body)) {
-                    if (isset($body['avg'])) {
-                        return (int)round((float)$body['avg']);
+                    if (isset($body['avg']) && is_numeric($body['avg'])) {
+                        return (int)max(1, round((float)$body['avg']));
                     }
-                    if (isset($body['avg-ms'])) {
-                        return (int)round((float)$body['avg-ms']);
+                    if (isset($body['avg-ms']) && is_numeric($body['avg-ms'])) {
+                        return (int)max(1, round((float)$body['avg-ms']));
                     }
-                    if (isset($body['min'], $body['max'])) {
-                        return (int)round(((float)$body['min'] + (float)$body['max']) / 2);
+                    if (isset($body['min'], $body['max']) && is_numeric($body['min'])) {
+                        return (int)max(1, round(((float)$body['min'] + (float)$body['max']) / 2));
                     }
                 }
 
-                // 2. Regex extraction from message lines
-                if (preg_match_all('/time=([0-9.]+)\s*ms/i', $contentStr, $matches)) {
+                // 2. Regex extraction from individual ping response lines (time=18.4 ms, time<1 ms, time=18ms)
+                if (preg_match_all('/time[=<]?\s*([0-9.]+)\s*ms/i', $contentStr, $matches)) {
                     $times = array_map('floatval', $matches[1]);
                     if (!empty($times)) {
-                        return (int)round(array_sum($times) / count($times));
+                        return (int)max(1, round(array_sum($times) / count($times)));
                     }
                 }
 
-                // 3. Regex extraction from summary line (rtt min/avg/max/mdev = ...)
-                if (preg_match('/rtt\s+min\/avg\/max[^\n=]*=\s*[0-9.]+\/([0-9.]+)/i', $contentStr, $m)) {
-                    return (int)round((float)$m[1]);
+                // 3. Regex extraction from summary lines (rtt / round-trip min/avg/max/mdev = ...)
+                if (preg_match('/(?:rtt|round-trip)[^\n=]*=\s*[0-9.]+\/([0-9.]+)/i', $contentStr, $m)) {
+                    return (int)max(1, round((float)$m[1]));
                 }
             }
         } catch (Throwable $e) {
