@@ -3230,14 +3230,44 @@ Router::post('/settings/backup-create', function () {
         if ($target === 'panel') {
             $path = $bm->createPanelBackup($user['id']);
             $tgErr = '';
-            if (!$bm->sendToTelegram($path, $tgErr)) {
+            $panelUploaded = $bm->sendToTelegram($path, $tgErr);
+
+            // Also create and send standalone External DB backup if reachable
+            $extMsg = '';
+            if (class_exists('ExtDB') && ExtDB::isAvailable()) {
+                try {
+                    $extPath = ExtDB::createBackup($user['id']);
+                    $extErr = '';
+                    $bm->sendToTelegram($extPath, $extErr);
+                    $extMsg = ' and External PostgreSQL DB backup';
+                } catch (Throwable $extEx) {
+                    error_log("Failed to auto-create ExtDB backup during panel backup: " . $extEx->getMessage());
+                }
+            }
+
+            if (!$panelUploaded) {
                 if (!empty($tgErr)) {
-                    $_SESSION['settings_success'] = 'Full panel backup successfully created, but Telegram upload failed: ' . $tgErr;
+                    $_SESSION['settings_success'] = 'Full panel backup' . $extMsg . ' successfully created, but Telegram upload failed: ' . $tgErr;
                 } else {
-                    $_SESSION['settings_success'] = 'Full panel backup successfully created (Telegram upload is disabled).';
+                    $_SESSION['settings_success'] = 'Full panel backup' . $extMsg . ' successfully created (Telegram upload is disabled).';
                 }
             } else {
-                $_SESSION['settings_success'] = 'Full panel backup successfully created and uploaded to Telegram.';
+                $_SESSION['settings_success'] = 'Full panel backup' . $extMsg . ' successfully created and uploaded to Telegram.';
+            }
+        } elseif ($target === 'ext_db') {
+            if (!class_exists('ExtDB') || !ExtDB::isAvailable()) {
+                throw new Exception("External PostgreSQL database is unreachable.");
+            }
+            $extPath = ExtDB::createBackup($user['id']);
+            $tgErr = '';
+            if (!$bm->sendToTelegram($extPath, $tgErr)) {
+                if (!empty($tgErr)) {
+                    $_SESSION['settings_success'] = 'External PostgreSQL database backup created, but Telegram upload failed: ' . $tgErr;
+                } else {
+                    $_SESSION['settings_success'] = 'External PostgreSQL database backup successfully created (Telegram upload is disabled).';
+                }
+            } else {
+                $_SESSION['settings_success'] = 'External PostgreSQL database backup successfully created and uploaded to Telegram.';
             }
         } else {
             $serverId = (int)$target;

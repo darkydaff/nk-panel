@@ -227,7 +227,8 @@
                         <div class="form-control">
                             <label class="label py-1"><span class="label-text text-xs font-medium">Backup Target</span></label>
                             <select name="target" class="select select-bordered select-sm">
-                                <option value="panel">Full Panel (ZIP)</option>
+                                <option value="panel">Full Panel (ZIP + Ext DB)</option>
+                                <option value="ext_db">External PostgreSQL DB (.sql)</option>
                                 {% for s in servers %}
                                 <option value="{{ s.id }}">Server: {{ s.name }} (JSON)</option>
                                 {% endfor %}
@@ -243,9 +244,9 @@
                         <h3 class="text-sm font-semibold">Restore Backup</h3>
                         <div id="drop-zone" class="border-2 border-dashed border-base-content/20 hover:border-primary rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition-colors h-36 bg-base-300/20">
                             <i class="fas fa-file-archive text-2xl text-base-content/30 mb-2"></i>
-                            <p class="text-xs text-base-content/50 text-center">Drag &amp; Drop zip/json backup file here</p>
+                            <p class="text-xs text-base-content/50 text-center">Drag &amp; Drop zip/json/sql backup file here</p>
                             <p class="text-[10px] text-base-content/30 text-center mt-1">Or click to select a file</p>
-                            <input type="file" id="restore-file-input" class="hidden" accept=".zip,.json">
+                            <input type="file" id="restore-file-input" class="hidden" accept=".zip,.json,.sql">
                         </div>
                     </div>
                 </div>
@@ -276,6 +277,8 @@
                             <td>
                                 {% if b.backup_scope == 'panel' %}
                                 <span class="badge badge-info badge-sm">Panel</span>
+                                {% elseif b.backup_scope == 'ext_db' %}
+                                <span class="badge badge-accent badge-sm">Ext DB</span>
                                 {% else %}
                                 <span class="badge badge-ghost badge-sm">Server</span>
                                 {% endif %}

@@ -81,11 +81,18 @@ class BackupManager {
             $pgErrorPath = "{$tempDir}/pg_dump.err";
             $pgErrorPathEsc = escapeshellarg($pgErrorPath);
 
-            $pgCmd = "PGPASSWORD=" . escapeshellarg($pgPass) . " pg_dump -h {$pgHostEsc} -p {$pgPortEsc} -U {$pgUserEsc} -d {$pgDbEsc} -F p > {$postgresDumpPathEsc} 2> {$pgErrorPathEsc}";
-            exec($pgCmd, $outputPg, $returnVarPg);
-            if ($returnVarPg !== 0) {
-                $errPg = file_exists($pgErrorPath) ? trim(file_get_contents($pgErrorPath)) : 'Unknown error';
-                error_log("PostgreSQL dump failed: {$errPg}");
+            $pgCmd = "PGPASSWORD=" . escapeshellarg($pgPass) . " pg_dump -h {$pgHostEsc} -p {$pgPortEsc} -U {$pgUserEsc} -d {$pgDbEsc} -F p --clean --if-exists > {$postgresDumpPathEsc} 2> {$pgErrorPathEsc}";
+            @exec($pgCmd, $outputPg, $returnVarPg);
+
+            if ($returnVarPg !== 0 || !file_exists($postgresDumpPath) || filesize($postgresDumpPath) === 0) {
+                try {
+                    require_once __DIR__ . '/ExtDB.php';
+                    if (ExtDB::isAvailable()) {
+                        ExtDB::dumpPostgresViaPdo($postgresDumpPath);
+                    }
+                } catch (Throwable $extEx) {
+                    error_log("PostgreSQL dump fallback failed: " . $extEx->getMessage());
+                }
             }
         }
 
