@@ -426,7 +426,7 @@ class ExtDB {
         $errPathEsc = escapeshellarg($errPath);
 
         // Try pg_dump CLI first
-        $cmd = "PGPASSWORD=" . escapeshellarg($pgPass) . " pg_dump -h {$pgHostEsc} -p {$pgPortEsc} -U {$pgUserEsc} -d {$pgDbEsc} -F p > {$backupPathEsc} 2> {$errPathEsc}";
+        $cmd = "PGPASSWORD=" . escapeshellarg($pgPass) . " pg_dump -h {$pgHostEsc} -p {$pgPortEsc} -U {$pgUserEsc} -d {$pgDbEsc} -F p --clean --if-exists > {$backupPathEsc} 2> {$errPathEsc}";
         @exec($cmd, $output, $returnVar);
 
         $dumpSuccess = ($returnVar === 0 && file_exists($backupPath) && filesize($backupPath) > 0);
@@ -483,7 +483,7 @@ class ExtDB {
         ");
         $tables = $tablesStmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $sql = "-- Whole External PostgreSQL Database Dump\n";
+        $sql = "-- Whole External PostgreSQL Database Dump (pg_dump compatible)\n";
         $sql .= "-- Database: " . Config::get('EXT_PG_DB', 'nocodb') . "\n";
         $sql .= "-- Generated: " . date('Y-m-d H:i:s UTC') . "\n\n";
         $sql .= "SET statement_timeout = 0;\n";
@@ -568,6 +568,31 @@ class ExtDB {
             throw new Exception("External PostgreSQL database is unreachable.");
         }
 
+        $pgHost = Config::get('EXT_PG_HOST', '157.22.175.250');
+        $pgPort = Config::get('EXT_PG_PORT', '5434');
+        $pgDb   = Config::get('EXT_PG_DB',   'nocodb');
+        $pgUser = Config::get('EXT_PG_USER', 'nocodb');
+        $pgPass = Config::get('EXT_PG_PASSWORD', 'nocodb');
+
+        $pgHostEsc = escapeshellarg($pgHost);
+        $pgPortEsc = escapeshellarg($pgPort);
+        $pgUserEsc = escapeshellarg($pgUser);
+        $pgDbEsc   = escapeshellarg($pgDb);
+        $backupPathEsc = escapeshellarg($backupPath);
+
+        $errPath = "/tmp/ext_pg_restore_" . time() . ".err";
+        $errPathEsc = escapeshellarg($errPath);
+
+        // Try psql CLI first
+        $cmd = "PGPASSWORD=" . escapeshellarg($pgPass) . " psql -h {$pgHostEsc} -p {$pgPortEsc} -U {$pgUserEsc} -d {$pgDbEsc} -f {$backupPathEsc} 2> {$errPathEsc}";
+        @exec($cmd, $output, $returnVar);
+
+        if ($returnVar === 0) {
+            if (file_exists($errPath)) @unlink($errPath);
+            return true;
+        }
+
+        // Fallback to PDO execution
         $sqlContent = file_get_contents($backupPath);
         if (empty(trim($sqlContent))) {
             throw new Exception("Backup file is empty.");
@@ -575,6 +600,8 @@ class ExtDB {
 
         $pgPdo = self::conn();
         $pgPdo->exec($sqlContent);
+
+        if (file_exists($errPath)) @unlink($errPath);
         return true;
     }
 }
