@@ -227,6 +227,15 @@ class RouterManager {
                 $newPingMs,
                 $routerId
             ]);
+
+            // Sync external Postgres client server ID if external DB is reachable
+            try {
+                if (class_exists('ExtDB') && !empty($router['ext_client_code'])) {
+                    ExtDB::syncClientServerId($router['ext_client_code']);
+                }
+            } catch (Throwable $extEx) {
+                error_log("Failed to sync external DB server ID for router {$routerId}: " . $extEx->getMessage());
+            }
             
             return [
                 'success' => true,

@@ -1,0 +1,146 @@
+{% extends "layout.twig" %}
+
+{% block title %}External Database Server Mapping{% endblock %}
+
+{% block breadcrumbs %}
+    <li><a href="/dashboard" class="hover:text-base-content transition-colors">Home</a></li>
+    <li><a href="/servers" class="hover:text-base-content transition-colors">Servers</a></li>
+    <li><span class="text-base-content/70">External DB Mapping</span></li>
+{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-6xl mx-auto">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div>
+            <h1 class="text-2xl font-bold flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-base-300 text-primary flex items-center justify-center">
+                    <i class="fas fa-database"></i>
+                </div>
+                External PostgreSQL Server Mapping
+            </h1>
+            <p class="text-xs text-base-content/60 mt-1">
+                Map local panel VPN servers to their corresponding <code class="font-mono bg-base-300 px-1 py-0.5 rounded text-secondary">Servers_id</code> in your external NocoDB / PostgreSQL database.
+            </p>
+        </div>
+
+        <div class="flex items-center gap-3">
+            {% if ext_db_available %}
+                <span class="badge badge-success gap-1.5 py-3 px-3">
+                    <span class="w-2 h-2 rounded-full bg-success animate-pulse"></span>
+                    PostgreSQL Connected
+                </span>
+            {% else %}
+                <span class="badge badge-error gap-1.5 py-3 px-3">
+                    <span class="w-2 h-2 rounded-full bg-error"></span>
+                    PostgreSQL Unreachable
+                </span>
+            {% endif %}
+
+            <form method="POST" action="/api/servers/sync-ext-ids" class="inline">
+                <button type="submit" class="btn btn-secondary btn-sm gap-2" {% if not ext_db_available %}disabled{% endif %}>
+                    <i class="fas fa-sync-alt"></i>
+                    Sync Client Server IDs Now
+                </button>
+            </form>
+        </div>
+    </div>
+
+    {% if message %}
+        <div class="alert alert-success shadow-lg mb-6">
+            <i class="fas fa-check-circle text-lg"></i>
+            <span>{{ message }}</span>
+        </div>
+    {% endif %}
+
+    {% if error %}
+        <div class="alert alert-error shadow-lg mb-6">
+            <i class="fas fa-exclamation-triangle text-lg"></i>
+            <span>{{ error }}</span>
+        </div>
+    {% endif %}
+
+    <form method="POST" action="/servers/ext-mapping">
+        <div class="card bg-base-200 border border-base-300 shadow-xl overflow-hidden mb-6">
+            <div class="card-body p-0">
+                <div class="overflow-x-auto">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr class="bg-base-300/50 text-base-content/70">
+                                <th>Local VPN Server</th>
+                                <th>Host / IP</th>
+                                <th>Auto-Detected External Match</th>
+                                <th>Assigned External Postgres Server ID</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if local_servers|length > 0 %}
+                                {% for server in local_servers %}
+                                    <tr class="hover">
+                                        <td>
+                                            <div class="font-semibold text-base-content flex items-center gap-2">
+                                                <i class="fas fa-server text-xs text-primary"></i>
+                                                {{ server.name }}
+                                            </div>
+                                            {% if server.description %}
+                                                <span class="text-xs text-base-content/50">{{ server.description }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <code class="text-xs bg-base-300 px-2 py-1 rounded font-mono">{{ server.host }}</code>
+                                        </td>
+                                        <td>
+                                            {% set auto_match = null %}
+                                            {% for ext in ext_servers %}
+                                                {% if ext.Servers|lower == server.name|lower %}
+                                                    {% set auto_match = ext %}
+                                                {% endif %}
+                                            {% endfor %}
+
+                                            {% if auto_match %}
+                                                <span class="badge badge-info badge-outline gap-1 text-xs font-mono">
+                                                    <span>{{ auto_match.Country }}</span>
+                                                    ID: <strong>{{ auto_match.id }}</strong> ({{ auto_match.Servers }})
+                                                </span>
+                                            {% else %}
+                                                <span class="text-xs text-base-content/40 italic">No exact name match</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="flex items-center gap-2 max-w-xs">
+                                                <select name="ext_server_id[{{ server.id }}]" class="select select-bordered select-sm w-full font-mono text-xs">
+                                                    <option value="">-- Auto Match by Name --</option>
+                                                    {% for ext in ext_servers %}
+                                                        <option value="{{ ext.id }}" {% if server.ext_server_id == ext.id %}selected{% endif %}>
+                                                            ID {{ ext.id }} | {{ ext.Servers }} {% if ext.Country %}({{ ext.Country }}){% endif %}
+                                                        </option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="4" class="text-center py-8 text-base-content/50">
+                                        No local VPN servers found in panel.
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card-body bg-base-300/30 border-t border-base-300 p-4 flex flex-row justify-between items-center">
+                <span class="text-xs text-base-content/60">
+                    <i class="fas fa-info-circle text-primary mr-1"></i>
+                    Selecting "-- Auto Match by Name --" automatically queries external PostgreSQL <code class="font-mono">"Servers"</code> table for a server matching the panel server name.
+                </span>
+                <button type="submit" class="btn btn-primary btn-sm gap-2">
+                    <i class="fas fa-save"></i>
+                    Save Mapping
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -380,6 +380,82 @@ Router::get('/servers', function () {
     View::render('servers/index.twig', ['servers' => $servers]);
 });
 
+// External Database Server Mapping page (Link-only hidden page)
+Router::get('/servers/ext-mapping', function () {
+    requireAdmin();
+    $pdo = DB::conn();
+
+    $stmtServers = $pdo->query("SELECT id, name, host, description, ext_server_id FROM vpn_servers ORDER BY id ASC");
+    $localServers = $stmtServers->fetchAll(PDO::FETCH_ASSOC);
+
+    $extServers = ExtDB::getExternalServers();
+    $extDbAvailable = ExtDB::isAvailable();
+
+    $message = $_SESSION['success_message'] ?? null;
+    $error = $_SESSION['error_message'] ?? null;
+    unset($_SESSION['success_message'], $_SESSION['error_message']);
+
+    View::render('servers/ext_mapping.twig', [
+        'local_servers' => $localServers,
+        'ext_servers' => $extServers,
+        'ext_db_available' => $extDbAvailable,
+        'message' => $message,
+        'error' => $error,
+    ]);
+});
+
+Router::post('/servers/ext-mapping', function () {
+    requireAdmin();
+    $extMappings = $_POST['ext_server_id'] ?? [];
+
+    try {
+        $pdo = DB::conn();
+        $stmtUpd = $pdo->prepare("UPDATE vpn_servers SET ext_server_id = ? WHERE id = ?");
+
+        foreach ($extMappings as $serverId => $extId) {
+            $serverId = (int)$serverId;
+            $extId = ($extId !== '' && $extId !== null) ? (int)$extId : null;
+            $stmtUpd->execute([$extId, $serverId]);
+        }
+
+        // Run sync after updating mapping
+        $syncedCount = ExtDB::syncAllClientServerIds();
+
+        $_SESSION['success_message'] = "Server mapping saved successfully! Synchronized $syncedCount client server IDs to external database.";
+    } catch (Throwable $e) {
+        $_SESSION['error_message'] = "Error saving mapping: " . $e->getMessage();
+    }
+
+    redirect('/servers/ext-mapping');
+});
+
+// Sync client server IDs API route
+Router::post('/api/servers/sync-ext-ids', function () {
+    requireAdmin();
+
+    try {
+        $syncedCount = ExtDB::syncAllClientServerIds();
+        
+        if (isJsonRequest()) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => true, 'count' => $syncedCount]);
+            return;
+        }
+
+        $_SESSION['success_message'] = "Successfully synchronized $syncedCount client server IDs to external database.";
+    } catch (Throwable $e) {
+        if (isJsonRequest()) {
+            http_response_code(500);
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+            return;
+        }
+        $_SESSION['error_message'] = "Error syncing server IDs: " . $e->getMessage();
+    }
+
+    redirect('/servers/ext-mapping');
+});
+
 // Create server page
 Router::get('/servers/create', function () {
     requireAuth();

@@ -218,6 +218,12 @@ class ExtDB {
                 $warnings[] = 'Router connections sync failed: ' . $e->getMessage();
             }
 
+            try {
+                self::syncAllClientServerIds();
+            } catch (Throwable $e) {
+                $warnings[] = 'External DB server IDs sync failed: ' . $e->getMessage();
+            }
+
             // 5. Update last sync timestamp
             $pdo->prepare("INSERT INTO system_settings (`key`, `value`) VALUES ('last_ext_clients_sync', ?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)")
                 ->execute([date('Y-m-d H:i:s')]);
@@ -243,6 +249,145 @@ class ExtDB {
             throw $e;
         }
     }
+
+    /**
+     * Fetch all servers from external PostgreSQL "Servers" table.
+     *
+     * @return array Array of server records with keys: id, Servers (name), Country, Exp_Date
+     */
+    public static function getExternalServers(): array {
+        if (!self::isAvailable()) {
+            return [];
+        }
+
+        try {
+            $pgPdo = self::conn();
+            $stmt = $pgPdo->query('SELECT "id", "Servers", "Country", "Exp_Date" FROM "Servers" ORDER BY "id" ASC');
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (Throwable $e) {
+            error_log("Failed to fetch external PostgreSQL servers: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Get the latest server record (from MySQL) connected/assigned to a client code.
+     */
+    public static function getLatestServerForClientCode(string $code): ?array {
+        $code = trim($code);
+        if ($code === '') return null;
+
+        $rawCode = ltrim($code, '#');
+        $hashCode = '#' . $rawCode;
+
+        $pdo = DB::conn();
+
+        // 1. Check routers table first (connected server)
+        $stmtRouter = $pdo->prepare("
+            SELECT s.id, s.name, s.ext_server_id 
+            FROM routers r 
+            JOIN vpn_servers s ON r.server_id = s.id 
+            WHERE (r.ext_client_code = ? OR r.ext_client_code = ?) 
+              AND r.server_id IS NOT NULL 
+            LIMIT 1
+        ");
+        $stmtRouter->execute([$code, $hashCode]);
+        $server = $stmtRouter->fetch(PDO::FETCH_ASSOC);
+        if ($server) return $server;
+
+        // 2. Fall back to active vpn_clients configs
+        $stmtClient = $pdo->prepare("
+            SELECT s.id, s.name, s.ext_server_id 
+            FROM vpn_clients c 
+            JOIN vpn_servers s ON c.server_id = s.id 
+            WHERE (c.ext_client_code = ? OR c.ext_client_code = ?) 
+              AND c.status = 'active' 
+            ORDER BY c.updated_at DESC, c.created_at DESC 
+            LIMIT 1
+        ");
+        $stmtClient->execute([$code, $hashCode]);
+        $server = $stmtClient->fetch(PDO::FETCH_ASSOC);
+        return $server ?: null;
+    }
+
+    /**
+     * Synchronize a specific client's Servers_id in external PostgreSQL based on their latest panel server.
+     */
+    public static function syncClientServerId(string $code): bool {
+        if (!self::isAvailable()) {
+            return false;
+        }
+
+        $code = trim($code);
+        if ($code === '') return false;
+
+        $localServer = self::getLatestServerForClientCode($code);
+        if (!$localServer) {
+            return false;
+        }
+
+        $extServerId = null;
+        if (!empty($localServer['ext_server_id'])) {
+            $extServerId = (int)$localServer['ext_server_id'];
+        } else {
+            // Find server by name in external Postgres "Servers" table
+            $pgPdo = self::conn();
+            $stmtSearch = $pgPdo->prepare('SELECT "id" FROM "Servers" WHERE "Servers" ILIKE ? LIMIT 1');
+            $stmtSearch->execute([trim($localServer['name'])]);
+            $foundId = $stmtSearch->fetchColumn();
+            if ($foundId !== false) {
+                $extServerId = (int)$foundId;
+            }
+        }
+
+        if ($extServerId === null) {
+            return false;
+        }
+
+        $rawCode = ltrim($code, '#');
+        $hashCode = '#' . $rawCode;
+
+        $pgPdo = self::conn();
+        $table = Config::get('EXT_PG_CLIENTS_TABLE', 'Clients');
+        $stmtUpd = $pgPdo->prepare("UPDATE \"{$table}\" SET \"Servers_id\" = ? WHERE \"Code\" = ? OR \"Code\" = ?");
+        $stmtUpd->execute([$extServerId, $code, $hashCode]);
+        return $stmtUpd->rowCount() > 0;
+    }
+
+    /**
+     * Synchronize all clients' Servers_id in external PostgreSQL based on their latest panel servers.
+     */
+    public static function syncAllClientServerIds(): int {
+        if (!self::isAvailable()) {
+            return 0;
+        }
+
+        $pdo = DB::conn();
+        // Gather all distinct client codes from ext_clients, routers, and vpn_clients
+        $stmtCodes = $pdo->query("
+            SELECT DISTINCT code FROM (
+                SELECT code FROM ext_clients WHERE code IS NOT NULL AND code != ''
+                UNION
+                SELECT ext_client_code AS code FROM routers WHERE ext_client_code IS NOT NULL AND ext_client_code != ''
+                UNION
+                SELECT ext_client_code AS code FROM vpn_clients WHERE ext_client_code IS NOT NULL AND ext_client_code != ''
+            ) AS combined_codes
+        ");
+        $codes = $stmtCodes->fetchAll(PDO::FETCH_COLUMN);
+
+        $syncedCount = 0;
+        foreach ($codes as $code) {
+            try {
+                if (self::syncClientServerId($code)) {
+                    $syncedCount++;
+                }
+            } catch (Throwable $e) {
+                error_log("Failed to sync server ID for client $code: " . $e->getMessage());
+            }
+        }
+        return $syncedCount;
+    }
+}
 }
 
 /**

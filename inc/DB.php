@@ -335,6 +335,22 @@ class DB {
           $pdo->exec($sql);
         }
       }
+
+      // Check if ext_server_id column exists in vpn_servers table
+      try {
+        $stmtExtServCol = $pdo->query("SHOW COLUMNS FROM vpn_servers LIKE 'ext_server_id'");
+        $hasExtServerId = $stmtExtServCol->rowCount() > 0;
+      } catch (Throwable $e) {
+        $hasExtServerId = false;
+      }
+
+      if (!$hasExtServerId) {
+        $sqlPath = __DIR__ . '/../migrations/038_add_ext_server_id_to_vpn_servers.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
     } catch (Throwable $e) {
       error_log("Database self-healing migration failed: " . $e->getMessage());
     }
