@@ -388,7 +388,6 @@ class ExtDB {
         return $syncedCount;
     }
 }
-}
 
 /**
  * pg_escape_identifier_compat — wraps the schema name safely.
