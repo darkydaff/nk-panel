@@ -51,16 +51,36 @@ try {
     if ($shouldRun) {
         echo "Triggering automated backup...\n";
         $bm = new BackupManager();
-        $path = $bm->createPanelBackup(0, 'automatic');
-        echo "Backup zip created: {$path}\n";
         
-        $errorReason = '';
-        if ($bm->sendToTelegram($path, $errorReason)) {
-            echo "Backup successfully uploaded to Telegram.\n";
+        // 1. Full Panel Backup
+        $pathPanel = $bm->createPanelBackup(0, 'automatic');
+        echo "Panel backup zip created: {$pathPanel}\n";
+        
+        $errorReasonPanel = '';
+        if ($bm->sendToTelegram($pathPanel, $errorReasonPanel)) {
+            echo "Panel backup successfully uploaded to Telegram.\n";
         } else {
-            echo "Telegram upload failed: " . (!empty($errorReason) ? $errorReason : "Disabled or not configured") . "\n";
+            echo "Panel backup Telegram upload failed: " . (!empty($errorReasonPanel) ? $errorReasonPanel : "Disabled or not configured") . "\n";
         }
-        
+
+        // 2. Standalone External DB Backup
+        require_once __DIR__ . '/../inc/ExtDB.php';
+        if (class_exists('ExtDB') && ExtDB::isAvailable()) {
+            try {
+                $pathExt = ExtDB::createBackup(0, 'automatic');
+                echo "External DB backup created: {$pathExt}\n";
+                
+                $errorReasonExt = '';
+                if ($bm->sendToTelegram($pathExt, $errorReasonExt)) {
+                    echo "External DB backup successfully uploaded to Telegram.\n";
+                } else {
+                    echo "External DB backup Telegram upload failed: " . (!empty($errorReasonExt) ? $errorReasonExt : "Disabled or not configured") . "\n";
+                }
+            } catch (Throwable $extEx) {
+                echo "External DB backup creation failed: " . $extEx->getMessage() . "\n";
+            }
+        }
+
         $pruned = $bm->pruneLocalBackups();
         echo "Pruned {$pruned} expired local backups.\n";
     } else {

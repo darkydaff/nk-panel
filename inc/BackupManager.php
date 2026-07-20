@@ -206,56 +206,63 @@ class BackupManager {
                return false;
            }
 
-           $url = "https://api.telegram.org/bot{$botToken}/sendDocument";
-           $ch = curl_init($url);
-           curl_setopt($ch, CURLOPT_POST, true);
-           curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-           curl_setopt($ch, CURLOPT_POSTFIELDS, [
-               'chat_id' => $chatId,
-               'document' => new CURLFile($filePath),
-               'caption' => "🛡️ Nk-VPN Panel Backup: " . basename($filePath)
-           ]);
-           
-           $response = curl_exec($ch);
-           $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-           
-           if ($response === false) {
-               $errorReason = curl_error($ch);
-           }
-           curl_close($ch);
+            $caption = str_contains(basename($filePath), 'ext_pg_backup')
+                ? "🐘 External PostgreSQL DB Backup: " . basename($filePath)
+                : "🛡️ Nk-VPN Panel Backup: " . basename($filePath);
 
-           if ($httpCode === 200) {
-               return true;
-           } else {
-               if (empty($errorReason)) {
-                   $data = json_decode($response, true);
-                   $errorReason = $data['description'] ?? 'HTTP Code ' . $httpCode;
-               }
-               $this->pdo->prepare("UPDATE server_backups SET error_message = ? WHERE backup_path = ?")->execute(['Telegram upload failed: ' . $errorReason, $filePath]);
-               return false;
-           }
-       }
+            $url = "https://api.telegram.org/bot{$botToken}/sendDocument";
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, [
+                'chat_id' => $chatId,
+                'document' => new CURLFile($filePath),
+                'caption' => $caption
+            ]);
+            
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            
+            if ($response === false) {
+                $errorReason = curl_error($ch);
+            }
+            curl_close($ch);
+
+            if ($httpCode === 200) {
+                return true;
+            } else {
+                if (empty($errorReason)) {
+                    $data = json_decode($response, true);
+                    $errorReason = $data['description'] ?? 'HTTP Code ' . $httpCode;
+                }
+                $this->pdo->prepare("UPDATE server_backups SET error_message = ? WHERE backup_path = ?")->execute(['Telegram upload failed: ' . $errorReason, $filePath]);
+                return false;
+            }
+        }
 
       /**
        * Prunes local backups according to the retention policy.
        */
-      public function pruneLocalBackups(): int {
-          $stmt = $this->pdo->prepare("SELECT value FROM settings WHERE namespace = 'backup' AND `key` = 'retention_days'");
-          $stmt->execute();
-          $res = $stmt->fetch();
-          $retentionDays = $res ? (int)json_decode($res['value'], true) : 7;
+       public function pruneLocalBackups(): int {
+           $stmt = $this->pdo->prepare("SELECT value FROM settings WHERE namespace = 'backup' AND `key` = 'retention_days'");
+           $stmt->execute();
+           $res = $stmt->fetch();
+           $retentionDays = $res ? (int)json_decode($res['value'], true) : 7;
 
-          $files = glob("{$this->backupDir}/panel/*.zip");
-          $deleted = 0;
-          foreach ($files as $file) {
-              if (filemtime($file) < (time() - ($retentionDays * 86400))) {
-                  unlink($file);
-                  $this->pdo->prepare("DELETE FROM server_backups WHERE backup_path = ?")->execute([$file]);
-                  $deleted++;
-              }
-          }
-          return $deleted;
-      }
+           $files = array_merge(
+               glob("{$this->backupDir}/panel/*.zip") ?: [],
+               glob("{$this->backupDir}/ext_db/*.sql") ?: []
+           );
+           $deleted = 0;
+           foreach ($files as $file) {
+               if (filemtime($file) < (time() - ($retentionDays * 86400))) {
+                   unlink($file);
+                   $this->pdo->prepare("DELETE FROM server_backups WHERE backup_path = ?")->execute([$file]);
+                   $deleted++;
+               }
+           }
+           return $deleted;
+       }
 
       public function restorePanelBackup(string $zipPath, array $options = []): array {
           $tempDir = "/tmp/panel_restore_" . time();
