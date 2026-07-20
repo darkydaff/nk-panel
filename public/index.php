@@ -506,6 +506,61 @@ Router::post('/api/backups/ext-db/restore/{id}', function ($params) {
     redirect($redirectUrl);
 });
 
+// Download backup by ID
+Router::get('/backups/{id}/download', function ($params) {
+    requireAdmin();
+    $id = (int)$params['id'];
+    $pdo = DB::conn();
+
+    $stmt = $pdo->prepare("SELECT backup_path, backup_name FROM server_backups WHERE id = ?");
+    $stmt->execute([$id]);
+    $backup = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($backup && file_exists($backup['backup_path'])) {
+        header('Content-Description: File Transfer');
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="' . basename($backup['backup_name']) . '"');
+        header('Expires: 0');
+        header('Cache-Control: must-revalidate');
+        header('Pragma: public');
+        header('Content-Length: ' . filesize($backup['backup_path']));
+        readfile($backup['backup_path']);
+        exit;
+    }
+    $_SESSION['error_message'] = 'Backup file not found on disk';
+    $redirectUrl = $_SERVER['HTTP_REFERER'] ?? '/servers/ext-mapping';
+    redirect($redirectUrl);
+});
+
+// Delete backup by ID (POST)
+Router::post('/api/backups/{id}', function ($params) {
+    requireAdmin();
+    $id = (int)$params['id'];
+
+    try {
+        VpnServer::deleteBackup($id);
+        
+        if (isJsonRequest()) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => true, 'message' => 'Backup deleted successfully']);
+            return;
+        }
+
+        $_SESSION['success_message'] = 'Backup deleted successfully';
+    } catch (Throwable $e) {
+        if (isJsonRequest()) {
+            http_response_code(500);
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+            return;
+        }
+        $_SESSION['error_message'] = 'Failed to delete backup: ' . $e->getMessage();
+    }
+
+    $redirectUrl = $_SERVER['HTTP_REFERER'] ?? '/servers/ext-mapping';
+    redirect($redirectUrl);
+});
+
 // Sync client server IDs API route
 Router::post('/api/servers/sync-ext-ids', function () {
     requireAdmin();
