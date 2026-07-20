@@ -272,6 +272,108 @@ class KeeneticRouter {
 
 
     /**
+     * Ping a host from the router and return average latency in milliseconds (or null if unreachable/blocked)
+     */
+    public function pingHost(string $host, int $count = 1): ?int {
+        if (empty($host)) {
+            return null;
+        }
+
+        // Clean host: extract domain or IP from any URL or Host:Port format
+        if (str_starts_with($host, 'http://') || str_starts_with($host, 'https://')) {
+            $parsedHost = parse_url($host, PHP_URL_HOST);
+            if ($parsedHost) {
+                $host = $parsedHost;
+            }
+        }
+        $host = preg_replace('/:[0-9]+$/', '', trim($host));
+        $host = trim($host, '/ ');
+
+        if (empty($host)) {
+            return null;
+        }
+
+        try {
+            $res = $this->request('rci/tools/ping', 'POST', [
+                'host' => $host,
+                'count' => $count
+            ]);
+
+            if ($res['code'] !== 200 || empty($res['body'])) {
+                $res = $this->request('rci/ping', 'POST', [
+                    'host' => $host,
+                    'count' => $count
+                ]);
+            }
+
+            if ($res['code'] === 200 && !empty($res['body'])) {
+                $body = $res['body'];
+
+                // Handle KeenOS RCI continuation output if continued: true and message lines missing ping data
+                if (is_array($body) && isset($body['continued']) && $body['continued'] === true) {
+                    $hasTimeInMessage = false;
+                    $msgStr = json_encode($body['message'] ?? [], JSON_UNESCAPED_UNICODE);
+                    if (preg_match('/time[=<]?\s*[0-9.]+/i', $msgStr)) {
+                        $hasTimeInMessage = true;
+                    }
+
+                    if (!$hasTimeInMessage) {
+                        usleep(600000); // Wait 600ms for ping to finish
+                        try {
+                            $contRes = $this->request('rci/tools/ping', 'POST', new stdClass());
+                            if ($contRes['code'] === 200 && !empty($contRes['body'])) {
+                                if (is_array($contRes['body'])) {
+                                    if (isset($contRes['body']['message'])) {
+                                        $body['message'] = array_merge((array)($body['message'] ?? []), (array)$contRes['body']['message']);
+                                    } else {
+                                        $body = array_merge($body, $contRes['body']);
+                                    }
+                                }
+                            }
+                        } catch (Throwable $e) {
+                            // Ignore continuation error
+                        }
+                    }
+                }
+
+                $contentStr = is_string($body) ? $body : json_encode($body, JSON_UNESCAPED_UNICODE);
+
+                // 1. Regex extraction from individual ping response lines:
+                // "100 bytes from 45.151.106.74: icmp_req=1, ttl=57, time=70.76 ms."
+                if (preg_match_all('/time[=<]?\s*([0-9.]+)\s*ms/i', $contentStr, $matches)) {
+                    $times = array_map('floatval', $matches[1]);
+                    if (!empty($times)) {
+                        return (int)max(1, round(array_sum($times) / count($times)));
+                    }
+                }
+
+                // 2. Regex extraction from summary lines:
+                // "Round-trip min/avg/max = 70.76/70.76/70.76 ms."
+                if (preg_match('/(?:round-trip|rtt)[^\n=]*=\s*[0-9.]+\/([0-9.]+)/i', $contentStr, $m)) {
+                    return (int)max(1, round((float)$m[1]));
+                }
+
+                // 3. Structured field extraction
+                if (is_array($body)) {
+                    if (isset($body['avg']) && is_numeric($body['avg'])) {
+                        return (int)max(1, round((float)$body['avg']));
+                    }
+                    if (isset($body['avg-ms']) && is_numeric($body['avg-ms'])) {
+                        return (int)max(1, round((float)$body['avg-ms']));
+                    }
+                    if (isset($body['min'], $body['max']) && is_numeric($body['min'])) {
+                        return (int)max(1, round(((float)$body['min'] + (float)$body['max']) / 2));
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            // Ignore ping errors
+        }
+
+        return null;
+    }
+
+    /**
      * List all network interfaces
      */
     public function getInterfaces(): array {

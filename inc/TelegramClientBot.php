@@ -246,12 +246,22 @@ class TelegramClientBot {
             $routerName = $router['router_model'] ?: $router['domain'];
             self::logActivity($tgId, $tgName, $router['ext_client_code'], $action, "Selected router: {$routerName} (ID: {$routerId}), Status: {$statusStr}", json_encode($update));
 
+            $pingStr = null;
+            if (isset($router['last_ping_ms']) && $router['last_ping_ms'] !== null) {
+                $ping = (int)$router['last_ping_ms'];
+                $pingIcon = ($ping < 50) ? '🟢' : (($ping < 150) ? '🟡' : '🔴');
+                $pingStr = "`{$ping} ms` {$pingIcon}";
+            }
+
             $text = "📶 **Роутер: {$routerName}**\n";
             if ($router['firmware_version']) {
                 $text .= "🔹 Версия OS: `{$router['firmware_version']}`\n";
             }
             $text .= "🔹 Статус: `{$statusStr}`\n";
             $text .= "🔹 Текущий сервер: **{$serverName}**\n";
+            if ($pingStr) {
+                $text .= "⚡ Пинг до сервера: {$pingStr}\n";
+            }
             if ($router['error_message']) {
                 $text .= "⚠️ Ошибка: _" . htmlspecialchars($router['error_message']) . "_\n";
             }
@@ -259,7 +269,7 @@ class TelegramClientBot {
             $keyboard = ['inline_keyboard' => [
                 [
                     ['text' => '🔄 Сменить сервер', 'callback_data' => "change_server:{$routerId}"],
-                    ['text' => '⚡ Обновить', 'callback_data' => "select_router:{$routerId}"]
+                    ['text' => '⚡ Обновить', 'callback_data' => "refresh_router:{$routerId}"]
                 ],
                 [
                     ['text' => '🔙 Назад к списку', 'callback_data' => 'main_list']

@@ -70,9 +70,14 @@
                             <td>
                                 <div class="flex flex-col">
                                     <span class="text-xs router-model-text font-medium">{{ r.router_model|default('Keenetic (Generic)') }}</span>
-                                     {% if r.firmware_version %}
+                                     {% if r.firmware_version or r.last_ping_ms %}
                                          <div class="flex items-center gap-1.5 mt-0.5">
-                                             <span class="text-[10px] text-base-content/50 font-mono" title="OS Version">OS: {{ r.firmware_version }}</span>
+                                             {% if r.firmware_version %}
+                                                 <span class="text-[10px] text-base-content/50 font-mono" title="OS Version">OS: {{ r.firmware_version }}</span>
+                                             {% endif %}
+                                             {% if r.last_ping_ms %}
+                                                 <span class="badge badge-ghost badge-xs font-mono text-[10px] gap-1" title="Ping from router to public server IP"><i class="fas fa-bolt text-[9px] text-warning"></i> {{ r.last_ping_ms }}ms</span>
+                                             {% endif %}
                                          </div>
                                      {% endif %}
                                 </div>

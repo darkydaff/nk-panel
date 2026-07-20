@@ -289,6 +289,44 @@ class RouterManager {
                 $status = 'connected'; // Connection works, but no interface pushed yet
             }
             
+            // Ping current server if assigned
+            $pingMs = null;
+            $serverId = $router['server_id'];
+            if (!$serverId) {
+                $stmtServerId = $pdo->prepare("SELECT server_id FROM vpn_clients WHERE ext_client_code = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1");
+                $stmtServerId->execute([$router['ext_client_code']]);
+                $serverId = $stmtServerId->fetchColumn();
+            }
+
+            if ($serverId) {
+                $stmtServer = $pdo->prepare("SELECT host FROM vpn_servers WHERE id = ?");
+                $stmtServer->execute([$serverId]);
+                $serverHost = $stmtServer->fetchColumn();
+                if ($serverHost) {
+                    // Extract domain/IP from host URL
+                    if (str_starts_with($serverHost, 'http://') || str_starts_with($serverHost, 'https://')) {
+                        $parsedHost = parse_url($serverHost, PHP_URL_HOST);
+                        if ($parsedHost) {
+                            $serverHost = $parsedHost;
+                        }
+                    }
+                    $serverHost = preg_replace('/:[0-9]+$/', '', trim($serverHost));
+                    $serverHost = trim($serverHost, '/ ');
+
+                    // Resolve hostname to public IP address to ensure router pings public server IP
+                    if (!empty($serverHost) && !filter_var($serverHost, FILTER_VALIDATE_IP)) {
+                        $resolvedIp = gethostbyname($serverHost);
+                        if (!empty($resolvedIp) && filter_var($resolvedIp, FILTER_VALIDATE_IP)) {
+                            $serverHost = $resolvedIp;
+                        }
+                    }
+
+                    if (!empty($serverHost)) {
+                        $pingMs = $adapter->pingHost($serverHost, 1);
+                    }
+                }
+            }
+
             // Update database
             $updateSql = "
                 UPDATE routers 
@@ -297,6 +335,11 @@ class RouterManager {
                     last_check_at = NOW()
             ";
             $updateParams = [$status, $errorMsg];
+            
+            if ($pingMs !== null) {
+                $updateSql .= ", last_ping_ms = ?";
+                $updateParams[] = $pingMs;
+            }
             
             $currentModel = $router['router_model'] ?? '';
             $newModel = $connTest['router_model'] ?? '';
