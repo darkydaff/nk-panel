@@ -299,16 +299,11 @@ class RouterManager {
             }
 
             if ($serverId) {
-                $stmtServer = $pdo->prepare("SELECT host, vpn_port FROM vpn_servers WHERE id = ?");
+                $stmtServer = $pdo->prepare("SELECT host FROM vpn_servers WHERE id = ?");
                 $stmtServer->execute([$serverId]);
-                $serverRow = $stmtServer->fetch();
-                if ($serverRow && !empty($serverRow['host'])) {
-                    $serverHost = $serverRow['host'];
+                $serverHost = $stmtServer->fetchColumn();
+                if ($serverHost) {
                     $pingMs = $adapter->pingHost($serverHost);
-                    if ($pingMs === null) {
-                        $port = !empty($serverRow['vpn_port']) ? (int)$serverRow['vpn_port'] : 443;
-                        $pingMs = self::measureLatency($serverHost, $port);
-                    }
                 }
             }
 
@@ -476,42 +471,5 @@ class RouterManager {
             'success' => true,
             'groups_count' => count($groups)
         ];
-    }
-
-    /**
-     * Measure network handshake latency to a target host and port (milliseconds)
-     */
-    public static function measureLatency(string $host, int $port = 443): ?int {
-        if (empty($host)) {
-            return null;
-        }
-
-        if (str_starts_with($host, 'http://') || str_starts_with($host, 'https://')) {
-            $parsedHost = parse_url($host, PHP_URL_HOST);
-            if ($parsedHost) {
-                $host = $parsedHost;
-            }
-        }
-        $host = preg_replace('/:[0-9]+$/', '', trim($host));
-        $host = trim($host, '/ ');
-
-        if (empty($host)) {
-            return null;
-        }
-
-        $portsToTry = [$port, 443, 80, 22];
-        $portsToTry = array_unique(array_filter($portsToTry));
-
-        foreach ($portsToTry as $p) {
-            $startTime = microtime(true);
-            $fp = @fsockopen($host, $p, $errno, $errstr, 2);
-            if ($fp) {
-                $latency = (microtime(true) - $startTime) * 1000;
-                fclose($fp);
-                return (int)max(1, round($latency));
-            }
-        }
-
-        return null;
     }
 }

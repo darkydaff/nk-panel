@@ -306,6 +306,26 @@ class KeeneticRouter {
 
             if ($res['code'] === 200 && !empty($res['body'])) {
                 $body = $res['body'];
+
+                // Handle KeenOS RCI asynchronous streaming output (continued: true)
+                if (is_array($body) && isset($body['continued']) && $body['continued'] === true) {
+                    usleep(1200000); // Wait 1.2s for count=2 ping packets to return
+                    try {
+                        $contRes = $this->request('rci/tools/ping', 'POST', new stdClass());
+                        if ($contRes['code'] === 200 && !empty($contRes['body'])) {
+                            if (is_array($contRes['body'])) {
+                                if (isset($contRes['body']['message'])) {
+                                    $body['message'] = array_merge((array)($body['message'] ?? []), (array)$contRes['body']['message']);
+                                } else {
+                                    $body = array_merge($body, $contRes['body']);
+                                }
+                            }
+                        }
+                    } catch (Throwable $e) {
+                        // Ignore continuation error
+                    }
+                }
+
                 $contentStr = is_string($body) ? $body : json_encode($body, JSON_UNESCAPED_UNICODE);
 
                 // 1. Structured field extraction
@@ -321,7 +341,7 @@ class KeeneticRouter {
                     }
                 }
 
-                // 2. Regex extraction from individual ping response lines (time=18.4 ms, time<1 ms, time=18ms)
+                // 2. Regex extraction from individual ping response lines (time=54.2 ms, time<1 ms, time=54ms)
                 if (preg_match_all('/time[=<]?\s*([0-9.]+)\s*ms/i', $contentStr, $matches)) {
                     $times = array_map('floatval', $matches[1]);
                     if (!empty($times)) {
