@@ -263,6 +263,17 @@ class RouterManager {
             if ($router['wg_interface_id']) {
                 $ifStatus = $adapter->getInterfaceStatus($router['wg_interface_id']);
                 if (empty($ifStatus)) {
+                    // Fallback: search if WireGuard interface exists under a different ID
+                    $foundIf = $adapter->findWgInterface($router['wg_interface_name'] ?? null);
+                    if ($foundIf) {
+                        $router['wg_interface_id'] = $foundIf['id'];
+                        $pdo->prepare("UPDATE routers SET wg_interface_id = ? WHERE id = ?")
+                            ->execute([$foundIf['id'], $routerId]);
+                        $ifStatus = $foundIf;
+                    }
+                }
+
+                if (empty($ifStatus)) {
                     $status = 'error';
                     $errorMsg = "Interface {$router['wg_interface_id']} not found on the router.";
                 } else {

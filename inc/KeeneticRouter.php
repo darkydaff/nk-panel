@@ -137,6 +137,19 @@ class KeeneticRouter {
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
+        // If HTTP 200, session is already authenticated or open
+        if ($httpCode === 200) {
+            if (isset($headers['set-cookie'])) {
+                $cookieParts = explode(';', $headers['set-cookie']);
+                $this->cookie = trim($cookieParts[0]);
+            }
+            return true;
+        }
+
+        if ($httpCode !== 401) {
+            throw new Exception("Router authentication request returned HTTP status code {$httpCode}.");
+        }
+
         $realm = $headers['x-ndm-realm'] ?? null;
         if ($realm !== null) {
             $realm = trim($realm, '"\' ');
@@ -315,9 +328,13 @@ class KeeneticRouter {
      * Retrieve status of a specific interface
      */
     public function getInterfaceStatus(string $interfaceId): array {
-        $res = $this->request("rci/show/interface/{$interfaceId}");
-        if ($res['code'] === 200 && is_array($res['body'])) {
-            return $res['body'];
+        try {
+            $res = $this->request("rci/show/interface/{$interfaceId}");
+            if ($res['code'] === 200 && is_array($res['body'])) {
+                return $res['body'];
+            }
+        } catch (Throwable $e) {
+            // Safely return empty array if interface status query fails or interface does not exist
         }
         return [];
     }
@@ -387,6 +404,13 @@ class KeeneticRouter {
 
         // 1. Find or choose interface ID
         $interfaceId = $forcedInterfaceId;
+        if ($interfaceId) {
+            $ifCheck = $this->getInterfaceStatus($interfaceId);
+            if (empty($ifCheck)) {
+                $interfaceId = null; // Forced interface no longer exists on router, fallback to find or create
+            }
+        }
+
         if (!$interfaceId) {
             $existing = $this->findWgInterface($description);
             if ($existing) {

@@ -181,7 +181,7 @@ class TelegramClientBot {
 
         // Check router ownership
         if ($routerId) {
-            $stmt = $pdo->prepare("SELECT * FROM routers WHERE id = ?");
+            $stmt = $pdo->prepare("SELECT r.*, s.name as server_name, s.description as server_desc FROM routers r LEFT JOIN vpn_servers s ON r.server_id = s.id WHERE r.id = ?");
             $stmt->execute([$routerId]);
             $router = $stmt->fetch();
             if (!$router || !in_array($router['ext_client_code'], $clientCodes)) {
@@ -282,17 +282,32 @@ class TelegramClientBot {
             }
 
             $routerName = $router['router_model'] ?: $router['domain'];
+            $currentServerId = (int)($router['server_id'] ?? 0);
+            $currentServerName = 'Не назначен';
+            if (!empty($router['server_name'])) {
+                $currentServerName = !empty($router['server_desc']) ? $router['server_desc'] . " [" . $router['server_name'] . "]" : $router['server_name'];
+            }
+
             self::logActivity($tgId, $tgName, $router['ext_client_code'], 'view_servers', "Requested server list for router: {$routerName} (ID: {$routerId})", json_encode($update));
 
-            $text = "🌍 **Выберите новый сервер для роутера {$routerName}:**";
+            $text = "🌍 **Выберите новый сервер для роутера {$routerName}:**\n";
+            $text .= "🔹 Текущий сервер: **{$currentServerName}**";
+
             $keyboard = ['inline_keyboard' => []];
             foreach ($servers as $s) {
                 $displayText = $s['name'];
                 if (!empty($s['description'])) {
                     $displayText = $s['description'] . " [" . $s['name'] . "]";
                 }
+
+                if ((int)$s['id'] === $currentServerId) {
+                    $buttonText = "✅ {$displayText} (Текущий)";
+                } else {
+                    $buttonText = "🌐 {$displayText}";
+                }
+
                 $keyboard['inline_keyboard'][] = [[
-                    'text' => $displayText,
+                    'text' => $buttonText,
                     'callback_data' => "set_server:{$routerId}:{$s['id']}"
                 ]];
             }
@@ -313,6 +328,11 @@ class TelegramClientBot {
         if ($action === 'set_server') {
             $serverId = (int)$parts[2];
             $routerName = $router['router_model'] ?: $router['domain'];
+
+            if ($serverId === (int)($router['server_id'] ?? 0)) {
+                self::answerCallbackQuery($callbackQueryId, "Роутер уже подключен к этому серверу", true, $token);
+                return;
+            }
             
             $stmt = $pdo->prepare("SELECT * FROM vpn_servers WHERE id = ? AND status = 'active'");
             $stmt->execute([$serverId]);
