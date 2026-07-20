@@ -351,6 +351,23 @@ class DB {
           $pdo->exec($sql);
         }
       }
+
+      // Check if backup_scope enum includes ext_db
+      try {
+        $stmtScopeCol = $pdo->query("SHOW COLUMNS FROM server_backups LIKE 'backup_scope'");
+        $scopeRow = $stmtScopeCol->fetch(PDO::FETCH_ASSOC);
+        $hasExtDbScope = isset($scopeRow['Type']) && str_contains($scopeRow['Type'], 'ext_db');
+      } catch (Throwable $e) {
+        $hasExtDbScope = false;
+      }
+
+      if (!$hasExtDbScope) {
+        $sqlPath = __DIR__ . '/../migrations/039_add_ext_db_scope_to_server_backups.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
     } catch (Throwable $e) {
       error_log("Database self-healing migration failed: " . $e->getMessage());
     }

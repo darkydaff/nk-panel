@@ -391,6 +391,9 @@ Router::get('/servers/ext-mapping', function () {
     $extServers = ExtDB::getExternalServers();
     $extDbAvailable = ExtDB::isAvailable();
 
+    $stmtExtBackups = $pdo->query("SELECT * FROM server_backups WHERE backup_scope = 'ext_db' ORDER BY created_at DESC");
+    $extBackups = $stmtExtBackups->fetchAll(PDO::FETCH_ASSOC);
+
     $message = $_SESSION['success_message'] ?? null;
     $error = $_SESSION['error_message'] ?? null;
     unset($_SESSION['success_message'], $_SESSION['error_message']);
@@ -399,6 +402,7 @@ Router::get('/servers/ext-mapping', function () {
         'local_servers' => $localServers,
         'ext_servers' => $extServers,
         'ext_db_available' => $extDbAvailable,
+        'ext_backups' => $extBackups,
         'message' => $message,
         'error' => $error,
     ]);
@@ -427,6 +431,79 @@ Router::post('/servers/ext-mapping', function () {
     }
 
     redirect('/servers/ext-mapping');
+});
+
+// API / Action: Create standalone External DB Backup
+Router::post('/api/backups/ext-db/create', function () {
+    requireAdmin();
+    $user = Auth::user();
+
+    try {
+        $path = ExtDB::createBackup($user['id']);
+        $fileName = basename($path);
+
+        if (isJsonRequest()) {
+            header('Content-Type: application/json');
+            echo json_encode([
+                'success' => true,
+                'file_name' => $fileName,
+                'path' => $path,
+                'message' => 'External PostgreSQL database backup created successfully.'
+            ]);
+            return;
+        }
+
+        $_SESSION['success_message'] = "External PostgreSQL database backup created successfully: {$fileName}";
+    } catch (Throwable $e) {
+        if (isJsonRequest()) {
+            http_response_code(500);
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+            return;
+        }
+        $_SESSION['error_message'] = "External DB backup failed: " . $e->getMessage();
+    }
+
+    $redirectUrl = $_SERVER['HTTP_REFERER'] ?? '/servers/ext-mapping';
+    redirect($redirectUrl);
+});
+
+// API / Action: Restore standalone External DB Backup
+Router::post('/api/backups/ext-db/restore/{id}', function ($params) {
+    requireAdmin();
+    $backupId = (int)$params['id'];
+
+    try {
+        $pdo = DB::conn();
+        $stmt = $pdo->prepare("SELECT backup_path, backup_name FROM server_backups WHERE id = ? AND backup_scope = 'ext_db'");
+        $stmt->execute([$backupId]);
+        $backup = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$backup || empty($backup['backup_path'])) {
+            throw new Exception("External DB backup record not found.");
+        }
+
+        ExtDB::restoreBackup($backup['backup_path']);
+
+        if (isJsonRequest()) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => true, 'message' => 'External PostgreSQL database restored successfully from ' . $backup['backup_name']]);
+            return;
+        }
+
+        $_SESSION['success_message'] = "External PostgreSQL database restored successfully from " . $backup['backup_name'];
+    } catch (Throwable $e) {
+        if (isJsonRequest()) {
+            http_response_code(500);
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+            return;
+        }
+        $_SESSION['error_message'] = "External DB restore failed: " . $e->getMessage();
+    }
+
+    $redirectUrl = $_SERVER['HTTP_REFERER'] ?? '/servers/ext-mapping';
+    redirect($redirectUrl);
 });
 
 // Sync client server IDs API route

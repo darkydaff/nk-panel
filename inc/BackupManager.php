@@ -164,6 +164,14 @@ class BackupManager {
       }
 
       /**
+       * Creates a standalone backup of the external PostgreSQL database.
+       */
+      public function createExtDbBackup(int $userId, string $type = 'manual'): string {
+          require_once __DIR__ . '/ExtDB.php';
+          return ExtDB::createBackup($userId, $type);
+      }
+
+      /**
        * Transmits a backup archive file to Telegram.
        */
        public function sendToTelegram(string $filePath, string &$errorReason = ''): bool {

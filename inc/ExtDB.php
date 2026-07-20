@@ -387,6 +387,196 @@ class ExtDB {
         }
         return $syncedCount;
     }
+
+    /**
+     * Creates a standalone backup of the external PostgreSQL database.
+     *
+     * @param int $userId ID of the user performing the backup
+     * @param string $type Backup trigger type ('manual' or 'automatic')
+     * @return string Path to the created .sql backup file
+     * @throws Exception If PostgreSQL is unreachable or dump fails
+     */
+    public static function createBackup(int $userId = 1, string $type = 'manual'): string {
+        if (!self::isAvailable()) {
+            throw new Exception("External PostgreSQL database is unreachable.");
+        }
+
+        $backupDir = '/var/www/html/backups/ext_db';
+        if (!is_dir($backupDir)) {
+            mkdir($backupDir, 0755, true);
+        }
+
+        $timestamp = date('Y-m-d_His');
+        $backupFileName = "ext_pg_backup_{$timestamp}.sql";
+        $backupPath = "{$backupDir}/{$backupFileName}";
+
+        $pgHost = Config::get('EXT_PG_HOST', '157.22.175.250');
+        $pgPort = Config::get('EXT_PG_PORT', '5434');
+        $pgDb   = Config::get('EXT_PG_DB',   'nocodb');
+        $pgUser = Config::get('EXT_PG_USER', 'nocodb');
+        $pgPass = Config::get('EXT_PG_PASSWORD', 'nocodb');
+
+        $pgHostEsc = escapeshellarg($pgHost);
+        $pgPortEsc = escapeshellarg($pgPort);
+        $pgUserEsc = escapeshellarg($pgUser);
+        $pgDbEsc   = escapeshellarg($pgDb);
+        $backupPathEsc = escapeshellarg($backupPath);
+
+        $errPath = "/tmp/ext_pg_dump_{$timestamp}.err";
+        $errPathEsc = escapeshellarg($errPath);
+
+        // Try pg_dump CLI first
+        $cmd = "PGPASSWORD=" . escapeshellarg($pgPass) . " pg_dump -h {$pgHostEsc} -p {$pgPortEsc} -U {$pgUserEsc} -d {$pgDbEsc} -F p > {$backupPathEsc} 2> {$errPathEsc}";
+        @exec($cmd, $output, $returnVar);
+
+        $dumpSuccess = ($returnVar === 0 && file_exists($backupPath) && filesize($backupPath) > 0);
+
+        if (!$dumpSuccess) {
+            // Fallback: Built-in PHP-native SQL Dumper via PDO
+            self::dumpPostgresViaPdo($backupPath);
+        }
+
+        if (file_exists($errPath)) {
+            @unlink($errPath);
+        }
+
+        if (!file_exists($backupPath) || filesize($backupPath) === 0) {
+            throw new Exception("Failed to create external PostgreSQL database backup file.");
+        }
+
+        $fileSize = filesize($backupPath);
+
+        // Insert record into local MySQL server_backups table
+        $pdo = DB::conn();
+        $stmtIns = $pdo->prepare("
+            INSERT INTO server_backups 
+            (server_id, backup_name, backup_path, backup_size, backup_type, status, created_by, backup_scope) 
+            VALUES (NULL, ?, ?, ?, ?, 'completed', ?, 'ext_db')
+        ");
+        $stmtIns->execute([$backupFileName, $backupPath, $fileSize, $type, $userId]);
+
+        // Trigger Telegram backup notification if configured
+        try {
+            require_once __DIR__ . '/BackupManager.php';
+            $bm = new BackupManager();
+            $errReason = '';
+            $bm->sendToTelegram($backupPath, $errReason);
+        } catch (Throwable $e) {
+            error_log("Failed to send external DB backup to Telegram: " . $e->getMessage());
+        }
+
+        return $backupPath;
+    }
+
+    /**
+     * Native PHP/PDO fallback SQL dumper for the whole external PostgreSQL database.
+     */
+    private static function dumpPostgresViaPdo(string $outputPath): void {
+        $pgPdo = self::conn();
+
+        $tablesStmt = $pgPdo->query("
+            SELECT table_schema, table_name 
+            FROM information_schema.tables 
+            WHERE table_schema NOT IN ('pg_catalog', 'information_schema') 
+              AND table_type = 'BASE TABLE'
+            ORDER BY table_schema, table_name
+        ");
+        $tables = $tablesStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $sql = "-- Whole External PostgreSQL Database Dump\n";
+        $sql .= "-- Database: " . Config::get('EXT_PG_DB', 'nocodb') . "\n";
+        $sql .= "-- Generated: " . date('Y-m-d H:i:s UTC') . "\n\n";
+        $sql .= "SET statement_timeout = 0;\n";
+        $sql .= "SET client_encoding = 'UTF8';\n";
+        $sql .= "SET standard_conforming_strings = on;\n\n";
+
+        foreach ($tables as $tRow) {
+            $schema = $tRow['table_schema'];
+            $table = $tRow['table_name'];
+            $quotedTable = '"' . str_replace('"', '""', $schema) . '"."' . str_replace('"', '""', $table) . '"';
+
+            $sql .= "-- Table: {$schema}.{$table}\n";
+            $sql .= "DROP TABLE IF EXISTS {$quotedTable} CASCADE;\n\n";
+
+            // Fetch columns
+            $colsStmt = $pgPdo->prepare("
+                SELECT column_name, data_type, character_maximum_length, is_nullable, column_default 
+                FROM information_schema.columns 
+                WHERE table_schema = ? AND table_name = ? 
+                ORDER BY ordinal_position
+            ");
+            $colsStmt->execute([$schema, $table]);
+            $cols = $colsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $colDefs = [];
+            foreach ($cols as $col) {
+                $cName = '"' . str_replace('"', '""', $col['column_name']) . '"';
+                $cType = strtoupper($col['data_type']);
+                if ($col['character_maximum_length']) {
+                    $cType .= "({$col['character_maximum_length']})";
+                }
+                $nullDef = ($col['is_nullable'] === 'NO') ? ' NOT NULL' : '';
+                $defaultDef = !empty($col['column_default']) ? ' DEFAULT ' . $col['column_default'] : '';
+                $colDefs[] = "  {$cName} {$cType}{$defaultDef}{$nullDef}";
+            }
+
+            $sql .= "CREATE TABLE {$quotedTable} (\n" . implode(",\n", $colDefs) . "\n);\n\n";
+
+            // Fetch rows
+            $dataStmt = $pgPdo->query("SELECT * FROM {$quotedTable}");
+            $rows = $dataStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            if (!empty($rows)) {
+                $colNames = array_keys($rows[0]);
+                $quotedColNames = implode(', ', array_map(fn($c) => '"' . str_replace('"', '""', $c) . '"', $colNames));
+
+                foreach ($rows as $row) {
+                    $vals = [];
+                    foreach ($row as $val) {
+                        if ($val === null) {
+                            $vals[] = 'NULL';
+                        } elseif (is_bool($val)) {
+                            $vals[] = $val ? 'TRUE' : 'FALSE';
+                        } elseif (is_numeric($val)) {
+                            $vals[] = $val;
+                        } else {
+                            $vals[] = $pgPdo->quote($val);
+                        }
+                    }
+                    $sql .= "INSERT INTO {$quotedTable} ({$quotedColNames}) VALUES (" . implode(', ', $vals) . ");\n";
+                }
+                $sql .= "\n";
+            }
+        }
+
+        file_put_contents($outputPath, $sql);
+    }
+
+    /**
+     * Restore external PostgreSQL database from a SQL backup file.
+     *
+     * @param string $backupPath Path to the SQL backup file
+     * @return bool True on success
+     * @throws Exception If restoration fails
+     */
+    public static function restoreBackup(string $backupPath): bool {
+        if (!file_exists($backupPath)) {
+            throw new Exception("Backup file not found at: {$backupPath}");
+        }
+
+        if (!self::isAvailable()) {
+            throw new Exception("External PostgreSQL database is unreachable.");
+        }
+
+        $sqlContent = file_get_contents($backupPath);
+        if (empty(trim($sqlContent))) {
+            throw new Exception("Backup file is empty.");
+        }
+
+        $pgPdo = self::conn();
+        $pgPdo->exec($sqlContent);
+        return true;
+    }
 }
 
 /**
