@@ -174,6 +174,31 @@ class RouterManager {
             $modelToSave = (!empty($newModel) && ($newModel !== 'Keenetic' || empty($currentModel))) ? $newModel : $currentModel;
             $firmwareToSave = $connTest['firmware_version'] ?: ($router['firmware_version'] ?? null);
 
+            // Measure ping to the new server public IP
+            $newPingMs = null;
+            if (!empty($server['host'])) {
+                $serverHost = $server['host'];
+                if (str_starts_with($serverHost, 'http://') || str_starts_with($serverHost, 'https://')) {
+                    $parsedHost = parse_url($serverHost, PHP_URL_HOST);
+                    if ($parsedHost) {
+                        $serverHost = $parsedHost;
+                    }
+                }
+                $serverHost = preg_replace('/:[0-9]+$/', '', trim($serverHost));
+                $serverHost = trim($serverHost, '/ ');
+
+                if (!empty($serverHost) && !filter_var($serverHost, FILTER_VALIDATE_IP)) {
+                    $resolvedIp = gethostbyname($serverHost);
+                    if (!empty($resolvedIp) && filter_var($resolvedIp, FILTER_VALIDATE_IP)) {
+                        $serverHost = $resolvedIp;
+                    }
+                }
+
+                if (!empty($serverHost)) {
+                    $newPingMs = $adapter->pingHost($serverHost, 1);
+                }
+            }
+
             $stmtSuccess = $pdo->prepare("
                 UPDATE routers 
                 SET vpn_client_id = ?, 
@@ -184,6 +209,7 @@ class RouterManager {
                     status = 'connected', 
                     router_model = ?,
                     firmware_version = ?,
+                    last_ping_ms = ?,
                     last_push_at = NOW(), 
                     last_check_at = NOW(), 
                     error_message = NULL 
@@ -198,6 +224,7 @@ class RouterManager {
                 json_encode($obfuscationResult['applied']),
                 $modelToSave,
                 $firmwareToSave,
+                $newPingMs,
                 $routerId
             ]);
             

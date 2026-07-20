@@ -77,6 +77,8 @@
                                              {% endif %}
                                              {% if r.last_ping_ms %}
                                                  <span class="badge badge-ghost badge-xs font-mono text-[10px] gap-1" title="Ping from router to public server IP"><i class="fas fa-bolt text-[9px] text-warning"></i> {{ r.last_ping_ms }}ms</span>
+                                             {% elseif r.status == 'connected' %}
+                                                 <span class="text-[10px] text-base-content/40 font-mono" title="ICMP ping blocked by server or unavailable">ping: n/a</span>
                                              {% endif %}
                                          </div>
                                      {% endif %}
