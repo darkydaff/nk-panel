@@ -249,7 +249,7 @@ class TelegramClientBot {
             $pingStr = "_недоступен (ICMP заблокирован)_ ⚪";
             if (isset($router['last_ping_ms']) && $router['last_ping_ms'] !== null) {
                 $ping = (int)$router['last_ping_ms'];
-                $pingIcon = ($ping < 50) ? '🟢' : (($ping < 150) ? '🟡' : '🔴');
+                $pingIcon = ($ping < 100) ? '🟢' : (($ping < 160) ? '🟡' : '🔴');
                 $pingStr = "`{$ping} ms` {$pingIcon}";
             }
 

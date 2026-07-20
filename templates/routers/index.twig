@@ -76,7 +76,8 @@
                                                  <span class="text-[10px] text-base-content/50 font-mono" title="OS Version">OS: {{ r.firmware_version }}</span>
                                              {% endif %}
                                              {% if r.last_ping_ms %}
-                                                 <span class="badge badge-ghost badge-xs font-mono text-[10px] gap-1" title="Ping from router to public server IP"><i class="fas fa-bolt text-[9px] text-warning"></i> {{ r.last_ping_ms }}ms</span>
+                                                 {% set pingClass = r.last_ping_ms < 100 ? 'text-success' : (r.last_ping_ms < 160 ? 'text-warning' : 'text-error') %}
+                                                 <span class="badge badge-ghost badge-xs font-mono text-[10px] gap-1" title="Ping from router to public server IP"><i class="fas fa-bolt text-[9px] {{ pingClass }}"></i> {{ r.last_ping_ms }}ms</span>
                                              {% elseif r.status == 'connected' %}
                                                  <span class="text-[10px] text-base-content/40 font-mono" title="ICMP ping blocked by server or unavailable">ping: n/a</span>
                                              {% endif %}
