@@ -291,9 +291,16 @@ class RouterManager {
             
             // Ping current server if assigned
             $pingMs = null;
-            if ($router['server_id']) {
+            $serverId = $router['server_id'];
+            if (!$serverId) {
+                $stmtServerId = $pdo->prepare("SELECT server_id FROM vpn_clients WHERE ext_client_code = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1");
+                $stmtServerId->execute([$router['ext_client_code']]);
+                $serverId = $stmtServerId->fetchColumn();
+            }
+
+            if ($serverId) {
                 $stmtServer = $pdo->prepare("SELECT host FROM vpn_servers WHERE id = ?");
-                $stmtServer->execute([$router['server_id']]);
+                $stmtServer->execute([$serverId]);
                 $serverHost = $stmtServer->fetchColumn();
                 if ($serverHost) {
                     $pingMs = $adapter->pingHost($serverHost);

@@ -319,6 +319,22 @@ class DB {
           $pdo->exec($sql);
         }
       }
+
+      // Check if last_ping_ms column exists in routers table
+      try {
+        $pdo->query("SELECT last_ping_ms FROM routers LIMIT 1");
+        $hasLastPingColumn = true;
+      } catch (Throwable $e) {
+        $hasLastPingColumn = false;
+      }
+
+      if (!$hasLastPingColumn) {
+        $sqlPath = __DIR__ . '/../migrations/037_add_last_ping_ms_to_routers.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
     } catch (Throwable $e) {
       error_log("Database self-healing migration failed: " . $e->getMessage());
     }
