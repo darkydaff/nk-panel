@@ -270,6 +270,69 @@ class KeeneticRouter {
     }
 
     /**
+     * Ping a host from the router and return average latency in milliseconds (or null if unreachable)
+     */
+    public function pingHost(string $host, int $count = 2): ?int {
+        if (empty($host)) {
+            return null;
+        }
+
+        // Clean host if URL was provided (e.g. extract domain/IP from http(s)://...)
+        if (preg_match('/^https?:\/\/([^\/:]+)/i', $host, $m)) {
+            $host = $m[1];
+        }
+
+        try {
+            $res = $this->request('rci/tools/ping', 'POST', [
+                'host' => $host,
+                'count' => $count
+            ]);
+
+            if ($res['code'] !== 200 || !is_array($res['body'])) {
+                $res = $this->request('rci/ping', 'POST', [
+                    'host' => $host,
+                    'count' => $count
+                ]);
+            }
+
+            if ($res['code'] === 200) {
+                $body = $res['body'];
+                $contentStr = is_string($body) ? $body : json_encode($body, JSON_UNESCAPED_UNICODE);
+
+                // 1. Structured field extraction
+                if (is_array($body)) {
+                    if (isset($body['avg'])) {
+                        return (int)round((float)$body['avg']);
+                    }
+                    if (isset($body['avg-ms'])) {
+                        return (int)round((float)$body['avg-ms']);
+                    }
+                    if (isset($body['min'], $body['max'])) {
+                        return (int)round(((float)$body['min'] + (float)$body['max']) / 2);
+                    }
+                }
+
+                // 2. Regex extraction from message lines
+                if (preg_match_all('/time=([0-9.]+)\s*ms/i', $contentStr, $matches)) {
+                    $times = array_map('floatval', $matches[1]);
+                    if (!empty($times)) {
+                        return (int)round(array_sum($times) / count($times));
+                    }
+                }
+
+                // 3. Regex extraction from summary line (rtt min/avg/max/mdev = ...)
+                if (preg_match('/rtt\s+min\/avg\/max[^\n=]*=\s*[0-9.]+\/([0-9.]+)/i', $contentStr, $m)) {
+                    return (int)round((float)$m[1]);
+                }
+            }
+        } catch (Throwable $e) {
+            // Ignore ping errors
+        }
+
+        return null;
+    }
+
+    /**
      * List all network interfaces
      */
     public function getInterfaces(): array {

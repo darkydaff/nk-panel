@@ -289,6 +289,17 @@ class RouterManager {
                 $status = 'connected'; // Connection works, but no interface pushed yet
             }
             
+            // Ping current server if assigned
+            $pingMs = null;
+            if ($router['server_id']) {
+                $stmtServer = $pdo->prepare("SELECT host FROM vpn_servers WHERE id = ?");
+                $stmtServer->execute([$router['server_id']]);
+                $serverHost = $stmtServer->fetchColumn();
+                if ($serverHost) {
+                    $pingMs = $adapter->pingHost($serverHost);
+                }
+            }
+
             // Update database
             $updateSql = "
                 UPDATE routers 
@@ -297,6 +308,11 @@ class RouterManager {
                     last_check_at = NOW()
             ";
             $updateParams = [$status, $errorMsg];
+            
+            if ($pingMs !== null) {
+                $updateSql .= ", last_ping_ms = ?";
+                $updateParams[] = $pingMs;
+            }
             
             $currentModel = $router['router_model'] ?? '';
             $newModel = $connTest['router_model'] ?? '';
@@ -319,6 +335,7 @@ class RouterManager {
             return [
                 'success' => true,
                 'status' => $status,
+                'last_ping_ms' => $pingMs,
                 'router_model' => $modelToSave ?: 'Keenetic',
                 'firmware_version' => ($connTest['firmware_version'] ?: ($router['firmware_version'] ?: 'Unknown')),
                 'error' => $errorMsg
