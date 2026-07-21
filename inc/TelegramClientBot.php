@@ -75,7 +75,30 @@ class TelegramClientBot {
         $clientCodesStr = implode(',', array_column($clients, 'code'));
         if (strpos($messageText, '/start') === 0 || strpos($messageText, '/help') === 0) {
             self::logActivity($tgId, $tgName, $clientCodesStr, 'view_menu', 'Opened main menu via start/help command', json_encode($update));
-            self::showMainMenu($chatId, $tgName, $clients, $token);
+
+            $clientCodes = array_column($clients, 'code');
+            $inQuery = implode(',', array_fill(0, count($clientCodes), '?'));
+            $stmtR = $pdo->prepare("SELECT id FROM routers WHERE ext_client_code IN ($inQuery)");
+            $stmtR->execute($clientCodes);
+            $userRouterIds = $stmtR->fetchAll(PDO::FETCH_COLUMN);
+
+            $targetRouterId = null;
+            if (count($userRouterIds) === 1) {
+                $targetRouterId = (int)$userRouterIds[0];
+            } elseif (!empty($userRouterIds)) {
+                $stmtLast = $pdo->prepare("SELECT last_router_id FROM ext_clients WHERE tgid = ? AND last_router_id IS NOT NULL LIMIT 1");
+                $stmtLast->execute([$tgId]);
+                $lastId = (int)$stmtLast->fetchColumn();
+                if ($lastId && in_array($lastId, array_map('intval', $userRouterIds), true)) {
+                    $targetRouterId = $lastId;
+                }
+            }
+
+            if ($targetRouterId) {
+                self::renderRouterDetails($chatId, (string)$tgId, $tgName, $targetRouterId, $clients, $token);
+            } else {
+                self::showMainMenu($chatId, $tgName, $clients, $token);
+            }
         } elseif ($normalizedText === 'show version' || $normalizedText === 'rci show/version' || $normalizedText === '/show_version' || $normalizedText === '/version' || $normalizedText === '/showversion') {
             self::logActivity($tgId, $tgName, $clientCodesStr, 'show_version', 'Checked router firmware versions', json_encode($update));
             self::handleShowVersion($chatId, $clients, $token);
@@ -171,6 +194,110 @@ class TelegramClientBot {
         }
     }
 
+    private static function updateLastRouterId(string $tgId, int $routerId): void {
+        try {
+            $pdo = DB::conn();
+            $stmt = $pdo->prepare("UPDATE ext_clients SET last_router_id = ? WHERE tgid = ?");
+            $stmt->execute([$routerId, $tgId]);
+        } catch (Throwable $e) {
+            // Ignore if column or update fails
+        }
+    }
+
+    private static function renderRouterDetails(int $chatId, string $tgId, string $tgName, int $routerId, array $clients, string $token, ?int $messageId = null, bool $isRefresh = false, ?string $callbackQueryId = null): void {
+        $pdo = DB::conn();
+        self::updateLastRouterId($tgId, $routerId);
+
+        if ($isRefresh && $callbackQueryId) {
+            require_once __DIR__ . '/RouterManager.php';
+            RouterManager::checkRouterStatus($routerId);
+            self::answerCallbackQuery($callbackQueryId, "Статус обновлен ⚡", false, $token);
+        }
+
+        $stmt = $pdo->prepare("
+            SELECT r.*, 
+                   COALESCE(s.name, (
+                       SELECT s2.name 
+                       FROM vpn_clients c 
+                       JOIN vpn_servers s2 ON c.server_id = s2.id 
+                       WHERE c.ext_client_code = r.ext_client_code AND c.status = 'active' 
+                       ORDER BY c.created_at DESC 
+                       LIMIT 1
+                   )) as server_name, 
+                   COALESCE(s.description, (
+                       SELECT s2.description 
+                       FROM vpn_clients c 
+                       JOIN vpn_servers s2 ON c.server_id = s2.id 
+                       WHERE c.ext_client_code = r.ext_client_code AND c.status = 'active' 
+                       ORDER BY c.created_at DESC 
+                       LIMIT 1
+                   )) as server_desc 
+            FROM routers r 
+            LEFT JOIN vpn_servers s ON r.server_id = s.id 
+            WHERE r.id = ?
+        ");
+        $stmt->execute([$routerId]);
+        $router = $stmt->fetch();
+
+        if (!$router) {
+            self::sendMessage($chatId, "Роутер не найден.", $token);
+            return;
+        }
+
+        $statusMap = [
+            'connected' => '🟢 Подключен',
+            'offline' => '⚪ Вне сети',
+            'error' => '⚠️ Ошибка',
+            'pending' => '🔄 Ожидание',
+            'unknown' => '❔ Неизвестно'
+        ];
+        $statusStr = $statusMap[$router['status']] ?? $router['status'];
+        $serverName = $router['server_name'] ?: 'Не назначен';
+        if ($router['server_name'] && !empty($router['server_desc'])) {
+            $serverName = $router['server_desc'] . " [" . $router['server_name'] . "]";
+        }
+
+        $routerName = $router['router_model'] ?: $router['domain'];
+        self::logActivity($tgId, $tgName, $router['ext_client_code'], $isRefresh ? 'refresh_router' : 'select_router', "Selected router: {$routerName} (ID: {$routerId}), Status: {$statusStr}", null);
+
+        $pingStr = "_недоступен (ICMP заблокирован)_ ⚪";
+        if (isset($router['last_ping_ms']) && $router['last_ping_ms'] !== null) {
+            $ping = (int)$router['last_ping_ms'];
+            $pingIcon = ($ping < 100) ? '🟢' : (($ping < 160) ? '🟡' : '🔴');
+            $pingStr = "`{$ping} ms` {$pingIcon}";
+        }
+
+        $text = "📶 **Роутер: {$routerName}**\n";
+        if ($router['firmware_version']) {
+            $text .= "🔹 Версия OS: `{$router['firmware_version']}`\n";
+        }
+        $text .= "🔹 Статус: `{$statusStr}`\n";
+        $text .= "🔹 Текущий сервер: **{$serverName}**\n";
+        $text .= "⚡ Пинг до сервера: {$pingStr}\n";
+        if ($router['error_message']) {
+            $text .= "⚠️ Ошибка: _" . htmlspecialchars($router['error_message']) . "_\n";
+        }
+
+        $keyboard = ['inline_keyboard' => [
+            [
+                ['text' => '🔄 Сменить сервер', 'callback_data' => "change_server:{$routerId}"],
+                ['text' => '⚡ Обновить', 'callback_data' => "refresh_router:{$routerId}"]
+            ],
+            [
+                ['text' => '🏠 Главное меню', 'callback_data' => 'main_list']
+            ]
+        ]];
+
+        if ($messageId) {
+            self::editMessageText($chatId, $messageId, $text, $token, $keyboard);
+        } else {
+            self::sendMessage($chatId, $text, $token, $keyboard);
+        }
+        if ($callbackQueryId && !$isRefresh) {
+            self::answerCallbackQuery($callbackQueryId, "", false, $token);
+        }
+    }
+
     private static function handleCallback(int $chatId, ?int $messageId, string $tgId, string $tgName, string $callbackQueryId, string $callbackData, array $clients, string $token): void {
         $parts = explode(':', $callbackData);
         $action = $parts[0];
@@ -188,6 +315,7 @@ class TelegramClientBot {
                 self::answerCallbackQuery($callbackQueryId, "Ошибка доступа к роутеру", true, $token);
                 return;
             }
+            self::updateLastRouterId($tgId, $routerId);
         }
 
         if ($action === 'main_list') {
@@ -196,96 +324,15 @@ class TelegramClientBot {
         }
 
         if ($action === 'select_router' || $action === 'refresh_router') {
-            require_once __DIR__ . '/RouterManager.php';
-            
-            // Only poll router over network when user explicitly taps '⚡ Обновить'
-            if ($action === 'refresh_router') {
-                RouterManager::checkRouterStatus($routerId);
-                self::answerCallbackQuery($callbackQueryId, "Статус обновлен ⚡", false, $token);
-            }
-            
-            // Fetch router directly from DB for instant response
-            $stmt = $pdo->prepare("
-                SELECT r.*, 
-                       COALESCE(s.name, (
-                           SELECT s2.name 
-                           FROM vpn_clients c 
-                           JOIN vpn_servers s2 ON c.server_id = s2.id 
-                           WHERE c.ext_client_code = r.ext_client_code AND c.status = 'active' 
-                           ORDER BY c.created_at DESC 
-                           LIMIT 1
-                       )) as server_name, 
-                       COALESCE(s.description, (
-                           SELECT s2.description 
-                           FROM vpn_clients c 
-                           JOIN vpn_servers s2 ON c.server_id = s2.id 
-                           WHERE c.ext_client_code = r.ext_client_code AND c.status = 'active' 
-                           ORDER BY c.created_at DESC 
-                           LIMIT 1
-                       )) as server_desc 
-                FROM routers r 
-                LEFT JOIN vpn_servers s ON r.server_id = s.id 
-                WHERE r.id = ?
-            ");
-            $stmt->execute([$routerId]);
-            $router = $stmt->fetch();
-
-            $statusMap = [
-                'connected' => '🟢 Подключен',
-                'offline' => '⚪ Вне сети',
-                'error' => '⚠️ Ошибка',
-                'pending' => '🔄 Ожидание',
-                'unknown' => '❔ Неизвестно'
-            ];
-            $statusStr = $statusMap[$router['status']] ?? $router['status'];
-            $serverName = $router['server_name'] ?: 'Не назначен';
-            if ($router['server_name'] && !empty($router['server_desc'])) {
-                $serverName = $router['server_desc'] . " [" . $router['server_name'] . "]";
-            }
-
-            $routerName = $router['router_model'] ?: $router['domain'];
-            self::logActivity($tgId, $tgName, $router['ext_client_code'], $action, "Selected router: {$routerName} (ID: {$routerId}), Status: {$statusStr}", json_encode($update));
-
-            $pingStr = "_недоступен (ICMP заблокирован)_ ⚪";
-            if (isset($router['last_ping_ms']) && $router['last_ping_ms'] !== null) {
-                $ping = (int)$router['last_ping_ms'];
-                $pingIcon = ($ping < 100) ? '🟢' : (($ping < 160) ? '🟡' : '🔴');
-                $pingStr = "`{$ping} ms` {$pingIcon}";
-            }
-
-            $text = "📶 **Роутер: {$routerName}**\n";
-            if ($router['firmware_version']) {
-                $text .= "🔹 Версия OS: `{$router['firmware_version']}`\n";
-            }
-            $text .= "🔹 Статус: `{$statusStr}`\n";
-            $text .= "🔹 Текущий сервер: **{$serverName}**\n";
-            $text .= "⚡ Пинг до сервера: {$pingStr}\n";
-            if ($router['error_message']) {
-                $text .= "⚠️ Ошибка: _" . htmlspecialchars($router['error_message']) . "_\n";
-            }
-
-            $keyboard = ['inline_keyboard' => [
-                [
-                    ['text' => '🔄 Сменить сервер', 'callback_data' => "change_server:{$routerId}"],
-                    ['text' => '⚡ Обновить', 'callback_data' => "refresh_router:{$routerId}"]
-                ],
-                [
-                    ['text' => '🔙 Назад к списку', 'callback_data' => 'main_list']
-                ]
-            ]];
-
-            if ($messageId) {
-                self::editMessageText($chatId, $messageId, $text, $token, $keyboard);
-            } else {
-                self::sendMessage($chatId, $text, $token, $keyboard);
-            }
-            self::answerCallbackQuery($callbackQueryId, "Обновлено", false, $token);
+            self::renderRouterDetails($chatId, $tgId, $tgName, $routerId, $clients, $token, $messageId, $action === 'refresh_router', $callbackQueryId);
             return;
         }
 
         if ($action === 'change_server') {
+            require_once __DIR__ . '/KeeneticRouter.php';
+
             // List all active servers and apply access control filters
-            $stmt = $pdo->query("SELECT id, name, description, show_in_bot, allowed_clients, blocked_clients FROM vpn_servers WHERE status = 'active' ORDER BY name ASC");
+            $stmt = $pdo->query("SELECT id, name, description, host, show_in_bot, allowed_clients, blocked_clients FROM vpn_servers WHERE status = 'active' ORDER BY name ASC");
             $allServers = $stmt->fetchAll();
 
             $servers = [];
@@ -319,6 +366,25 @@ class TelegramClientBot {
                 $currentServerName = !empty($router['server_desc']) ? $router['server_desc'] . " [" . $router['server_name'] . "]" : $router['server_name'];
             }
 
+            // Attempt to ping each server directly from the user's router
+            $pings = [];
+            try {
+                $login = $router['login'] ?: 'admin';
+                $adapter = new KeeneticRouter($router['domain'], $router['password'], $login);
+                $adapter->setTimeout(3);
+
+                foreach ($servers as $s) {
+                    if (!empty($s['host'])) {
+                        $pingMs = $adapter->pingHost($s['host'], 1);
+                        if ($pingMs !== null) {
+                            $pings[$s['id']] = $pingMs;
+                        }
+                    }
+                }
+            } catch (Throwable $e) {
+                // Ignore ping failures (router unreachable/offline)
+            }
+
             self::logActivity($tgId, $tgName, $router['ext_client_code'], 'view_servers', "Requested server list for router: {$routerName} (ID: {$routerId})", json_encode($update));
 
             $text = "🌍 **Выберите новый сервер для роутера {$routerName}:**\n";
@@ -331,10 +397,12 @@ class TelegramClientBot {
                     $displayText = $s['description'] . " [" . $s['name'] . "]";
                 }
 
+                $pingStr = isset($pings[$s['id']]) ? " ⚡ {$pings[$s['id']]} ms" : "";
+
                 if ((int)$s['id'] === $currentServerId) {
-                    $buttonText = "✅ {$displayText} (Текущий)";
+                    $buttonText = "✅ {$displayText}{$pingStr} (Текущий)";
                 } else {
-                    $buttonText = "🌐 {$displayText}";
+                    $buttonText = "🌐 {$displayText}{$pingStr}";
                 }
 
                 $keyboard['inline_keyboard'][] = [[
@@ -342,10 +410,10 @@ class TelegramClientBot {
                     'callback_data' => "set_server:{$routerId}:{$s['id']}"
                 ]];
             }
-            $keyboard['inline_keyboard'][] = [[
-                'text' => '🔙 Назад',
-                'callback_data' => "select_router:{$routerId}"
-            ]];
+            $keyboard['inline_keyboard'][] = [
+                ['text' => '🔙 К роутеру', 'callback_data' => "select_router:{$routerId}"],
+                ['text' => '🏠 Главное меню', 'callback_data' => 'main_list']
+            ];
 
             if ($messageId) {
                 self::editMessageText($chatId, $messageId, $text, $token, $keyboard);
@@ -413,9 +481,9 @@ class TelegramClientBot {
             self::answerCallbackQuery($callbackQueryId, "", false, $token);
             
             if ($messageId) {
-                self::editMessageText($chatId, $messageId, "🔄 *Переключаем сервер на {$serverLabel}... Пожалуйста, подождите, это может занять до 15 секунд.*", $token);
+                self::editMessageText($chatId, $messageId, "🔄 *Генерируем конфигурацию...*", $token);
             } else {
-                $messageId = self::sendMessage($chatId, "🔄 *Переключаем сервер на {$serverLabel}... Пожалуйста, подождите, это может занять до 15 секунд.*", $token);
+                $messageId = self::sendMessage($chatId, "🔄 *Генерируем конфигурацию...*", $token);
             }
 
             try {
@@ -444,19 +512,37 @@ class TelegramClientBot {
                     $vpnClient->linkToExtClient($extCode);
                 }
 
+                // Step 2: Push to Router
+                self::editMessageText($chatId, $messageId, "📡 *Отправляем на роутер {$routerName}...*", $token);
+
                 // Push to Router
                 RouterManager::pushConfigToRouter($routerId, $clientId);
 
-                // Update progress message to success
-                $backKeyboard = ['inline_keyboard' => [[
-                    ['text' => '🔙 К роутеру', 'callback_data' => "select_router:{$routerId}"]
-                ]]];
-                self::editMessageText($chatId, $messageId, "✅ **Сервер успешно изменен!** Роутер переключен на сервер **{$serverLabel}**.", $token, $backKeyboard);
+                // Step 3: Await confirmation from router & poll status
+                self::editMessageText($chatId, $messageId, "⏳ *Ожидаем подтверждение от роутера...*", $token);
+
+                // Poll router status to confirm connection
+                $maxPolls = 3;
+                for ($i = 0; $i < $maxPolls; $i++) {
+                    usleep(1000000); // 1 second interval
+                    $statusRes = RouterManager::checkRouterStatus($routerId);
+                    if (!empty($statusRes['success']) && isset($statusRes['status']) && $statusRes['status'] === 'connected') {
+                        break;
+                    }
+                }
+
+                // Step 4: Router connected
+                $backKeyboard = ['inline_keyboard' => [
+                    [['text' => '🔙 К роутеру', 'callback_data' => "select_router:{$routerId}"]],
+                    [['text' => '🏠 Главное меню', 'callback_data' => 'main_list']]
+                ]];
+                self::editMessageText($chatId, $messageId, "✅ *Роутер {$routerName} подключен к {$serverLabel}*", $token, $backKeyboard);
                 self::logActivity($tgId, $tgName, $router['ext_client_code'], 'change_server_success', "Successfully switched router: {$routerName} (ID: {$routerId}) to server: {$serverLabel}", json_encode($update));
             } catch (Throwable $e) {
-                $errKeyboard = ['inline_keyboard' => [[
-                    ['text' => '🔙 К роутеру', 'callback_data' => "select_router:{$routerId}"]
-                ]]];
+                $errKeyboard = ['inline_keyboard' => [
+                    [['text' => '🔙 К роутеру', 'callback_data' => "select_router:{$routerId}"]],
+                    [['text' => '🏠 Главное меню', 'callback_data' => 'main_list']]
+                ]];
                 self::editMessageText($chatId, $messageId, "❌ **Ошибка при переключении сервера:** " . $e->getMessage(), $token, $errKeyboard);
                 self::logActivity($tgId, $tgName, $router['ext_client_code'], 'change_server_error', "Error switching router: {$routerName} (ID: {$routerId}) to server: {$serverLabel}. Error: " . $e->getMessage(), json_encode($update));
             }

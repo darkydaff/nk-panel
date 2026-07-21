@@ -272,6 +272,22 @@ class DB {
         }
       }
 
+      // Check if last_router_id column exists in ext_clients
+      try {
+        $stmtExtCols7 = $pdo->query("SHOW COLUMNS FROM ext_clients LIKE 'last_router_id'");
+        $hasLastRouterId = $stmtExtCols7->rowCount() > 0;
+      } catch (Throwable $e) {
+        $hasLastRouterId = false;
+      }
+
+      if (!$hasLastRouterId) {
+        $sqlPath = __DIR__ . '/../migrations/040_add_last_router_id_to_ext_clients.sql';
+        if (file_exists($sqlPath)) {
+          $sql = file_get_contents($sqlPath);
+          $pdo->exec($sql);
+        }
+      }
+
       // Check if show_in_bot column exists in vpn_servers
       try {
         $stmtServerCols = $pdo->query("SHOW COLUMNS FROM vpn_servers LIKE 'show_in_bot'");
