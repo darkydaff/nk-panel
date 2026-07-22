@@ -343,8 +343,14 @@
         color: oklch(var(--bc) / 0.4) !important;
         font-size: 9px !important;
     }
-    .leaflet-control-attribution a { color: oklch(var(--p)) !important; }
-    .custom-map-marker { background: transparent !important; border: none !important; }
+    .custom-map-marker {
+        background: transparent !important;
+        border: none !important;
+        white-space: nowrap !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
 </style>
 {% endblock %}
 
@@ -632,8 +638,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     window.recenterMap = function() {
         closeMapCard();
+        map.invalidateSize();
         if (mappedClients.length > 0) {
-            map.fitBounds(markerGroup.getBounds(), { padding: [40, 40], maxZoom: 6, animate: true });
+            try {
+                map.fitBounds(markerGroup.getBounds(), { padding: [50, 50], maxZoom: 6, animate: true });
+            } catch(e) {
+                map.setView([30, 10], 2, { animate: true });
+            }
         } else {
             map.setView([20, 0], 2, { animate: true });
         }
@@ -676,7 +687,7 @@ document.addEventListener('DOMContentLoaded', function() {
                      ${countBadgeHtml}
                    </div>`,
             iconSize: null,
-            iconAnchor: [30, 12]
+            iconAnchor: [12, 12]
         });
 
         const marker = L.marker([group.lat, group.lon], { icon: customIcon });
@@ -766,7 +777,20 @@ document.addEventListener('DOMContentLoaded', function() {
         marker.addTo(markerGroup);
     });
 
-    if (mappedClients.length > 0) map.fitBounds(markerGroup.getBounds(), { padding: [40, 40], maxZoom: 6 });
+    setTimeout(() => {
+        map.invalidateSize();
+        if (mappedClients.length > 0) {
+            try {
+                map.fitBounds(markerGroup.getBounds(), { padding: [50, 50], maxZoom: 6 });
+            } catch(e) {
+                map.setView([30, 10], 2);
+            }
+        }
+    }, 250);
+
+    window.addEventListener('resize', () => {
+        map.invalidateSize();
+    });
 });
 </script>
 
