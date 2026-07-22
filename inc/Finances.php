@@ -442,19 +442,7 @@ class Finances {
 
         // Data query
         $sql = "
-            SELECT 
-                id, 
-                \"Date\", 
-                \"Type\", 
-                \"Amount\", 
-                \"Description\", 
-                \"Client_id\", 
-                \"VLESS_id\", 
-                created_at, 
-                updated_at, 
-                created_by, 
-                updated_by, 
-                nc_order
+            SELECT *
             FROM \"Finances_2026\"
             {$where}
             ORDER BY {$sortBy} {$sortDir}, id DESC
@@ -471,12 +459,12 @@ class Finances {
             'items' => array_map(function($r) {
                 return [
                     'id' => (int)$r['id'],
-                    'date' => $r['Date'],
-                    'type' => strtolower($r['Type'] ?? 'income'),
-                    'amount' => (float)$r['Amount'],
-                    'description' => $r['Description'] ?? '',
-                    'client_id' => $r['Client_id'] ?? '',
-                    'vless_id' => $r['VLESS_id'] ?? '',
+                    'date' => $r['Date'] ?? $r['date'] ?? '',
+                    'type' => strtolower($r['Type'] ?? $r['type'] ?? 'income'),
+                    'amount' => (float)($r['Amount'] ?? $r['amount'] ?? 0),
+                    'description' => $r['Description'] ?? $r['description'] ?? '',
+                    'client_id' => $r['Client_id'] ?? $r['client_id'] ?? '',
+                    'vless_id' => $r['VLESS_id'] ?? $r['vless_id'] ?? '',
                     'created_at' => $r['created_at'] ?? '',
                     'updated_at' => $r['updated_at'] ?? '',
                     'created_by' => $r['created_by'] ?? '',
@@ -502,7 +490,7 @@ class Finances {
         $where = self::buildWhereClause($filters, $params);
 
         $sql = "
-            SELECT id, \"Date\", \"Type\", \"Amount\", \"Description\", \"Client_id\", \"VLESS_id\", created_at, updated_at
+            SELECT *
             FROM \"Finances_2026\"
             {$where}
             ORDER BY \"Date\" DESC, id DESC
