@@ -317,9 +317,13 @@
 {% block styles %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous" />
 <style>
-    .leaflet-container {
+    #clientsMap, .leaflet-container {
         background: oklch(var(--b1)) !important;
         font-family: inherit;
+        width: 100% !important;
+        height: 100% !important;
+        min-height: 460px !important;
+        position: relative !important;
     }
     .leaflet-bar {
         border: 1px solid oklch(var(--b3)) !important;
@@ -555,11 +559,24 @@ document.addEventListener('DOMContentLoaded', function() {
     const clients = {{ clients|json_encode|raw }};
     const mappedClients = clients.filter(c => c.latitude !== null && c.longitude !== null);
 
-    const map = L.map('clientsMap', { zoomControl: false, attributionControl: true, minZoom: 1.5, maxZoom: 15 }).setView([20, 0], 2);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    const map = L.map('clientsMap', { zoomControl: false, attributionControl: true, minZoom: 1.5, maxZoom: 15 }).setView([30, 10], 2);
+    
+    let primaryTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
         subdomains: 'abcd', maxZoom: 20
-    }).addTo(map);
+    });
+
+    primaryTiles.on('tileerror', function() {
+        if (!window._mapFallbackLoaded) {
+            window._mapFallbackLoaded = true;
+            map.removeLayer(primaryTiles);
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri', maxZoom: 16
+            }).addTo(map);
+        }
+    });
+    primaryTiles.addTo(map);
+
     L.control.zoom({ position: 'bottomright' }).addTo(map);
     const markerGroup = L.featureGroup().addTo(map);
 
@@ -777,19 +794,25 @@ document.addEventListener('DOMContentLoaded', function() {
         marker.addTo(markerGroup);
     });
 
-    setTimeout(() => {
+    function refreshMapSize() {
+        if (!map) return;
         map.invalidateSize();
         if (mappedClients.length > 0) {
             try {
-                map.fitBounds(markerGroup.getBounds(), { padding: [50, 50], maxZoom: 6 });
+                map.fitBounds(markerGroup.getBounds(), { padding: [40, 40], maxZoom: 6 });
             } catch(e) {
                 map.setView([30, 10], 2);
             }
         }
-    }, 250);
+    }
+
+    refreshMapSize();
+    setTimeout(refreshMapSize, 100);
+    setTimeout(refreshMapSize, 500);
+    setTimeout(refreshMapSize, 1200);
 
     window.addEventListener('resize', () => {
-        map.invalidateSize();
+        refreshMapSize();
     });
 });
 </script>
