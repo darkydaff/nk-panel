@@ -239,70 +239,94 @@
                 <div class="pointer-events-none absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-base-200/60 to-transparent z-[400]"></div>
                 <div class="pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-base-200/60 to-transparent z-[400]"></div>
 
-                <!-- Dynamic Client Info Overlay Panel -->
-                <div id="mapClientCard" class="absolute top-4 right-4 z-[1000] w-80 bg-base-200/95 backdrop-blur-xl border border-base-content/10 rounded-2xl p-4 shadow-2xl hidden transition-all duration-300 transform translate-y-2 opacity-0 flex flex-col max-h-[380px]">
+                <!-- Dynamic Config Info Overlay Panel -->
+                <div id="mapClientCard" class="absolute top-3 right-3 z-[1000] w-80 sm:w-96 bg-base-200/95 backdrop-blur-2xl border border-base-content/15 rounded-2xl p-4 shadow-2xl hidden transition-all duration-300 transform translate-y-2 opacity-0 flex flex-col max-h-[420px]">
 
-                    <!-- View 1: List of Clients in Location -->
+                    <!-- View 1: List of Configs in Location -->
                     <div id="cardListView" class="flex flex-col h-full overflow-hidden">
-                        <div class="flex flex-col mb-3 shrink-0 pb-2.5 border-b border-base-300/60">
-                            <div class="flex items-center justify-between">
-                                <h4 id="cardLocationTitle" class="text-sm font-bold text-base-content truncate pr-2">City, Country</h4>
-                                <button onclick="closeMapCard()" class="btn btn-ghost btn-xs btn-circle text-base-content/60 hover:text-base-content shrink-0">
+                        <!-- Header -->
+                        <div class="flex flex-col shrink-0 pb-3 border-b border-base-300/80">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="flex items-center gap-2 min-w-0">
+                                    <div class="w-6 h-6 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                                        <i class="fas fa-map-marker-alt text-xs"></i>
+                                    </div>
+                                    <h4 id="cardLocationTitle" class="text-xs sm:text-sm font-bold text-base-content truncate">City, Country</h4>
+                                </div>
+                                <button onclick="closeMapCard()" class="btn btn-ghost btn-xs btn-circle text-base-content/60 hover:text-base-content shrink-0" title="Close Panel">
                                     <i class="fas fa-times text-xs"></i>
                                 </button>
                             </div>
-                            <div id="cardLocationStatusBadges" class="flex flex-wrap items-center gap-1.5 mt-2">
-                                <span id="cardClientCount" class="text-[10px] text-base-content/40 font-medium">0 clients</span>
+
+                            <!-- Interactive Filter Tabs -->
+                            <div id="cardLocationFilterTabs" class="flex flex-wrap items-center gap-1 mt-1">
+                                <!-- Populated in JS -->
+                            </div>
+
+                            <!-- Live Search Input -->
+                            <div class="relative mt-2.5">
+                                <i class="fas fa-search absolute left-2.5 top-2 text-[10px] text-base-content/40"></i>
+                                <input type="text" id="cardConfigSearch" placeholder="Filter configs or IP..." class="input input-xs input-bordered w-full pl-7 pr-6 rounded-lg text-xs bg-base-300/50 focus:bg-base-300">
+                                <button id="cardConfigSearchClear" onclick="clearConfigSearch()" class="hidden absolute right-2 top-1.5 text-base-content/40 hover:text-base-content text-[10px]">
+                                    <i class="fas fa-times-circle"></i>
+                                </button>
                             </div>
                         </div>
-                        <div id="cardClientList" class="space-y-2 overflow-y-auto pr-1 flex-grow scrollbar-thin"></div>
+
+                        <!-- Config List -->
+                        <div id="cardClientList" class="space-y-2 overflow-y-auto pr-1 mt-3 flex-grow scrollbar-thin"></div>
                     </div>
 
-                    <!-- View 2: Single Client Detail View -->
+                    <!-- View 2: Single Config Detail View -->
                     <div id="cardDetailView" class="hidden flex flex-col h-full overflow-hidden">
-                        <div class="flex items-start justify-between mb-3 shrink-0 pb-2 border-b border-base-300/60">
+                        <div class="flex items-start justify-between mb-3 shrink-0 pb-2.5 border-b border-base-300/80">
                             <div class="flex flex-col min-w-0">
                                 <button id="cardBackButton" class="text-[10px] text-primary hover:text-primary/70 font-semibold mb-1 flex items-center gap-1 w-max btn-ghost btn-xs px-0">
-                                    <i class="fas fa-chevron-left text-[8px]"></i> Back to List
+                                    <i class="fas fa-chevron-left text-[8px]"></i> <span id="cardBackText">Back to List</span>
                                 </button>
-                                <h4 id="cardClientName" class="text-sm font-bold text-base-content truncate max-w-[210px]">Client Name</h4>
-                                <span id="cardClientStatus" class="badge badge-sm mt-1 w-max">Status</span>
+                                <h4 id="cardClientName" class="text-sm font-bold text-base-content truncate max-w-[240px]">Config Name</h4>
+                                <span id="cardClientStatus" class="badge badge-sm mt-1 w-max font-semibold">Status</span>
                             </div>
-                            <button onclick="closeMapCard()" class="btn btn-ghost btn-xs btn-circle text-base-content/60 hover:text-base-content">
+                            <button onclick="closeMapCard()" class="btn btn-ghost btn-xs btn-circle text-base-content/60 hover:text-base-content shrink-0">
                                 <i class="fas fa-times text-xs"></i>
                             </button>
                         </div>
 
                         <div class="space-y-2 text-xs overflow-y-auto pr-1 flex-grow">
-                            <div class="flex justify-between items-center bg-base-300/30 px-2.5 py-1.5 rounded-lg border border-base-content/5">
+                            <div class="flex justify-between items-center bg-base-300/40 px-3 py-2 rounded-xl border border-base-content/5">
                                 <span class="text-base-content/60 font-medium">IP Address</span>
-                                <code id="cardClientIp" class="text-[10px] bg-base-300 px-1.5 py-0.5 rounded font-mono font-semibold text-primary">10.0.0.2</code>
+                                <div class="flex items-center gap-1.5">
+                                    <code id="cardClientIp" class="text-xs bg-base-300 px-2 py-0.5 rounded-md font-mono font-semibold text-primary">10.0.0.2</code>
+                                    <button onclick="copyToClipboard(document.getElementById('cardClientIp').textContent)" class="btn btn-ghost btn-xs btn-square text-base-content/40 hover:text-primary h-6 w-6" title="Copy IP">
+                                        <i class="fas fa-copy text-[10px]"></i>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="flex justify-between items-center bg-base-300/30 px-2.5 py-1.5 rounded-lg border border-base-content/5">
+                            <div class="flex justify-between items-center bg-base-300/40 px-3 py-2 rounded-xl border border-base-content/5">
                                 <span class="text-base-content/60 font-medium">Server</span>
-                                <span id="cardClientServer" class="font-semibold truncate max-w-[155px] text-right">Server Name</span>
+                                <span id="cardClientServer" class="font-semibold truncate max-w-[170px] text-right text-base-content">Server Name</span>
                             </div>
-                            <div class="flex justify-between items-center bg-base-300/30 px-2.5 py-1.5 rounded-lg border border-base-content/5">
+                            <div class="flex justify-between items-center bg-base-300/40 px-3 py-2 rounded-xl border border-base-content/5">
                                 <span class="text-base-content/60 font-medium">Location</span>
-                                <span id="cardClientLoc" class="font-semibold">City, Country</span>
+                                <span id="cardClientLoc" class="font-semibold text-base-content">City, Country</span>
                             </div>
-                            <div class="flex justify-between items-center bg-base-300/30 px-2.5 py-1.5 rounded-lg border border-base-content/5">
-                                <span class="text-base-content/60 font-medium">ISP</span>
-                                <span id="cardClientIsp" class="font-semibold truncate max-w-[150px] text-right">ISP Name</span>
+                            <div class="flex justify-between items-center bg-base-300/40 px-3 py-2 rounded-xl border border-base-content/5">
+                                <span class="text-base-content/60 font-medium">ISP Provider</span>
+                                <span id="cardClientIsp" class="font-semibold truncate max-w-[160px] text-right text-base-content">ISP Name</span>
                             </div>
-                            <div class="flex justify-between items-center bg-base-300/30 px-2.5 py-1.5 rounded-lg border border-base-content/5">
+                            <div class="flex justify-between items-center bg-base-300/40 px-3 py-2 rounded-xl border border-base-content/5">
                                 <span class="text-base-content/60 font-medium">Total Traffic</span>
                                 <span id="cardClientTraffic" class="font-mono font-bold text-base-content">0 MB</span>
                             </div>
-                            <div class="flex justify-between items-center bg-base-300/30 px-2.5 py-1.5 rounded-lg border border-base-content/5">
+                            <div class="flex justify-between items-center bg-base-300/40 px-3 py-2 rounded-xl border border-base-content/5">
                                 <span class="text-base-content/60 font-medium">Last Active</span>
-                                <span id="cardClientLastSeen" class="font-medium text-base-content/80">Never</span>
+                                <span id="cardClientLastSeen" class="font-semibold text-base-content">Never</span>
                             </div>
                         </div>
 
                         <div class="mt-3 pt-2 shrink-0">
                             <a id="cardClientLink" href="#" class="btn btn-primary btn-sm w-full gap-2 rounded-xl shadow-md">
-                                View Full Profile <i class="fas fa-arrow-right text-xs"></i>
+                                Manage Config Profile <i class="fas fa-arrow-right text-xs"></i>
                             </a>
                         </div>
                     </div>
@@ -593,6 +617,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const i = Math.floor(Math.log(bytes) / Math.log(1024));
         return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 2)} ${units[i]}`;
     }
+    function copyToClipboard(text) {
+        if (!text) return;
+        navigator.clipboard.writeText(text.trim()).then(() => {
+            const toast = document.createElement('div');
+            toast.className = 'toast toast-top toast-center z-[3000]';
+            toast.innerHTML = `<div class="alert alert-success text-xs font-semibold py-1.5 px-3 shadow-lg">Copied IP ${text}!</div>`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        });
+    }
     function getClientActivity(lastHandshake) {
         if (!lastHandshake) return { status: 'offline', text: 'Offline', colorClass: 'badge-error' };
         const lastSeenDate = new Date(lastHandshake.trim().replace(' ', 'T') + 'Z');
@@ -745,54 +779,127 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('cardBackButton').classList.add('hidden');
             } else {
                 document.getElementById('cardLocationTitle').textContent = `${group.city}, ${group.country}`;
-                
-                let onlineCount = 0, idleCount = 0, offlineCount = 0;
-                group.clients.forEach(c => {
-                    const act = getClientActivity(c.last_handshake);
-                    if (act.status === 'online') onlineCount++;
-                    else if (act.status === 'idle') idleCount++;
-                    else offlineCount++;
-                });
+                document.getElementById('cardBackText').textContent = `Back to ${group.city} (${group.clients.length})`;
 
-                const badgesContainer = document.getElementById('cardLocationStatusBadges');
-                if (badgesContainer) {
-                    let badgesHtml = `<span class="badge badge-sm bg-base-300 border-0 text-base-content/70 font-semibold text-[10px] px-2 py-0.5">${group.clients.length} Total</span>`;
-                    if (onlineCount > 0) badgesHtml += `<span class="badge badge-sm badge-success font-semibold text-[10px] px-2 py-0.5">${onlineCount} online</span>`;
-                    if (idleCount > 0) badgesHtml += `<span class="badge badge-sm badge-warning font-semibold text-[10px] px-2 py-0.5">${idleCount} idle</span>`;
-                    if (offlineCount > 0) badgesHtml += `<span class="badge badge-sm badge-error font-semibold text-[10px] px-2 py-0.5">${offlineCount} offline</span>`;
-                    badgesContainer.innerHTML = badgesHtml;
+                let currentFilter = 'all';
+                let searchQuery = '';
+
+                const searchInput = document.getElementById('cardConfigSearch');
+                const clearSearchBtn = document.getElementById('cardConfigSearchClear');
+                if (searchInput) {
+                    searchInput.value = '';
+                    if (clearSearchBtn) clearSearchBtn.classList.add('hidden');
                 }
 
-                const listContainer = document.getElementById('cardClientList');
-                listContainer.innerHTML = '';
-                group.clients.forEach(client => {
-                    const activity = getClientActivity(client.last_handshake);
-                    const item = document.createElement('div');
-                    item.className = 'flex flex-col gap-1 p-2.5 rounded-xl bg-base-300/40 border border-base-content/5 hover:bg-base-300/80 transition-colors';
-                    
-                    let dotBg = 'bg-error';
-                    if (activity.status === 'online') dotBg = 'bg-success shadow-[0_0_6px_oklch(var(--su))]';
-                    else if (activity.status === 'idle') dotBg = 'bg-warning';
-                    
-                    item.innerHTML = `
-                        <div class="flex items-center justify-between gap-2 min-w-0">
-                            <div class="flex items-center gap-2 min-w-0">
-                                <span class="w-2 h-2 rounded-full ${dotBg} shrink-0"></span>
-                                <span class="text-xs font-bold text-base-content truncate max-w-[150px]">${client.name}</span>
-                            </div>
-                            <span class="badge badge-xs ${activity.colorClass} font-semibold text-[9px] px-1.5 py-0.5 shrink-0">${activity.text}</span>
-                        </div>
-                        <div class="flex items-center justify-between text-[10px] font-mono text-base-content/50 pt-0.5 pl-4">
-                            <span>${client.client_ip}</span>
-                            <button class="btn btn-ghost btn-xs h-5 min-h-0 text-primary font-medium p-0 hover:bg-transparent hover:underline">Details &rarr;</button>
-                        </div>
-                    `;
-                    item.querySelector('button').addEventListener('click', function() {
-                        showClientDetails(client, activity);
-                        document.getElementById('cardBackButton').classList.remove('hidden');
+                function renderFilteredList() {
+                    const listContainer = document.getElementById('cardClientList');
+                    if (!listContainer) return;
+                    listContainer.innerHTML = '';
+
+                    const matching = group.clients.filter(c => {
+                        const act = getClientActivity(c.last_handshake);
+                        if (currentFilter !== 'all' && act.status !== currentFilter) return false;
+                        if (searchQuery) {
+                            const q = searchQuery.toLowerCase();
+                            const matchName = (c.name || '').toLowerCase().includes(q);
+                            const matchIp = (c.client_ip || '').toLowerCase().includes(q);
+                            if (!matchName && !matchIp) return false;
+                        }
+                        return true;
                     });
-                    listContainer.appendChild(item);
-                });
+
+                    if (matching.length === 0) {
+                        listContainer.innerHTML = `<div class="text-center py-8 text-xs text-base-content/40 italic">No configs match current filter</div>`;
+                        return;
+                    }
+
+                    matching.forEach(client => {
+                        const activity = getClientActivity(client.last_handshake);
+                        const item = document.createElement('div');
+                        item.className = 'group flex items-center justify-between p-2.5 rounded-xl bg-base-300/40 hover:bg-base-300 border border-base-content/5 hover:border-primary/40 transition-all duration-150 cursor-pointer shadow-sm';
+                        
+                        let dotBg = 'bg-error';
+                        if (activity.status === 'online') dotBg = 'bg-success shadow-[0_0_6px_oklch(var(--su))]';
+                        else if (activity.status === 'idle') dotBg = 'bg-warning';
+                        
+                        item.innerHTML = `
+                            <div class="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
+                                <span class="w-2.5 h-2.5 rounded-full ${dotBg} shrink-0"></span>
+                                <div class="flex flex-col min-w-0 flex-1">
+                                    <div class="flex items-center justify-between gap-1.5 min-w-0">
+                                        <span class="text-xs font-bold text-base-content group-hover:text-primary transition-colors truncate max-w-[160px]">${client.name}</span>
+                                        <span class="badge badge-xs ${activity.colorClass} font-semibold text-[9px] px-1.5 py-0.5 shrink-0">${activity.text}</span>
+                                    </div>
+                                    <div class="flex items-center justify-between gap-1 text-[10px] font-mono text-base-content/50 mt-1">
+                                        <span class="flex items-center gap-1 truncate">
+                                            <i class="fas fa-network-wired text-[8px] text-base-content/30"></i>
+                                            ${client.client_ip}
+                                        </span>
+                                        <span class="text-base-content/60 font-semibold shrink-0">${formatBytes((parseInt(client.bytes_sent)||0) + (parseInt(client.bytes_received)||0))}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="shrink-0 text-base-content/30 group-hover:text-primary transition-colors pl-1">
+                                <i class="fas fa-chevron-right text-xs"></i>
+                            </div>
+                        `;
+                        item.addEventListener('click', function() {
+                            showClientDetails(client, activity);
+                            document.getElementById('cardBackButton').classList.remove('hidden');
+                        });
+                        listContainer.appendChild(item);
+                    });
+                }
+
+                function renderTabs() {
+                    let onlineCount = 0, idleCount = 0, offlineCount = 0;
+                    group.clients.forEach(c => {
+                        const act = getClientActivity(c.last_handshake);
+                        if (act.status === 'online') onlineCount++;
+                        else if (act.status === 'idle') idleCount++;
+                        else offlineCount++;
+                    });
+
+                    const tabsContainer = document.getElementById('cardLocationFilterTabs');
+                    if (tabsContainer) {
+                        tabsContainer.innerHTML = `
+                            <button data-filter="all" class="btn btn-xs rounded-lg font-semibold transition-all ${currentFilter === 'all' ? 'btn-primary' : 'btn-ghost text-base-content/70 bg-base-300/60'}">All (${group.clients.length})</button>
+                            ${onlineCount > 0 ? `<button data-filter="online" class="btn btn-xs rounded-lg font-semibold transition-all ${currentFilter === 'online' ? 'btn-success text-success-content' : 'btn-ghost text-success bg-success/10'}">● ${onlineCount} Online</button>` : ''}
+                            ${idleCount > 0 ? `<button data-filter="idle" class="btn btn-xs rounded-lg font-semibold transition-all ${currentFilter === 'idle' ? 'btn-warning text-warning-content' : 'btn-ghost text-warning bg-warning/10'}">● ${idleCount} Idle</button>` : ''}
+                            ${offlineCount > 0 ? `<button data-filter="offline" class="btn btn-xs rounded-lg font-semibold transition-all ${currentFilter === 'offline' ? 'btn-error text-error-content' : 'btn-ghost text-error bg-error/10'}">● ${offlineCount} Offline</button>` : ''}
+                        `;
+
+                        tabsContainer.querySelectorAll('button').forEach(btn => {
+                            btn.addEventListener('click', function() {
+                                currentFilter = this.getAttribute('data-filter');
+                                renderTabs();
+                                renderFilteredList();
+                            });
+                        });
+                    }
+                }
+
+                if (searchInput) {
+                    searchInput.oninput = function() {
+                        searchQuery = this.value.trim();
+                        if (clearSearchBtn) {
+                            if (searchQuery) clearSearchBtn.classList.remove('hidden');
+                            else clearSearchBtn.classList.add('hidden');
+                        }
+                        renderFilteredList();
+                    };
+                }
+
+                window.clearConfigSearch = function() {
+                    if (searchInput) searchInput.value = '';
+                    if (clearSearchBtn) clearSearchBtn.classList.add('hidden');
+                    searchQuery = '';
+                    renderFilteredList();
+                };
+
+                renderTabs();
+                renderFilteredList();
+
                 document.getElementById('cardListView').classList.remove('hidden');
                 document.getElementById('cardDetailView').classList.add('hidden');
             }
