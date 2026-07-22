@@ -700,6 +700,7 @@ document.addEventListener('DOMContentLoaded', function() {
         card.classList.add('translate-y-2', 'opacity-0');
         setTimeout(() => {
             card.classList.add('hidden');
+            card.style.display = 'none';
         }, 200);
     };
 
@@ -707,6 +708,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const card = document.getElementById('mapClientCard');
         if (!card) return;
         card.classList.remove('hidden');
+        card.style.display = 'flex';
         setTimeout(() => {
             card.classList.remove('translate-y-2', 'opacity-0');
         }, 10);
@@ -786,6 +788,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         marker.on('click', function(e) {
+            if (e && e.originalEvent) {
+                L.DomEvent.stopPropagation(e.originalEvent);
+            }
             map.setView([group.lat, group.lon], Math.max(map.getZoom(), 5), { animate: true });
             document.getElementById('cardBackButton').onclick = function() {
                 document.getElementById('cardDetailView').classList.add('hidden');
@@ -796,6 +801,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const client = group.clients[0];
                 showClientDetails(client, getClientActivity(client.last_handshake));
                 document.getElementById('cardBackButton').classList.add('hidden');
+                openMapCard();
             } else {
                 document.getElementById('cardLocationTitle').textContent = `${group.city}, ${group.country}`;
                 document.getElementById('cardBackText').textContent = `Back to ${group.city} (${group.clients.length})`;
