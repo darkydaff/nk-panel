@@ -504,6 +504,22 @@ document.addEventListener('DOMContentLoaded', () => {
         return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(val) + ' ₽';
     }
 
+    // Date Formatter (dd.mm.yyyy)
+    function formatDate(dateStr) {
+        if (!dateStr) return '-';
+        const str = String(dateStr).trim();
+        if (/^\d{4}-\d{2}$/.test(str)) {
+            const [y, m] = str.split('-');
+            return `${m}.${y}`;
+        }
+        const match = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}:\d{2}(?::\d{2})?))?/);
+        if (match) {
+            const [, y, m, d, time] = match;
+            return `${d}.${m}.${y}` + (time ? ` ${time}` : '');
+        }
+        return str;
+    }
+
     // Date Presets Handler
     document.querySelectorAll('.preset-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -725,7 +741,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const ctx = document.getElementById('chartCashFlow').getContext('2d');
         if (charts.cashFlow) charts.cashFlow.destroy();
 
-        const labels = cashFlowData.map(c => c.period);
+        const labels = cashFlowData.map(c => formatDate(c.period));
         const netFlow = cashFlowData.map(c => c.net_flow);
         const cumulative = cashFlowData.map(c => c.cumulative_balance);
 
@@ -857,7 +873,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tbody.innerHTML = unmatched.samples.map(s => `
             <tr class="hover:bg-base-300/30">
                 <td class="font-mono">#${s.id}</td>
-                <td class="font-mono">${s.Date}</td>
+                <td class="font-mono">${formatDate(s.Date)}</td>
                 <td><span class="badge badge-xs ${s.Type.toLowerCase() === 'income' ? 'badge-success' : 'badge-error'}">${s.Type}</span></td>
                 <td class="font-mono font-bold">${formatCurrency(s.Amount)}</td>
                 <td class="text-base-content/80">${escapeHtml(s.Description || '-')}</td>
@@ -886,7 +902,7 @@ document.addEventListener('DOMContentLoaded', () => {
         body.innerHTML = dq.top_outliers.map(o => `
             <tr class="hover:bg-base-300/30 font-mono">
                 <td>#${o.id}</td>
-                <td>${o.Date}</td>
+                <td>${formatDate(o.Date)}</td>
                 <td><span class="badge badge-xs ${o.Type.toLowerCase() === 'income' ? 'badge-success' : 'badge-error'}">${o.Type}</span></td>
                 <td class="font-bold text-amber-400">${formatCurrency(o.Amount)}</td>
                 <td>${escapeHtml(o.Client_id || 'N/A')}</td>
@@ -955,7 +971,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tbody.innerHTML = items.map(tx => `
             <tr class="hover:bg-base-300/40 transition-colors">
                 <td class="font-mono text-xs text-base-content/50">#${tx.id}</td>
-                <td class="font-mono text-xs">${tx.date || '-'}</td>
+                <td class="font-mono text-xs">${formatDate(tx.date)}</td>
                 <td>
                     <span class="badge badge-sm gap-1 ${tx.type === 'income' ? 'badge-success text-white' : 'badge-error text-white'}">
                         <i class="fas ${tx.type === 'income' ? 'fa-arrow-down' : 'fa-arrow-up'} text-[10px]"></i>
@@ -996,7 +1012,7 @@ document.addEventListener('DOMContentLoaded', () => {
         content.innerHTML = `
             <div class="flex justify-between border-b border-base-300 pb-2">
                 <span class="text-base-content/50">Date:</span>
-                <span class="font-bold">${tx.date}</span>
+                <span class="font-bold">${formatDate(tx.date)}</span>
             </div>
             <div class="flex justify-between border-b border-base-300 pb-2">
                 <span class="text-base-content/50">Type:</span>
@@ -1024,7 +1040,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
             <div class="flex justify-between border-b border-base-300 pb-2">
                 <span class="text-base-content/50">Updated At:</span>
-                <span>${tx.updated_at || '-'}</span>
+                <span>${formatDate(tx.updated_at)}</span>
             </div>
             <div class="flex justify-between">
                 <span class="text-base-content/50">Updated By:</span>
