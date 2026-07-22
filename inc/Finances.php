@@ -13,6 +13,15 @@ class Finances {
         return ExtDB::isAvailable();
     }
 
+    private static function normalizeDate(?string $date): ?string {
+        if (empty($date)) return null;
+        $date = trim($date);
+        if (preg_match('/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/', $date, $m)) {
+            return sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]);
+        }
+        return $date;
+    }
+
     /**
      * Build standard SQL WHERE clauses based on filter parameters.
      */
@@ -20,13 +29,19 @@ class Finances {
         $where = [];
 
         if (!empty($filters['startDate'])) {
-            $where[] = '"Date"::text >= :startDate';
-            $params['startDate'] = $filters['startDate'];
+            $start = self::normalizeDate($filters['startDate']);
+            if ($start) {
+                $where[] = '"Date"::text >= :startDate';
+                $params['startDate'] = $start;
+            }
         }
 
         if (!empty($filters['endDate'])) {
-            $where[] = '"Date"::text <= :endDate';
-            $params['endDate'] = $filters['endDate'];
+            $end = self::normalizeDate($filters['endDate']);
+            if ($end) {
+                $where[] = '"Date"::text <= :endDate';
+                $params['endDate'] = $end;
+            }
         }
 
         if (!empty($filters['type']) && in_array(strtolower($filters['type']), ['income', 'expense'])) {
@@ -203,7 +218,7 @@ class Finances {
             'Server & Hosting' => 0.0,
             'Hardware & Routers' => 0.0,
             'Mobile & Referral' => 0.0,
-            'Services & Transfers' => 0.0,
+            'Services & Subscriptions' => 0.0,
             'Miscellaneous' => 0.0
         ];
 
@@ -211,14 +226,14 @@ class Finances {
             $desc = mb_strtolower($r['Description'] ?? '');
             $amt = (float)($r['Amount'] ?? 0);
 
-            if (str_contains($desc, 'zom') || str_contains($desc, 'vps') || str_contains($desc, 'server') || str_contains($desc, 'zarub') || str_contains($desc, 'host') || str_contains($desc, 'ip')) {
+            if (str_contains($desc, 'zom') || str_contains($desc, 'vps') || str_contains($desc, 'server') || str_contains($desc, 'сервер') || str_contains($desc, 'zarub') || str_contains($desc, 'host') || str_contains($desc, 'ip') || str_contains($desc, 'трафик') || str_contains($desc, 'hetzner')) {
                 $categories['Server & Hosting'] += $amt;
-            } elseif (str_contains($desc, 'роутер') || str_contains($desc, 'доставка') || str_contains($desc, 'router') || str_contains($desc, 'оборудование')) {
+            } elseif (str_contains($desc, 'роутер') || str_contains($desc, 'доставка') || str_contains($desc, 'router') || str_contains($desc, 'оборудование') || str_contains($desc, 'железо')) {
                 $categories['Hardware & Routers'] += $amt;
-            } elseif (str_contains($desc, 'моб') || str_contains($desc, 'рефералка') || str_contains($desc, 'ref') || str_contains($desc, 'комиссия')) {
+            } elseif (str_contains($desc, 'моб') || str_contains($desc, 'рефералка') || str_contains($desc, 'ref') || str_contains($desc, 'комиссия') || str_contains($desc, 'бонус')) {
                 $categories['Mobile & Referral'] += $amt;
-            } elseif (str_contains($desc, 'перевод') || str_contains($desc, 'сервис') || str_contains($desc, 'pay') || str_contains($desc, 'card')) {
-                $categories['Services & Transfers'] += $amt;
+            } elseif (str_contains($desc, 'google') || str_contains($desc, 'imp') || str_contains($desc, 'sub') || str_contains($desc, 'подписка') || str_contains($desc, 'перевод') || str_contains($desc, 'сервис') || str_contains($desc, 'pay') || str_contains($desc, 'card')) {
+                $categories['Services & Subscriptions'] += $amt;
             } else {
                 $categories['Miscellaneous'] += $amt;
             }
@@ -307,7 +322,7 @@ class Finances {
     }
 
     /**
-     * Get records with missing or unlinked client IDs.
+     * Get income payments missing client subscription IDs.
      */
     public static function getUnmatchedClients(array $filters = []): array {
         $pdo = ExtDB::conn();
@@ -315,14 +330,13 @@ class Finances {
         $where = self::buildWhereClause($filters, $params);
 
         $unmatchedClause = $where 
-            ? ($where . ' AND ("Client_id" IS NULL OR TRIM("Client_id"::text) = \'\')')
-            : 'WHERE ("Client_id" IS NULL OR TRIM("Client_id"::text) = \'\')';
+            ? ($where . ' AND TRIM(LOWER("Type"::text)) = \'income\' AND ("Client_id" IS NULL OR TRIM("Client_id"::text) = \'\')')
+            : 'WHERE TRIM(LOWER("Type"::text)) = \'income\' AND ("Client_id" IS NULL OR TRIM("Client_id"::text) = \'\')';
 
         $sqlStats = "
             SELECT 
                 COUNT(*) AS total_unmatched,
-                COALESCE(SUM(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'income' THEN COALESCE(\"Amount\"::numeric, 0) ELSE 0 END), 0) AS total_income,
-                COALESCE(SUM(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'expense' THEN COALESCE(\"Amount\"::numeric, 0) ELSE 0 END), 0) AS total_expense
+                COALESCE(SUM(COALESCE(\"Amount\"::numeric, 0)), 0) AS total_income
             FROM \"Finances_2026\"
             {$unmatchedClause}
         ";
@@ -346,7 +360,6 @@ class Finances {
         return [
             'total_unmatched' => (int)($stats['total_unmatched'] ?? 0),
             'total_income' => (float)($stats['total_income'] ?? 0),
-            'total_expense' => (float)($stats['total_expense'] ?? 0),
             'samples' => array_map(function($r) {
                 return [
                     'id' => (int)$r['id'],
