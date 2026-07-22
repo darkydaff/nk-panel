@@ -46,12 +46,12 @@
             <div class="stat-desc font-mono">{{ active_servers_count }} Active / {{ servers|length - active_servers_count }} Offline</div>
         </div>
 
-        <!-- Clients Stat -->
+        <!-- Configs Stat -->
         <div class="stat">
             <div class="stat-figure text-info">
                 <i class="fas fa-users text-2xl"></i>
             </div>
-            <div class="stat-title">Total Clients</div>
+            <div class="stat-title">Total Configs</div>
             <div class="stat-value font-mono">{{ clients|length }}</div>
             {% set online_clients_count = 0 %}
             {% set offline_clients_count = 0 %}
@@ -203,7 +203,7 @@
                     </div>
                     <div>
                         <h2 class="text-sm font-bold flex items-center gap-2">
-                            Client Locations
+                            Config Locations
                         </h2>
                         <span class="text-[11px] text-base-content/40 font-mono" id="mapStatus">Loading locations...</span>
                     </div>
@@ -658,7 +658,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (cntOfflineEl) cntOfflineEl.textContent = totalOffline;
 
     const mapStatus = document.getElementById('mapStatus');
-    if (mapStatus) mapStatus.textContent = `${mappedClients.length} clients • ${Object.keys(locationGroups).length} cities`;
+    if (mapStatus) mapStatus.textContent = `${mappedClients.length} configs • ${Object.keys(locationGroups).length} cities`;
 
     window.recenterMap = function() {
         closeMapCard();
