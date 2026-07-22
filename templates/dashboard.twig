@@ -694,6 +694,24 @@ document.addEventListener('DOMContentLoaded', function() {
     const mapStatus = document.getElementById('mapStatus');
     if (mapStatus) mapStatus.textContent = `${mappedClients.length} configs • ${Object.keys(locationGroups).length} cities`;
 
+    window.closeMapCard = function() {
+        const card = document.getElementById('mapClientCard');
+        if (!card) return;
+        card.classList.add('translate-y-2', 'opacity-0');
+        setTimeout(() => {
+            card.classList.add('hidden');
+        }, 200);
+    };
+
+    window.openMapCard = function() {
+        const card = document.getElementById('mapClientCard');
+        if (!card) return;
+        card.classList.remove('hidden');
+        setTimeout(() => {
+            card.classList.remove('translate-y-2', 'opacity-0');
+        }, 10);
+    };
+
     window.recenterMap = function() {
         closeMapCard();
         map.invalidateSize();
@@ -764,6 +782,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('cardClientLink').href = `/clients/${client.id}`;
             document.getElementById('cardListView').classList.add('hidden');
             document.getElementById('cardDetailView').classList.remove('hidden');
+            openMapCard();
         }
 
         marker.on('click', function(e) {
@@ -902,11 +921,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 document.getElementById('cardListView').classList.remove('hidden');
                 document.getElementById('cardDetailView').classList.add('hidden');
+                openMapCard();
             }
-
-            const card = document.getElementById('mapClientCard');
-            card.classList.remove('hidden');
-            setTimeout(() => { card.classList.remove('translate-y-2', 'opacity-0'); }, 10);
         });
 
         marker.addTo(markerGroup);
