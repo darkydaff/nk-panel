@@ -549,10 +549,30 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const locationGroups = {};
     mappedClients.forEach(client => {
-        const lat = parseFloat(client.latitude), lon = parseFloat(client.longitude);
-        const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
-        if (!locationGroups[key]) locationGroups[key] = { lat, lon, city: client.city || 'Unknown', country: client.country || 'Unknown', clients: [] };
+        const city = (client.city || '').trim().toLowerCase();
+        const country = (client.country || '').trim().toLowerCase();
+        
+        const key = (city && city !== 'unknown')
+            ? `${city}_${country}`
+            : `${parseFloat(client.latitude).toFixed(2)},${parseFloat(client.longitude).toFixed(2)}`;
+
+        if (!locationGroups[key]) {
+            locationGroups[key] = {
+                city: client.city || 'Unknown',
+                country: client.country || 'Unknown',
+                lats: [],
+                lons: [],
+                clients: []
+            };
+        }
+        locationGroups[key].lats.push(parseFloat(client.latitude));
+        locationGroups[key].lons.push(parseFloat(client.longitude));
         locationGroups[key].clients.push(client);
+    });
+
+    Object.values(locationGroups).forEach(group => {
+        group.lat = group.lats.reduce((a, b) => a + b, 0) / group.lats.length;
+        group.lon = group.lons.reduce((a, b) => a + b, 0) / group.lons.length;
     });
 
     const mapStatus = document.getElementById('mapStatus');
@@ -566,18 +586,36 @@ document.addEventListener('DOMContentLoaded', function() {
             else if (act.status === 'idle' && groupStatus !== 'online') groupStatus = 'idle';
         });
 
-        let pulseColorClass = 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]';
-        let pingColorClass = 'bg-red-400';
-        if (groupStatus === 'online') { pulseColorClass = 'bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.8)]'; pingColorClass = 'bg-sky-400'; }
-        else if (groupStatus === 'idle') { pulseColorClass = 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]'; pingColorClass = 'bg-amber-400'; }
+        let pulseColorClass = 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.7)]';
+        let pingColorClass = 'bg-rose-500';
+        let isOnline = false;
 
-        const pulseSize = 10 + Math.min(10, (group.clients.length - 1) * 2);
-        const pingSize = pulseSize + 8;
+        if (groupStatus === 'online') {
+            pulseColorClass = 'bg-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.8)]';
+            pingColorClass = 'bg-sky-400';
+            isOnline = true;
+        } else if (groupStatus === 'idle') {
+            pulseColorClass = 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)]';
+            pingColorClass = 'bg-amber-400';
+        }
+
+        const countBadgeHtml = group.clients.length > 1
+            ? `<span class="absolute -top-1.5 -right-1.5 badge badge-xs badge-primary font-mono font-bold px-1.5 py-0.5 text-[9px] shadow-md z-10">${group.clients.length}</span>`
+            : '';
+
+        const pingHtml = isOnline
+            ? `<span class="animate-ping absolute inline-flex h-full w-full rounded-full ${pingColorClass} opacity-50"></span>`
+            : '';
 
         const customIcon = L.divIcon({
             className: 'custom-map-marker',
-            html: `<div class="relative flex items-center justify-center" style="width:${pingSize}px;height:${pingSize}px;"><span class="animate-ping absolute inline-flex h-full w-full rounded-full ${pingColorClass} opacity-60"></span><span class="relative inline-flex rounded-full ${pulseColorClass}" style="width:${pulseSize}px;height:${pulseSize}px;"></span></div>`,
-            iconSize: [pingSize, pingSize], iconAnchor: [pingSize / 2, pingSize / 2]
+            html: `<div class="relative flex items-center justify-center cursor-pointer" style="width:24px;height:24px;">
+                     ${pingHtml}
+                     <span class="relative inline-flex rounded-full ${pulseColorClass} border-2 border-base-100" style="width:12px;height:12px;"></span>
+                     ${countBadgeHtml}
+                   </div>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
         });
 
         const marker = L.marker([group.lat, group.lon], { icon: customIcon });
@@ -617,19 +655,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 group.clients.forEach(client => {
                     const activity = getClientActivity(client.last_handshake);
                     const item = document.createElement('div');
-                    item.className = 'flex items-center justify-between p-2 rounded-lg bg-base-300/50 border border-base-content/5 hover:bg-base-300 transition-colors';
+                    item.className = 'flex items-center justify-between p-2 rounded-xl bg-base-300/50 border border-base-content/5 hover:bg-base-300 transition-colors';
                     let dotColor = 'bg-error';
-                    if (activity.status === 'online') dotColor = 'bg-success';
+                    if (activity.status === 'online') dotColor = 'bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.8)]';
                     else if (activity.status === 'idle') dotColor = 'bg-warning';
+                    
                     item.innerHTML = `
                         <div class="flex items-center gap-2 min-w-0">
-                            <span class="w-1.5 h-1.5 rounded-full ${dotColor} shrink-0"></span>
+                            <span class="w-2 h-2 rounded-full ${dotColor} shrink-0"></span>
                             <div class="flex flex-col min-w-0">
                                 <span class="text-xs font-semibold truncate max-w-[130px]">${client.name}</span>
                                 <span class="text-[9px] text-base-content/40 font-mono">${client.client_ip}</span>
                             </div>
                         </div>
-                        <button class="btn btn-ghost btn-xs">Details</button>
+                        <button class="btn btn-ghost btn-xs text-primary font-medium">Details</button>
                     `;
                     item.querySelector('button').addEventListener('click', function() {
                         showClientDetails(client, activity);
