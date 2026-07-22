@@ -254,36 +254,36 @@ class Finances {
     }
 
     /**
-     * Get top clients by revenue and by transaction count.
+     * Get top clients by profit and by transaction count.
      */
     public static function getTopClients(array $filters = [], int $limit = 10): array {
         $pdo = ExtDB::conn();
         $params = [];
         $where = self::buildWhereClause($filters, $params);
 
-        $revWhere = $where ? ($where . ' AND TRIM(LOWER("Type"::text)) = \'income\' AND "Client_id" IS NOT NULL AND TRIM("Client_id"::text) != \'\'') 
-                           : 'WHERE TRIM(LOWER("Type"::text)) = \'income\' AND "Client_id" IS NOT NULL AND TRIM("Client_id"::text) != \'\'';
+        $clientWhere = $where ? ($where . ' AND "Client_id" IS NOT NULL AND TRIM("Client_id"::text) != \'\'') 
+                             : 'WHERE "Client_id" IS NOT NULL AND TRIM("Client_id"::text) != \'\'';
         
-        $sqlRev = "
+        $sqlProfit = "
             SELECT 
                 \"Client_id\"::text AS client_id,
-                SUM(COALESCE(\"Amount\"::numeric, 0)) AS total_revenue,
+                SUM(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'income' THEN COALESCE(\"Amount\"::numeric, 0) ELSE 0 END) - 
+                SUM(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'expense' THEN COALESCE(\"Amount\"::numeric, 0) ELSE 0 END) AS net_profit,
+                SUM(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'income' THEN COALESCE(\"Amount\"::numeric, 0) ELSE 0 END) AS total_income,
+                SUM(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'expense' THEN COALESCE(\"Amount\"::numeric, 0) ELSE 0 END) AS total_expense,
                 COUNT(*) AS transaction_count,
-                AVG(COALESCE(\"Amount\"::numeric, 0)) AS avg_amount
+                AVG(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'income' THEN COALESCE(\"Amount\"::numeric, 0) ELSE NULL END) AS avg_amount
             FROM \"Finances_2026\"
-            {$revWhere}
+            {$clientWhere}
             GROUP BY \"Client_id\"::text
-            ORDER BY total_revenue DESC
+            ORDER BY net_profit DESC
             LIMIT {$limit}
         ";
 
-        $stmtRev = $pdo->prepare($sqlRev);
-        $stmtRev->execute($params);
-        $byRevenue = $stmtRev->fetchAll(PDO::FETCH_ASSOC);
+        $stmtProfit = $pdo->prepare($sqlProfit);
+        $stmtProfit->execute($params);
+        $byProfit = $stmtProfit->fetchAll(PDO::FETCH_ASSOC);
 
-        $txWhere = $where ? ($where . ' AND "Client_id" IS NOT NULL AND TRIM("Client_id"::text) != \'\'') 
-                          : 'WHERE "Client_id" IS NOT NULL AND TRIM("Client_id"::text) != \'\'';
-        
         $sqlTx = "
             SELECT 
                 \"Client_id\"::text AS client_id,
@@ -291,7 +291,7 @@ class Finances {
                 SUM(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'income' THEN COALESCE(\"Amount\"::numeric, 0) ELSE 0 END) AS total_income,
                 SUM(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'expense' THEN COALESCE(\"Amount\"::numeric, 0) ELSE 0 END) AS total_expense
             FROM \"Finances_2026\"
-            {$txWhere}
+            {$clientWhere}
             GROUP BY \"Client_id\"::text
             ORDER BY transaction_count DESC
             LIMIT {$limit}
@@ -301,15 +301,21 @@ class Finances {
         $stmtTx->execute($params);
         $byCount = $stmtTx->fetchAll(PDO::FETCH_ASSOC);
 
+        $mappedProfit = array_map(function($r) {
+            return [
+                'client_id' => $r['client_id'],
+                'net_profit' => (float)$r['net_profit'],
+                'total_income' => (float)$r['total_income'],
+                'total_expense' => (float)$r['total_expense'],
+                'total_revenue' => (float)$r['net_profit'], // Compatibility fallback
+                'transaction_count' => (int)$r['transaction_count'],
+                'avg_amount' => round((float)($r['avg_amount'] ?? 0), 2)
+            ];
+        }, $byProfit);
+
         return [
-            'by_revenue' => array_map(function($r) {
-                return [
-                    'client_id' => $r['client_id'],
-                    'total_revenue' => (float)$r['total_revenue'],
-                    'transaction_count' => (int)$r['transaction_count'],
-                    'avg_amount' => round((float)$r['avg_amount'], 2)
-                ];
-            }, $byRevenue),
+            'by_profit' => $mappedProfit,
+            'by_revenue' => $mappedProfit,
             'by_transactions' => array_map(function($r) {
                 return [
                     'client_id' => $r['client_id'],
