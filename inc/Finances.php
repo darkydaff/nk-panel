@@ -2,6 +2,7 @@
 /**
  * Finances Service Class
  * Handles analytics, trends, queries, and data quality metrics for the external Finances_2026 database table.
+ * All SQL queries use robust type casts and safe substring extractions to prevent PostgreSQL runtime errors.
  */
 class Finances {
     
@@ -19,27 +20,27 @@ class Finances {
         $where = [];
 
         if (!empty($filters['startDate'])) {
-            $where[] = '"Date" >= :startDate';
+            $where[] = '"Date"::text >= :startDate';
             $params['startDate'] = $filters['startDate'];
         }
 
         if (!empty($filters['endDate'])) {
-            $where[] = '"Date" <= :endDate';
+            $where[] = '"Date"::text <= :endDate';
             $params['endDate'] = $filters['endDate'];
         }
 
         if (!empty($filters['type']) && in_array(strtolower($filters['type']), ['income', 'expense'])) {
-            $where[] = 'LOWER("Type") = :type';
+            $where[] = 'TRIM(LOWER("Type"::text)) = :type';
             $params['type'] = strtolower($filters['type']);
         }
 
         if (!empty($filters['client'])) {
-            $where[] = '"Client_id" ILIKE :client';
+            $where[] = '"Client_id"::text ILIKE :client';
             $params['client'] = '%' . trim($filters['client']) . '%';
         }
 
         if (!empty($filters['description'])) {
-            $where[] = '"Description" ILIKE :description';
+            $where[] = '"Description"::text ILIKE :description';
             $params['description'] = '%' . trim($filters['description']) . '%';
         }
 
@@ -56,15 +57,15 @@ class Finances {
 
         $sql = "
             SELECT 
-                COALESCE(SUM(CASE WHEN LOWER(\"Type\") = 'income' THEN \"Amount\" ELSE 0 END), 0) AS total_income,
-                COALESCE(SUM(CASE WHEN LOWER(\"Type\") = 'expense' THEN \"Amount\" ELSE 0 END), 0) AS total_expense,
+                COALESCE(SUM(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'income' THEN COALESCE(\"Amount\"::numeric, 0) ELSE 0 END), 0) AS total_income,
+                COALESCE(SUM(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'expense' THEN COALESCE(\"Amount\"::numeric, 0) ELSE 0 END), 0) AS total_expense,
                 COUNT(*) AS total_transactions,
-                COUNT(CASE WHEN LOWER(\"Type\") = 'income' THEN 1 END) AS income_count,
-                COUNT(CASE WHEN LOWER(\"Type\") = 'expense' THEN 1 END) AS expense_count,
-                COALESCE(AVG(CASE WHEN LOWER(\"Type\") = 'income' THEN \"Amount\" END), 0) AS avg_income,
-                COALESCE(AVG(CASE WHEN LOWER(\"Type\") = 'expense' THEN \"Amount\" END), 0) AS avg_expense,
-                COALESCE(MAX(CASE WHEN LOWER(\"Type\") = 'income' THEN \"Amount\" END), 0) AS max_income,
-                COALESCE(MAX(CASE WHEN LOWER(\"Type\") = 'expense' THEN \"Amount\" END), 0) AS max_expense
+                COUNT(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'income' THEN 1 END) AS income_count,
+                COUNT(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'expense' THEN 1 END) AS expense_count,
+                COALESCE(AVG(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'income' THEN COALESCE(\"Amount\"::numeric, 0) END), 0) AS avg_income,
+                COALESCE(AVG(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'expense' THEN COALESCE(\"Amount\"::numeric, 0) END), 0) AS avg_expense,
+                COALESCE(MAX(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'income' THEN COALESCE(\"Amount\"::numeric, 0) END), 0) AS max_income,
+                COALESCE(MAX(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'expense' THEN COALESCE(\"Amount\"::numeric, 0) END), 0) AS max_expense
             FROM \"Finances_2026\"
             {$where}
         ";
@@ -103,9 +104,9 @@ class Finances {
 
         $sql = "
             SELECT 
-                TO_CHAR(\"Date\"::date, 'YYYY-MM') AS month,
-                COALESCE(SUM(CASE WHEN LOWER(\"Type\") = 'income' THEN \"Amount\" ELSE 0 END), 0) AS income,
-                COALESCE(SUM(CASE WHEN LOWER(\"Type\") = 'expense' THEN \"Amount\" ELSE 0 END), 0) AS expense,
+                COALESCE(SUBSTRING(NULLIF(TRIM(\"Date\"::text), '') FROM 1 FOR 7), 'Unspecified') AS month,
+                COALESCE(SUM(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'income' THEN COALESCE(\"Amount\"::numeric, 0) ELSE 0 END), 0) AS income,
+                COALESCE(SUM(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'expense' THEN COALESCE(\"Amount\"::numeric, 0) ELSE 0 END), 0) AS expense,
                 COUNT(*) AS transactions
             FROM \"Finances_2026\"
             {$where}
@@ -122,7 +123,7 @@ class Finances {
             $inc = (float)$r['income'];
             $exp = (float)$r['expense'];
             $result[] = [
-                'month' => $r['month'] ?: 'Unknown',
+                'month' => $r['month'] ?: 'Unspecified',
                 'income' => $inc,
                 'expense' => $exp,
                 'net_profit' => $inc - $exp,
@@ -141,15 +142,13 @@ class Finances {
         $params = [];
         $where = self::buildWhereClause($filters, $params);
 
-        $groupExpr = ($granularity === 'weekly') 
-            ? "TO_CHAR(DATE_TRUNC('week', \"Date\"::date), 'YYYY-MM-DD')" 
-            : "TO_CHAR(\"Date\"::date, 'YYYY-MM-DD')";
+        $groupExpr = "COALESCE(SUBSTRING(NULLIF(TRIM(\"Date\"::text), '') FROM 1 FOR 10), 'Unspecified')";
 
         $sql = "
             SELECT 
                 {$groupExpr} AS period,
-                COALESCE(SUM(CASE WHEN LOWER(\"Type\") = 'income' THEN \"Amount\" ELSE 0 END), 0) AS income,
-                COALESCE(SUM(CASE WHEN LOWER(\"Type\") = 'expense' THEN \"Amount\" ELSE 0 END), 0) AS expense
+                COALESCE(SUM(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'income' THEN COALESCE(\"Amount\"::numeric, 0) ELSE 0 END), 0) AS income,
+                COALESCE(SUM(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'expense' THEN COALESCE(\"Amount\"::numeric, 0) ELSE 0 END), 0) AS expense
             FROM \"Finances_2026\"
             {$where}
             GROUP BY period
@@ -170,7 +169,7 @@ class Finances {
             $cumulative += $net;
 
             $result[] = [
-                'period' => $r['period'] ?: 'Unknown',
+                'period' => $r['period'] ?: 'Unspecified',
                 'income' => $inc,
                 'expense' => $exp,
                 'net_flow' => $net,
@@ -191,7 +190,7 @@ class Finances {
         $where = self::buildWhereClause($filters, $params);
 
         $sql = "
-            SELECT \"Description\", \"Amount\"
+            SELECT \"Description\"::text AS \"Description\", COALESCE(\"Amount\"::numeric, 0) AS \"Amount\"
             FROM \"Finances_2026\"
             {$where}
         ";
@@ -235,9 +234,7 @@ class Finances {
             }
         }
 
-        // Sort descending by amount
         usort($formatted, fn($a, $b) => $b['amount'] <=> $a['amount']);
-
         return $formatted;
     }
 
@@ -249,19 +246,18 @@ class Finances {
         $params = [];
         $where = self::buildWhereClause($filters, $params);
 
-        // Revenue Top
-        $revWhere = $where ? ($where . ' AND LOWER("Type") = \'income\' AND "Client_id" IS NOT NULL AND TRIM("Client_id") != \'\'') 
-                           : 'WHERE LOWER("Type") = \'income\' AND "Client_id" IS NOT NULL AND TRIM("Client_id") != \'\'';
+        $revWhere = $where ? ($where . ' AND TRIM(LOWER("Type"::text)) = \'income\' AND "Client_id" IS NOT NULL AND TRIM("Client_id"::text) != \'\'') 
+                           : 'WHERE TRIM(LOWER("Type"::text)) = \'income\' AND "Client_id" IS NOT NULL AND TRIM("Client_id"::text) != \'\'';
         
         $sqlRev = "
             SELECT 
-                \"Client_id\" AS client_id,
-                SUM(\"Amount\") AS total_revenue,
+                \"Client_id\"::text AS client_id,
+                SUM(COALESCE(\"Amount\"::numeric, 0)) AS total_revenue,
                 COUNT(*) AS transaction_count,
-                AVG(\"Amount\") AS avg_amount
+                AVG(COALESCE(\"Amount\"::numeric, 0)) AS avg_amount
             FROM \"Finances_2026\"
             {$revWhere}
-            GROUP BY \"Client_id\"
+            GROUP BY \"Client_id\"::text
             ORDER BY total_revenue DESC
             LIMIT {$limit}
         ";
@@ -270,19 +266,18 @@ class Finances {
         $stmtRev->execute($params);
         $byRevenue = $stmtRev->fetchAll(PDO::FETCH_ASSOC);
 
-        // Transaction Volume Top
-        $txWhere = $where ? ($where . ' AND "Client_id" IS NOT NULL AND TRIM("Client_id") != \'\'') 
-                          : 'WHERE "Client_id" IS NOT NULL AND TRIM("Client_id") != \'\'';
+        $txWhere = $where ? ($where . ' AND "Client_id" IS NOT NULL AND TRIM("Client_id"::text) != \'\'') 
+                          : 'WHERE "Client_id" IS NOT NULL AND TRIM("Client_id"::text) != \'\'';
         
         $sqlTx = "
             SELECT 
-                \"Client_id\" AS client_id,
+                \"Client_id\"::text AS client_id,
                 COUNT(*) AS transaction_count,
-                SUM(CASE WHEN LOWER(\"Type\") = 'income' THEN \"Amount\" ELSE 0 END) AS total_income,
-                SUM(CASE WHEN LOWER(\"Type\") = 'expense' THEN \"Amount\" ELSE 0 END) AS total_expense
+                SUM(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'income' THEN COALESCE(\"Amount\"::numeric, 0) ELSE 0 END) AS total_income,
+                SUM(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'expense' THEN COALESCE(\"Amount\"::numeric, 0) ELSE 0 END) AS total_expense
             FROM \"Finances_2026\"
             {$txWhere}
-            GROUP BY \"Client_id\"
+            GROUP BY \"Client_id\"::text
             ORDER BY transaction_count DESC
             LIMIT {$limit}
         ";
@@ -320,14 +315,14 @@ class Finances {
         $where = self::buildWhereClause($filters, $params);
 
         $unmatchedClause = $where 
-            ? ($where . ' AND ("Client_id" IS NULL OR TRIM("Client_id") = \'\')')
-            : 'WHERE ("Client_id" IS NULL OR TRIM("Client_id") = \'\')';
+            ? ($where . ' AND ("Client_id" IS NULL OR TRIM("Client_id"::text) = \'\')')
+            : 'WHERE ("Client_id" IS NULL OR TRIM("Client_id"::text) = \'\')';
 
         $sqlStats = "
             SELECT 
                 COUNT(*) AS total_unmatched,
-                COALESCE(SUM(CASE WHEN LOWER(\"Type\") = 'income' THEN \"Amount\" ELSE 0 END), 0) AS total_income,
-                COALESCE(SUM(CASE WHEN LOWER(\"Type\") = 'expense' THEN \"Amount\" ELSE 0 END), 0) AS total_expense
+                COALESCE(SUM(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'income' THEN COALESCE(\"Amount\"::numeric, 0) ELSE 0 END), 0) AS total_income,
+                COALESCE(SUM(CASE WHEN TRIM(LOWER(\"Type\"::text)) = 'expense' THEN COALESCE(\"Amount\"::numeric, 0) ELSE 0 END), 0) AS total_expense
             FROM \"Finances_2026\"
             {$unmatchedClause}
         ";
@@ -337,10 +332,10 @@ class Finances {
         $stats = $stmtStats->fetch(PDO::FETCH_ASSOC);
 
         $sqlSample = "
-            SELECT id, \"Date\", \"Type\", \"Amount\", \"Description\", \"VLESS_id\"
+            SELECT *
             FROM \"Finances_2026\"
             {$unmatchedClause}
-            ORDER BY \"Date\" DESC
+            ORDER BY id DESC
             LIMIT 20
         ";
 
@@ -352,7 +347,16 @@ class Finances {
             'total_unmatched' => (int)($stats['total_unmatched'] ?? 0),
             'total_income' => (float)($stats['total_income'] ?? 0),
             'total_expense' => (float)($stats['total_expense'] ?? 0),
-            'samples' => $sample
+            'samples' => array_map(function($r) {
+                return [
+                    'id' => (int)$r['id'],
+                    'Date' => $r['Date'] ?? $r['date'] ?? '',
+                    'Type' => $r['Type'] ?? $r['type'] ?? 'income',
+                    'Amount' => (float)($r['Amount'] ?? $r['amount'] ?? 0),
+                    'Description' => $r['Description'] ?? $r['description'] ?? '',
+                    'VLESS_id' => $r['VLESS_id'] ?? $r['vless_id'] ?? ''
+                ];
+            }, $sample)
         ];
     }
 
@@ -362,42 +366,38 @@ class Finances {
     public static function getDataQualityMetrics(): array {
         $pdo = ExtDB::conn();
 
-        // 1. Missing values
         $sqlMissing = "
             SELECT 
                 COUNT(*) AS total_records,
                 COUNT(CASE WHEN \"Date\" IS NULL OR TRIM(\"Date\"::text) = '' THEN 1 END) AS missing_date,
                 COUNT(CASE WHEN \"Amount\" IS NULL THEN 1 END) AS missing_amount,
-                COUNT(CASE WHEN \"Description\" IS NULL OR TRIM(\"Description\") = '' THEN 1 END) AS missing_description,
-                COUNT(CASE WHEN \"Client_id\" IS NULL OR TRIM(\"Client_id\") = '' THEN 1 END) AS missing_client_id,
-                COUNT(CASE WHEN \"VLESS_id\" IS NULL OR TRIM(\"VLESS_id\") = '' THEN 1 END) AS missing_vless_id
+                COUNT(CASE WHEN \"Description\" IS NULL OR TRIM(\"Description\"::text) = '' THEN 1 END) AS missing_description,
+                COUNT(CASE WHEN \"Client_id\" IS NULL OR TRIM(\"Client_id\"::text) = '' THEN 1 END) AS missing_client_id,
+                COUNT(CASE WHEN \"VLESS_id\" IS NULL OR TRIM(\"VLESS_id\"::text) = '' THEN 1 END) AS missing_vless_id
             FROM \"Finances_2026\"
         ";
         $missingRow = $pdo->query($sqlMissing)->fetch(PDO::FETCH_ASSOC);
         $total = (int)($missingRow['total_records'] ?? 0);
 
-        // 2. Exact duplicates check (matching Date, Type, Amount, Description, Client_id)
         $sqlDuplicates = "
             SELECT COUNT(*) FROM (
-                SELECT \"Date\", \"Type\", \"Amount\", \"Description\", \"Client_id\", COUNT(*) 
+                SELECT \"Date\"::text, \"Type\"::text, \"Amount\"::numeric, \"Description\"::text, \"Client_id\"::text, COUNT(*) 
                 FROM \"Finances_2026\"
-                GROUP BY \"Date\", \"Type\", \"Amount\", \"Description\", \"Client_id\"
+                GROUP BY \"Date\"::text, \"Type\"::text, \"Amount\"::numeric, \"Description\"::text, \"Client_id\"::text
                 HAVING COUNT(*) > 1
             ) dupes
         ";
         $duplicateGroupsCount = (int)$pdo->query($sqlDuplicates)->fetchColumn();
 
-        // 3. Outlier / High-Value Anomaly Detection
         $sqlOutliers = "
-            SELECT id, \"Date\", \"Type\", \"Amount\", \"Description\", \"Client_id\"
+            SELECT *
             FROM \"Finances_2026\"
-            ORDER BY \"Amount\" DESC
+            ORDER BY COALESCE(\"Amount\"::numeric, 0) DESC
             LIMIT 5
         ";
-        $outliers = $pdo->query($sqlOutliers)->fetchAll(PDO::FETCH_ASSOC);
+        $rawOutliers = $pdo->query($sqlOutliers)->fetchAll(PDO::FETCH_ASSOC);
 
-        // Completeness score
-        $totalFieldsCheck = $total * 4; // Date, Amount, Description, Client_id
+        $totalFieldsCheck = $total * 4;
         $missingFieldsSum = (int)$missingRow['missing_date'] + (int)$missingRow['missing_amount'] + (int)$missingRow['missing_description'] + (int)$missingRow['missing_client_id'];
         $completenessScore = $totalFieldsCheck > 0 ? round((( $totalFieldsCheck - $missingFieldsSum ) / $totalFieldsCheck) * 100, 1) : 100;
 
@@ -410,7 +410,16 @@ class Finances {
             'missing_vless_id' => (int)$missingRow['missing_vless_id'],
             'duplicate_groups' => $duplicateGroupsCount,
             'completeness_score' => $completenessScore,
-            'top_outliers' => $outliers
+            'top_outliers' => array_map(function($r) {
+                return [
+                    'id' => (int)$r['id'],
+                    'Date' => $r['Date'] ?? $r['date'] ?? '',
+                    'Type' => $r['Type'] ?? $r['type'] ?? 'income',
+                    'Amount' => (float)($r['Amount'] ?? $r['amount'] ?? 0),
+                    'Description' => $r['Description'] ?? $r['description'] ?? '',
+                    'Client_id' => $r['Client_id'] ?? $r['client_id'] ?? ''
+                ];
+            }, $rawOutliers)
         ];
     }
 
@@ -426,21 +435,24 @@ class Finances {
         $limit = min(100, max(5, (int)($filters['limit'] ?? 20)));
         $offset = ($page - 1) * $limit;
 
-        $sortBy = 'Date';
-        $allowedSort = ['Date' => '"Date"', 'Amount' => '"Amount"', 'id' => 'id', 'Client_id' => '"Client_id"'];
+        $sortBy = '"Date"::text';
+        $allowedSort = [
+            'Date' => '"Date"::text', 
+            'Amount' => 'COALESCE("Amount"::numeric, 0)', 
+            'id' => 'id', 
+            'Client_id' => '"Client_id"::text'
+        ];
         if (!empty($filters['sortBy']) && isset($allowedSort[$filters['sortBy']])) {
             $sortBy = $allowedSort[$filters['sortBy']];
         }
 
         $sortDir = (strtoupper($filters['sortDir'] ?? '') === 'ASC') ? 'ASC' : 'DESC';
 
-        // Count query
         $countSql = "SELECT COUNT(*) FROM \"Finances_2026\" {$where}";
         $countStmt = $pdo->prepare($countSql);
         $countStmt->execute($params);
         $totalCount = (int)$countStmt->fetchColumn();
 
-        // Data query
         $sql = "
             SELECT *
             FROM \"Finances_2026\"
@@ -493,7 +505,7 @@ class Finances {
             SELECT *
             FROM \"Finances_2026\"
             {$where}
-            ORDER BY \"Date\" DESC, id DESC
+            ORDER BY \"Date\"::text DESC, id DESC
         ";
 
         $stmt = $pdo->prepare($sql);

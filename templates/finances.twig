@@ -664,7 +664,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
 
             if (!res.ok || !data.success) {
-                console.error(data.error || 'Failed to load stats');
+                console.error('Stats API error:', data.error || 'Failed to load stats');
                 return;
             }
 

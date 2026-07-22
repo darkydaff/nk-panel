@@ -4192,19 +4192,18 @@ Router::get('/api/finances/export', function () {
         $output = fopen('php://output', 'w');
         // Add UTF-8 BOM for Excel compatibility
         fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
-        fputcsv($output, ['ID', 'Date', 'Type', 'Amount', 'Description', 'Client_ID', 'VLESS_ID', 'Created At', 'Updated At']);
+        fputcsv($output, ['ID', 'Date', 'Type', 'Amount', 'Description', 'Client_ID', 'VLESS_ID', 'Updated At']);
 
         foreach ($rows as $r) {
             fputcsv($output, [
-                $r['id'],
-                $r['Date'],
-                $r['Type'],
-                $r['Amount'],
-                $r['Description'],
-                $r['Client_id'],
-                $r['VLESS_id'],
-                $r['created_at'],
-                $r['updated_at']
+                $r['id'] ?? '',
+                $r['Date'] ?? $r['date'] ?? '',
+                $r['Type'] ?? $r['type'] ?? '',
+                $r['Amount'] ?? $r['amount'] ?? '',
+                $r['Description'] ?? $r['description'] ?? '',
+                $r['Client_id'] ?? $r['client_id'] ?? '',
+                $r['VLESS_id'] ?? $r['vless_id'] ?? '',
+                $r['updated_at'] ?? ''
             ]);
         }
         fclose($output);
