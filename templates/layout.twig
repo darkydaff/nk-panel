@@ -131,6 +131,12 @@
                             <span>Routing Groups</span>
                         </a>
                     </li>
+                    <li>
+                        <a href="/finances" class="{% if '/finances' in current_uri %}active{% endif %}">
+                            <i class="fas fa-wallet w-4 text-center"></i>
+                            <span>Finances 2026</span>
+                        </a>
+                    </li>
                     {% if user.role == 'admin' %}
                     <li>
                         <a href="/bot-logs" class="{% if '/bot-logs' in current_uri %}active{% endif %}">

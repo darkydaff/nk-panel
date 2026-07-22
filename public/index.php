@@ -25,6 +25,7 @@ require_once __DIR__ . '/../inc/PanelImporter.php';
 require_once __DIR__ . '/../inc/ServerMonitoring.php';
 require_once __DIR__ . '/../inc/GeoIP.php';
 require_once __DIR__ . '/../inc/ExtDB.php';
+require_once __DIR__ . '/../inc/Finances.php';
 require_once __DIR__ . '/../inc/BackupManager.php';
 
 // Load environment configuration
@@ -4072,6 +4073,147 @@ Router::get('/api/routers/{id}/configs', function ($params) {
     }
     
     echo json_encode(['configs' => $configs]);
+});
+
+/**
+ * FINANCES 2026 DASHBOARD & API ROUTES
+ */
+Router::get('/finances', function () {
+    requireAuth();
+    $isAvailable = Finances::isAvailable();
+    View::render('finances.twig', [
+        'is_available' => $isAvailable,
+        'title' => 'Financial Dashboard'
+    ]);
+});
+
+Router::get('/api/finances/stats', function () {
+    header('Content-Type: application/json');
+    $user = requireApiAuth();
+    if (!$user) return;
+
+    try {
+        if (!Finances::isAvailable()) {
+            http_response_code(503);
+            echo json_encode(['error' => 'External PostgreSQL database is unreachable']);
+            return;
+        }
+
+        $filters = [
+            'startDate' => $_GET['startDate'] ?? null,
+            'endDate' => $_GET['endDate'] ?? null,
+            'type' => $_GET['type'] ?? null,
+            'client' => $_GET['client'] ?? null,
+            'description' => $_GET['description'] ?? null,
+        ];
+
+        $overview = Finances::getOverviewStats($filters);
+        $monthly = Finances::getMonthlyBreakdown($filters);
+        $cashFlow = Finances::getCashFlowTrends($filters, $_GET['granularity'] ?? 'daily');
+        $expenseCategories = Finances::getExpenseCategories($filters);
+        $topClients = Finances::getTopClients($filters, 10);
+        $unmatched = Finances::getUnmatchedClients($filters);
+        $dataQuality = Finances::getDataQualityMetrics();
+
+        echo json_encode([
+            'success' => true,
+            'overview' => $overview,
+            'monthly' => $monthly,
+            'cash_flow' => $cashFlow,
+            'expense_categories' => $expenseCategories,
+            'top_clients' => $topClients,
+            'unmatched' => $unmatched,
+            'data_quality' => $dataQuality
+        ]);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+});
+
+Router::get('/api/finances/transactions', function () {
+    header('Content-Type: application/json');
+    $user = requireApiAuth();
+    if (!$user) return;
+
+    try {
+        if (!Finances::isAvailable()) {
+            http_response_code(503);
+            echo json_encode(['error' => 'External PostgreSQL database is unreachable']);
+            return;
+        }
+
+        $filters = [
+            'page' => $_GET['page'] ?? 1,
+            'limit' => $_GET['limit'] ?? 20,
+            'startDate' => $_GET['startDate'] ?? null,
+            'endDate' => $_GET['endDate'] ?? null,
+            'type' => $_GET['type'] ?? null,
+            'client' => $_GET['client'] ?? null,
+            'description' => $_GET['description'] ?? null,
+            'sortBy' => $_GET['sortBy'] ?? 'Date',
+            'sortDir' => $_GET['sortDir'] ?? 'DESC',
+        ];
+
+        $data = Finances::getTransactions($filters);
+        echo json_encode(array_merge(['success' => true], $data));
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+});
+
+Router::get('/api/finances/export', function () {
+    $user = requireApiAuth();
+    if (!$user) return;
+
+    try {
+        if (!Finances::isAvailable()) {
+            http_response_code(503);
+            header('Content-Type: application/json');
+            echo json_encode(['error' => 'External PostgreSQL database is unreachable']);
+            return;
+        }
+
+        $filters = [
+            'startDate' => $_GET['startDate'] ?? null,
+            'endDate' => $_GET['endDate'] ?? null,
+            'type' => $_GET['type'] ?? null,
+            'client' => $_GET['client'] ?? null,
+            'description' => $_GET['description'] ?? null,
+        ];
+
+        $rows = Finances::getExportData($filters);
+
+        $filename = 'finances_2026_export_' . date('Y-m-d_H-i-s') . '.csv';
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+
+        $output = fopen('php://output', 'w');
+        // Add UTF-8 BOM for Excel compatibility
+        fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
+        fputcsv($output, ['ID', 'Date', 'Type', 'Amount', 'Description', 'Client_ID', 'VLESS_ID', 'Created At', 'Updated At']);
+
+        foreach ($rows as $r) {
+            fputcsv($output, [
+                $r['id'],
+                $r['Date'],
+                $r['Type'],
+                $r['Amount'],
+                $r['Description'],
+                $r['Client_id'],
+                $r['VLESS_id'],
+                $r['created_at'],
+                $r['updated_at']
+            ]);
+        }
+        fclose($output);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => $e->getMessage()]);
+    }
 });
 
 // Dispatch router
