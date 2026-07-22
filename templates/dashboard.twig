@@ -213,7 +213,9 @@
                         <div class="flex items-start justify-between mb-3 shrink-0">
                             <div class="min-w-0">
                                 <h4 id="cardLocationTitle" class="text-sm font-semibold text-base-content truncate pr-2">City, Country</h4>
-                                <span id="cardClientCount" class="text-[10px] text-base-content/40 font-medium">0 clients</span>
+                                <div id="cardLocationStatusBadges" class="flex flex-wrap items-center gap-1 mt-1">
+                                    <span id="cardClientCount" class="text-[10px] text-base-content/40 font-medium">0 clients</span>
+                                </div>
                             </div>
                             <button onclick="closeMapCard()" class="btn btn-ghost btn-xs btn-circle">
                                 <i class="fas fa-times text-xs"></i>
@@ -649,7 +651,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('cardBackButton').classList.add('hidden');
             } else {
                 document.getElementById('cardLocationTitle').textContent = `${group.city}, ${group.country}`;
-                document.getElementById('cardClientCount').textContent = `${group.clients.length} clients`;
+                
+                let onlineCount = 0, idleCount = 0, offlineCount = 0;
+                group.clients.forEach(c => {
+                    const act = getClientActivity(c.last_handshake);
+                    if (act.status === 'online') onlineCount++;
+                    else if (act.status === 'idle') idleCount++;
+                    else offlineCount++;
+                });
+
+                const badgesContainer = document.getElementById('cardLocationStatusBadges');
+                if (badgesContainer) {
+                    let badgesHtml = `<span class="text-[10px] text-base-content/40 font-mono font-medium mr-0.5">${group.clients.length} Total</span>`;
+                    if (onlineCount > 0) badgesHtml += `<span class="badge badge-xs badge-success text-[9px] font-semibold">${onlineCount} online</span>`;
+                    if (idleCount > 0) badgesHtml += `<span class="badge badge-xs badge-warning text-[9px] font-semibold">${idleCount} idle</span>`;
+                    if (offlineCount > 0) badgesHtml += `<span class="badge badge-xs badge-error text-[9px] font-semibold">${offlineCount} offline</span>`;
+                    badgesContainer.innerHTML = badgesHtml;
+                }
+
                 const listContainer = document.getElementById('cardClientList');
                 listContainer.innerHTML = '';
                 group.clients.forEach(client => {
