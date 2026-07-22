@@ -234,152 +234,51 @@
         </div>
     </div>
 
-    <!-- Analytical Insights & Data Quality Tabs -->
+    <!-- Client Revenue Rankings -->
     <div class="card bg-base-200 border border-base-300 shadow-sm">
         <div class="card-body p-5 space-y-4">
-            <div class="tabs tabs-bordered">
-                <a class="tab tab-active gap-2 font-medium" data-tab="unmatched">
-                    <i class="fas fa-user-slash text-amber-400"></i>
-                    Unmatched Client Payments
-                </a>
-                <a class="tab gap-2 font-medium" data-tab="quality">
-                    <i class="fas fa-shield-alt text-info"></i>
-                    Data Quality & Hygiene
-                </a>
-                <a class="tab gap-2 font-medium" data-tab="top-clients">
-                    <i class="fas fa-users text-emerald-400"></i>
-                    Client Revenue Rankings
-                </a>
-            </div>
+            <h2 class="font-bold text-base flex items-center gap-2">
+                <i class="fas fa-users text-emerald-400"></i>
+                Client Revenue Rankings
+            </h2>
 
-            <!-- Tab 1: Unmatched Income Payments -->
-            <div id="tabContentUnmatched" class="space-y-4 tab-content-panel">
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div class="bg-base-300/50 p-4 rounded-xl border border-base-300">
-                        <div class="text-xs text-base-content/50 font-medium">Unmatched Income Payments</div>
-                        <div class="text-xl font-bold font-mono text-amber-400 mt-1" id="unmatchedTxCount">0</div>
-                    </div>
-                    <div class="bg-base-300/50 p-4 rounded-xl border border-base-300">
-                        <div class="text-xs text-base-content/50 font-medium">Unattributed Revenue</div>
-                        <div class="text-xl font-bold font-mono text-emerald-400 mt-1" id="unmatchedIncome">0</div>
-                    </div>
-                </div>
-
-                <div class="overflow-x-auto">
-                    <table class="table table-sm w-full">
-                        <thead>
-                            <tr class="text-base-content/50">
-                                <th>ID</th>
-                                <th>Date</th>
-                                <th>Type</th>
-                                <th>Amount</th>
-                                <th>Description</th>
-                                <th>VLESS ID</th>
-                            </tr>
-                        </thead>
-                        <tbody id="unmatchedTableBody">
-                            <tr><td colspan="6" class="text-center py-4 text-base-content/40">Loading unmatched records...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Tab 2: Data Quality & Hygiene -->
-            <div id="tabContentQuality" class="space-y-4 tab-content-panel hidden">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <!-- Completeness Gauge -->
-                    <div class="bg-base-300/50 p-4 rounded-xl border border-base-300 flex flex-col justify-between">
-                        <div>
-                            <div class="text-xs text-base-content/50 font-medium">Data Completeness Score</div>
-                            <div class="text-3xl font-bold font-mono text-primary mt-2" id="dqScore">100%</div>
-                        </div>
-                        <progress class="progress progress-primary w-full mt-3" id="dqProgressBar" value="100" max="100"></progress>
-                    </div>
-
-                    <!-- Missing Fields List -->
-                    <div class="bg-base-300/50 p-4 rounded-xl border border-base-300 space-y-2">
-                        <div class="text-xs text-base-content/50 font-medium border-b border-base-300 pb-1">Missing Field Indicators</div>
-                        <div class="text-xs space-y-1 font-mono">
-                            <div class="flex justify-between"><span>Missing Client_id:</span><span id="dqMissingClient" class="font-bold">0</span></div>
-                            <div class="flex justify-between"><span>Missing Description:</span><span id="dqMissingDesc" class="font-bold">0</span></div>
-                            <div class="flex justify-between"><span>Missing Date:</span><span id="dqMissingDate" class="font-bold">0</span></div>
-                            <div class="flex justify-between"><span>Missing VLESS_id:</span><span id="dqMissingVless" class="font-bold">0</span></div>
-                        </div>
-                    </div>
-
-                    <!-- Duplicate & Integrity Check -->
-                    <div class="bg-base-300/50 p-4 rounded-xl border border-base-300 space-y-2">
-                        <div class="text-xs text-base-content/50 font-medium border-b border-base-300 pb-1">Duplicate & Integrity Scan</div>
-                        <div class="text-xs space-y-1 font-mono">
-                            <div class="flex justify-between"><span>Exact Duplicate Groups:</span><span id="dqDuplicates" class="font-bold text-amber-400">0</span></div>
-                            <div class="flex justify-between"><span>Total Database Records:</span><span id="dqTotalRecords" class="font-bold">0</span></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Top Outliers List -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                    <h3 class="text-xs font-semibold uppercase tracking-wider text-base-content/60 mb-2">Largest Transactions / Anomaly Scan</h3>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-emerald-400 mb-2">Top Clients by Revenue</h3>
                     <div class="overflow-x-auto">
-                        <table class="table table-xs w-full">
+                        <table class="table table-sm w-full">
                             <thead>
                                 <tr class="text-base-content/50">
-                                    <th>ID</th>
-                                    <th>Date</th>
-                                    <th>Type</th>
-                                    <th>Amount</th>
+                                    <th>#</th>
                                     <th>Client ID</th>
-                                    <th>Description</th>
+                                    <th>Total Revenue</th>
+                                    <th>Tx Count</th>
+                                    <th>Avg Order</th>
                                 </tr>
                             </thead>
-                            <tbody id="dqOutliersBody">
-                                <tr><td colspan="6" class="text-center py-2 text-base-content/40">Loading outliers...</td></tr>
+                            <tbody id="topClientsRevenueBody">
+                                <tr><td colspan="5" class="text-center py-4 text-base-content/40">Loading ranking...</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
-            </div>
-
-            <!-- Tab 3: Client Rankings -->
-            <div id="tabContentTopClients" class="space-y-4 tab-content-panel hidden">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <h3 class="text-xs font-semibold uppercase tracking-wider text-emerald-400 mb-2">Top Clients by Revenue</h3>
-                        <div class="overflow-x-auto">
-                            <table class="table table-sm w-full">
-                                <thead>
-                                    <tr class="text-base-content/50">
-                                        <th>#</th>
-                                        <th>Client ID</th>
-                                        <th>Total Revenue</th>
-                                        <th>Tx Count</th>
-                                        <th>Avg Order</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="topClientsRevenueBody">
-                                    <tr><td colspan="5" class="text-center py-4 text-base-content/40">Loading ranking...</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                    <div>
-                        <h3 class="text-xs font-semibold uppercase tracking-wider text-info mb-2">Top Clients by Transaction Count</h3>
-                        <div class="overflow-x-auto">
-                            <table class="table table-sm w-full">
-                                <thead>
-                                    <tr class="text-base-content/50">
-                                        <th>#</th>
-                                        <th>Client ID</th>
-                                        <th>Txs</th>
-                                        <th>Total Income</th>
-                                        <th>Total Expense</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="topClientsTxBody">
-                                    <tr><td colspan="5" class="text-center py-4 text-base-content/40">Loading ranking...</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
+                <div>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-info mb-2">Top Clients by Transaction Count</h3>
+                    <div class="overflow-x-auto">
+                        <table class="table table-sm w-full">
+                            <thead>
+                                <tr class="text-base-content/50">
+                                    <th>#</th>
+                                    <th>Client ID</th>
+                                    <th>Txs</th>
+                                    <th>Total Income</th>
+                                    <th>Total Expense</th>
+                                </tr>
+                            </thead>
+                            <tbody id="topClientsTxBody">
+                                <tr><td colspan="5" class="text-center py-4 text-base-content/40">Loading ranking...</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -599,21 +498,6 @@ document.addEventListener('DOMContentLoaded', () => {
         loadTransactions();
     });
 
-    // Tabs Listener
-    document.querySelectorAll('.tabs a.tab').forEach(tab => {
-        tab.addEventListener('click', (e) => {
-            document.querySelectorAll('.tabs a.tab').forEach(t => t.classList.remove('tab-active'));
-            tab.classList.add('tab-active');
-
-            const target = tab.dataset.tab;
-            document.querySelectorAll('.tab-content-panel').forEach(p => p.classList.add('hidden'));
-
-            if (target === 'unmatched') document.getElementById('tabContentUnmatched').classList.remove('hidden');
-            if (target === 'quality') document.getElementById('tabContentQuality').classList.remove('hidden');
-            if (target === 'top-clients') document.getElementById('tabContentTopClients').classList.remove('hidden');
-        });
-    });
-
     // Load All Data
     function loadDashboardData() {
         loadStats();
@@ -658,8 +542,6 @@ document.addEventListener('DOMContentLoaded', () => {
             renderMonthlyChart(data.monthly);
             renderCashFlowChart(data.cash_flow);
             renderTopClientsChart(data.top_clients.by_revenue);
-            renderUnmatchedTab(data.unmatched);
-            renderDataQualityTab(data.data_quality);
             renderTopClientsTables(data.top_clients);
         } catch (e) {
             console.error('Network error loading stats:', e);
@@ -811,53 +693,26 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function renderUnmatchedTab(unmatched) {
-        document.getElementById('unmatchedTxCount').textContent = unmatched.total_unmatched;
-        document.getElementById('unmatchedIncome').textContent = formatCurrency(unmatched.total_income);
-
-        const tbody = document.getElementById('unmatchedTableBody');
-        if (unmatched.samples.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-emerald-400">All transactions are matched with Client IDs!</td></tr>';
-            return;
-        }
-
-        tbody.innerHTML = unmatched.samples.map(s => `
-            <tr class="hover:bg-base-300/30">
-                <td class="font-mono">#${s.id}</td>
-                <td class="font-mono">${formatDate(s.Date)}</td>
-                <td><span class="badge badge-xs ${s.Type.toLowerCase() === 'income' ? 'badge-success' : 'badge-error'}">${s.Type}</span></td>
-                <td class="font-mono font-bold">${formatCurrency(s.Amount)}</td>
-                <td class="text-base-content/80">${escapeHtml(s.Description || '-')}</td>
-                <td class="font-mono text-base-content/50">${escapeHtml(s.VLESS_id || '-')}</td>
+    function renderTopClientsTables(top) {
+        const revBody = document.getElementById('topClientsRevenueBody');
+        revBody.innerHTML = top.by_revenue.map((c, i) => `
+            <tr class="hover:bg-base-300/30 font-mono">
+                <td>#${i + 1}</td>
+                <td class="font-bold text-primary">${escapeHtml(c.client_id)}</td>
+                <td class="text-emerald-400 font-bold">${formatCurrency(c.total_revenue)}</td>
+                <td>${c.transaction_count}</td>
+                <td>${formatCurrency(c.avg_amount)}</td>
             </tr>
         `).join('');
-    }
 
-    function renderDataQualityTab(dq) {
-        document.getElementById('dqScore').textContent = dq.completeness_score + '%';
-        document.getElementById('dqProgressBar').value = dq.completeness_score;
-
-        document.getElementById('dqMissingClient').textContent = dq.missing_client_id;
-        document.getElementById('dqMissingDesc').textContent = dq.missing_description;
-        document.getElementById('dqMissingDate').textContent = dq.missing_date;
-        document.getElementById('dqMissingVless').textContent = dq.missing_vless_id;
-        document.getElementById('dqDuplicates').textContent = dq.duplicate_groups;
-        document.getElementById('dqTotalRecords').textContent = dq.total_records;
-
-        const body = document.getElementById('dqOutliersBody');
-        if (!dq.top_outliers || dq.top_outliers.length === 0) {
-            body.innerHTML = '<tr><td colspan="6" class="text-center py-2 text-base-content/40">No anomalies detected</td></tr>';
-            return;
-        }
-
-        body.innerHTML = dq.top_outliers.map(o => `
+        const txBody = document.getElementById('topClientsTxBody');
+        txBody.innerHTML = top.by_transactions.map((c, i) => `
             <tr class="hover:bg-base-300/30 font-mono">
-                <td>#${o.id}</td>
-                <td>${formatDate(o.Date)}</td>
-                <td><span class="badge badge-xs ${o.Type.toLowerCase() === 'income' ? 'badge-success' : 'badge-error'}">${o.Type}</span></td>
-                <td class="font-bold text-amber-400">${formatCurrency(o.Amount)}</td>
-                <td>${escapeHtml(o.Client_id || 'N/A')}</td>
-                <td class="font-sans text-base-content/80">${escapeHtml(o.Description || '-')}</td>
+                <td>#${i + 1}</td>
+                <td class="font-bold text-info">${escapeHtml(c.client_id)}</td>
+                <td class="font-bold">${c.transaction_count}</td>
+                <td class="text-emerald-400">${formatCurrency(c.total_income)}</td>
+                <td class="text-rose-400">${formatCurrency(c.total_expense)}</td>
             </tr>
         `).join('');
     }
