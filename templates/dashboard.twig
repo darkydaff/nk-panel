@@ -770,165 +770,220 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const marker = L.marker([group.lat, group.lon], { icon: customIcon });
 
-        function showClientDetails(client, activity) {
-            document.getElementById('cardClientName').textContent = client.name;
-            const statusBadge = document.getElementById('cardClientStatus');
-            statusBadge.className = `badge badge-sm mt-1 w-max ${activity.colorClass}`;
-            statusBadge.textContent = activity.text;
-            document.getElementById('cardClientIp').textContent = client.client_ip;
-            document.getElementById('cardClientServer').textContent = client.server_name || 'N/A';
-            document.getElementById('cardClientLoc').textContent = `${client.city || 'Unknown'}, ${client.country || 'Unknown'}`;
-            document.getElementById('cardClientIsp').textContent = client.isp || 'N/A';
-            document.getElementById('cardClientTraffic').textContent = formatBytes((parseInt(client.bytes_sent) || 0) + (parseInt(client.bytes_received) || 0));
-            document.getElementById('cardClientLastSeen').textContent = formatRelativeTime(client.last_handshake);
-            document.getElementById('cardClientLink').href = `/clients/${client.id}`;
-            document.getElementById('cardListView').classList.add('hidden');
-            document.getElementById('cardDetailView').classList.remove('hidden');
+    function showClientDetails(client, activity) {
+        document.getElementById('cardClientName').textContent = client.name;
+        const statusBadge = document.getElementById('cardClientStatus');
+        statusBadge.className = `badge badge-sm mt-1 w-max ${activity.colorClass}`;
+        statusBadge.textContent = activity.text;
+        document.getElementById('cardClientIp').textContent = client.client_ip;
+        document.getElementById('cardClientServer').textContent = client.server_name || 'N/A';
+        document.getElementById('cardClientLoc').textContent = `${client.city || 'Unknown'}, ${client.country || 'Unknown'}`;
+        document.getElementById('cardClientIsp').textContent = client.isp || 'N/A';
+        document.getElementById('cardClientTraffic').textContent = formatBytes((parseInt(client.bytes_sent) || 0) + (parseInt(client.bytes_received) || 0));
+        document.getElementById('cardClientLastSeen').textContent = formatRelativeTime(client.last_handshake);
+        document.getElementById('cardClientLink').href = `/clients/${client.id}`;
+        document.getElementById('cardListView').classList.add('hidden');
+        document.getElementById('cardDetailView').classList.remove('hidden');
+        openMapCard();
+    }
+
+    window.onCityMarkerClick = function(key) {
+        const group = locationGroups[key];
+        if (!group) return;
+
+        map.setView([group.lat, group.lon], Math.max(map.getZoom(), 5), { animate: true });
+        
+        const backBtn = document.getElementById('cardBackButton');
+        if (backBtn) {
+            backBtn.onclick = function() {
+                document.getElementById('cardDetailView').classList.add('hidden');
+                document.getElementById('cardListView').classList.remove('hidden');
+            };
+        }
+
+        if (group.clients.length === 1) {
+            const client = group.clients[0];
+            showClientDetails(client, getClientActivity(client.last_handshake));
+            if (backBtn) backBtn.classList.add('hidden');
+            openMapCard();
+        } else {
+            document.getElementById('cardLocationTitle').textContent = `${group.city}, ${group.country}`;
+            document.getElementById('cardBackText').textContent = `Back to ${group.city} (${group.clients.length})`;
+
+            let currentFilter = 'all';
+            let searchQuery = '';
+
+            const searchInput = document.getElementById('cardConfigSearch');
+            const clearSearchBtn = document.getElementById('cardConfigSearchClear');
+            if (searchInput) {
+                searchInput.value = '';
+                if (clearSearchBtn) clearSearchBtn.classList.add('hidden');
+            }
+
+            function renderFilteredList() {
+                const listContainer = document.getElementById('cardClientList');
+                if (!listContainer) return;
+                listContainer.innerHTML = '';
+
+                const matching = group.clients.filter(c => {
+                    const act = getClientActivity(c.last_handshake);
+                    if (currentFilter !== 'all' && act.status !== currentFilter) return false;
+                    if (searchQuery) {
+                        const q = searchQuery.toLowerCase();
+                        const matchName = (c.name || '').toLowerCase().includes(q);
+                        const matchIp = (c.client_ip || '').toLowerCase().includes(q);
+                        if (!matchName && !matchIp) return false;
+                    }
+                    return true;
+                });
+
+                if (matching.length === 0) {
+                    listContainer.innerHTML = `<div class="text-center py-8 text-xs text-base-content/40 italic">No configs match current filter</div>`;
+                    return;
+                }
+
+                matching.forEach(client => {
+                    const activity = getClientActivity(client.last_handshake);
+                    const item = document.createElement('div');
+                    item.className = 'group flex items-center justify-between p-2.5 rounded-xl bg-base-300/40 hover:bg-base-300 border border-base-content/5 hover:border-primary/40 transition-all duration-150 cursor-pointer shadow-sm';
+                    
+                    let dotBg = 'bg-error';
+                    if (activity.status === 'online') dotBg = 'bg-success shadow-[0_0_6px_oklch(var(--su))]';
+                    else if (activity.status === 'idle') dotBg = 'bg-warning';
+                    
+                    item.innerHTML = `
+                        <div class="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
+                            <span class="w-2.5 h-2.5 rounded-full ${dotBg} shrink-0"></span>
+                            <div class="flex flex-col min-w-0 flex-1">
+                                <div class="flex items-center justify-between gap-1.5 min-w-0">
+                                    <span class="text-xs font-bold text-base-content group-hover:text-primary transition-colors truncate max-w-[160px]">${client.name}</span>
+                                    <span class="badge badge-xs ${activity.colorClass} font-semibold text-[9px] px-1.5 py-0.5 shrink-0">${activity.text}</span>
+                                </div>
+                                <div class="flex items-center justify-between gap-1 text-[10px] font-mono text-base-content/50 mt-1">
+                                    <span class="flex items-center gap-1 truncate">
+                                        <i class="fas fa-network-wired text-[8px] text-base-content/30"></i>
+                                        ${client.client_ip}
+                                    </span>
+                                    <span class="text-base-content/60 font-semibold shrink-0">${formatBytes((parseInt(client.bytes_sent)||0) + (parseInt(client.bytes_received)||0))}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="shrink-0 text-base-content/30 group-hover:text-primary transition-colors pl-1">
+                            <i class="fas fa-chevron-right text-xs"></i>
+                        </div>
+                    `;
+                    item.addEventListener('click', function(e) {
+                        if (e) e.stopPropagation();
+                        showClientDetails(client, activity);
+                        if (backBtn) backBtn.classList.remove('hidden');
+                    });
+                    listContainer.appendChild(item);
+                });
+            }
+
+            function renderTabs() {
+                let onlineCount = 0, idleCount = 0, offlineCount = 0;
+                group.clients.forEach(c => {
+                    const act = getClientActivity(c.last_handshake);
+                    if (act.status === 'online') onlineCount++;
+                    else if (act.status === 'idle') idleCount++;
+                    else offlineCount++;
+                });
+
+                const tabsContainer = document.getElementById('cardLocationFilterTabs');
+                if (tabsContainer) {
+                    tabsContainer.innerHTML = `
+                        <button data-filter="all" class="btn btn-xs rounded-lg font-semibold transition-all ${currentFilter === 'all' ? 'btn-primary' : 'btn-ghost text-base-content/70 bg-base-300/60'}">All (${group.clients.length})</button>
+                        ${onlineCount > 0 ? `<button data-filter="online" class="btn btn-xs rounded-lg font-semibold transition-all ${currentFilter === 'online' ? 'btn-success text-success-content' : 'btn-ghost text-success bg-success/10'}">● ${onlineCount} Online</button>` : ''}
+                        ${idleCount > 0 ? `<button data-filter="idle" class="btn btn-xs rounded-lg font-semibold transition-all ${currentFilter === 'idle' ? 'btn-warning text-warning-content' : 'btn-ghost text-warning bg-warning/10'}">● ${idleCount} Idle</button>` : ''}
+                        ${offlineCount > 0 ? `<button data-filter="offline" class="btn btn-xs rounded-lg font-semibold transition-all ${currentFilter === 'offline' ? 'btn-error text-error-content' : 'btn-ghost text-error bg-error/10'}">● ${offlineCount} Offline</button>` : ''}
+                    `;
+
+                    tabsContainer.querySelectorAll('button').forEach(btn => {
+                        btn.addEventListener('click', function(e) {
+                            if (e) e.stopPropagation();
+                            currentFilter = this.getAttribute('data-filter');
+                            renderTabs();
+                            renderFilteredList();
+                        });
+                    });
+                }
+            }
+
+            if (searchInput) {
+                searchInput.oninput = function() {
+                    searchQuery = this.value.trim();
+                    if (clearSearchBtn) {
+                        if (searchQuery) clearSearchBtn.classList.remove('hidden');
+                        else clearSearchBtn.classList.add('hidden');
+                    }
+                    renderFilteredList();
+                };
+            }
+
+            window.clearConfigSearch = function() {
+                if (searchInput) searchInput.value = '';
+                if (clearSearchBtn) clearSearchBtn.classList.add('hidden');
+                searchQuery = '';
+                renderFilteredList();
+            };
+
+            renderTabs();
+            renderFilteredList();
+
+            document.getElementById('cardListView').classList.remove('hidden');
+            document.getElementById('cardDetailView').classList.add('hidden');
             openMapCard();
         }
+    };
+
+    Object.entries(locationGroups).forEach(([key, group]) => {
+        let groupStatus = 'offline';
+        group.clients.forEach(c => {
+            const act = getClientActivity(c.last_handshake);
+            if (act.status === 'online') groupStatus = 'online';
+            else if (act.status === 'idle' && groupStatus !== 'online') groupStatus = 'idle';
+        });
+
+        let statusDotBg = 'bg-error';
+        let isOnline = false;
+
+        if (groupStatus === 'online') {
+            statusDotBg = 'bg-success';
+            isOnline = true;
+        } else if (groupStatus === 'idle') {
+            statusDotBg = 'bg-warning';
+        }
+
+        const countBadgeHtml = group.clients.length > 1
+            ? `<span class="badge badge-primary badge-xs font-mono font-bold text-[9px] px-1.5 py-0.5 shadow-sm">${group.clients.length}</span>`
+            : '';
+
+        const pingHtml = isOnline
+            ? `<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>`
+            : '';
+
+        const customIcon = L.divIcon({
+            className: 'custom-map-marker',
+            html: `<div onclick="window.onCityMarkerClick('${key}')" class="group relative flex items-center gap-1.5 bg-base-200/90 hover:bg-base-200 backdrop-blur-md border border-base-content/15 hover:border-primary/60 text-base-content px-2 py-1 rounded-full shadow-lg transition-all duration-200 hover:scale-110 cursor-pointer">
+                     <span class="relative flex h-2 w-2 shrink-0">
+                         ${pingHtml}
+                         <span class="relative inline-flex rounded-full h-2 w-2 ${statusDotBg}"></span>
+                     </span>
+                     <span class="marker-city-name text-[11px] font-semibold tracking-tight whitespace-nowrap leading-none">${group.city}</span>
+                     ${countBadgeHtml}
+                   </div>`,
+            iconSize: null,
+            iconAnchor: [12, 12]
+        });
+
+        const marker = L.marker([group.lat, group.lon], { icon: customIcon });
 
         marker.on('click', function(e) {
             if (e && e.originalEvent) {
                 L.DomEvent.stopPropagation(e.originalEvent);
             }
-            map.setView([group.lat, group.lon], Math.max(map.getZoom(), 5), { animate: true });
-            document.getElementById('cardBackButton').onclick = function() {
-                document.getElementById('cardDetailView').classList.add('hidden');
-                document.getElementById('cardListView').classList.remove('hidden');
-            };
-
-            if (group.clients.length === 1) {
-                const client = group.clients[0];
-                showClientDetails(client, getClientActivity(client.last_handshake));
-                document.getElementById('cardBackButton').classList.add('hidden');
-                openMapCard();
-            } else {
-                document.getElementById('cardLocationTitle').textContent = `${group.city}, ${group.country}`;
-                document.getElementById('cardBackText').textContent = `Back to ${group.city} (${group.clients.length})`;
-
-                let currentFilter = 'all';
-                let searchQuery = '';
-
-                const searchInput = document.getElementById('cardConfigSearch');
-                const clearSearchBtn = document.getElementById('cardConfigSearchClear');
-                if (searchInput) {
-                    searchInput.value = '';
-                    if (clearSearchBtn) clearSearchBtn.classList.add('hidden');
-                }
-
-                function renderFilteredList() {
-                    const listContainer = document.getElementById('cardClientList');
-                    if (!listContainer) return;
-                    listContainer.innerHTML = '';
-
-                    const matching = group.clients.filter(c => {
-                        const act = getClientActivity(c.last_handshake);
-                        if (currentFilter !== 'all' && act.status !== currentFilter) return false;
-                        if (searchQuery) {
-                            const q = searchQuery.toLowerCase();
-                            const matchName = (c.name || '').toLowerCase().includes(q);
-                            const matchIp = (c.client_ip || '').toLowerCase().includes(q);
-                            if (!matchName && !matchIp) return false;
-                        }
-                        return true;
-                    });
-
-                    if (matching.length === 0) {
-                        listContainer.innerHTML = `<div class="text-center py-8 text-xs text-base-content/40 italic">No configs match current filter</div>`;
-                        return;
-                    }
-
-                    matching.forEach(client => {
-                        const activity = getClientActivity(client.last_handshake);
-                        const item = document.createElement('div');
-                        item.className = 'group flex items-center justify-between p-2.5 rounded-xl bg-base-300/40 hover:bg-base-300 border border-base-content/5 hover:border-primary/40 transition-all duration-150 cursor-pointer shadow-sm';
-                        
-                        let dotBg = 'bg-error';
-                        if (activity.status === 'online') dotBg = 'bg-success shadow-[0_0_6px_oklch(var(--su))]';
-                        else if (activity.status === 'idle') dotBg = 'bg-warning';
-                        
-                        item.innerHTML = `
-                            <div class="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
-                                <span class="w-2.5 h-2.5 rounded-full ${dotBg} shrink-0"></span>
-                                <div class="flex flex-col min-w-0 flex-1">
-                                    <div class="flex items-center justify-between gap-1.5 min-w-0">
-                                        <span class="text-xs font-bold text-base-content group-hover:text-primary transition-colors truncate max-w-[160px]">${client.name}</span>
-                                        <span class="badge badge-xs ${activity.colorClass} font-semibold text-[9px] px-1.5 py-0.5 shrink-0">${activity.text}</span>
-                                    </div>
-                                    <div class="flex items-center justify-between gap-1 text-[10px] font-mono text-base-content/50 mt-1">
-                                        <span class="flex items-center gap-1 truncate">
-                                            <i class="fas fa-network-wired text-[8px] text-base-content/30"></i>
-                                            ${client.client_ip}
-                                        </span>
-                                        <span class="text-base-content/60 font-semibold shrink-0">${formatBytes((parseInt(client.bytes_sent)||0) + (parseInt(client.bytes_received)||0))}</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="shrink-0 text-base-content/30 group-hover:text-primary transition-colors pl-1">
-                                <i class="fas fa-chevron-right text-xs"></i>
-                            </div>
-                        `;
-                        item.addEventListener('click', function() {
-                            showClientDetails(client, activity);
-                            document.getElementById('cardBackButton').classList.remove('hidden');
-                        });
-                        listContainer.appendChild(item);
-                    });
-                }
-
-                function renderTabs() {
-                    let onlineCount = 0, idleCount = 0, offlineCount = 0;
-                    group.clients.forEach(c => {
-                        const act = getClientActivity(c.last_handshake);
-                        if (act.status === 'online') onlineCount++;
-                        else if (act.status === 'idle') idleCount++;
-                        else offlineCount++;
-                    });
-
-                    const tabsContainer = document.getElementById('cardLocationFilterTabs');
-                    if (tabsContainer) {
-                        tabsContainer.innerHTML = `
-                            <button data-filter="all" class="btn btn-xs rounded-lg font-semibold transition-all ${currentFilter === 'all' ? 'btn-primary' : 'btn-ghost text-base-content/70 bg-base-300/60'}">All (${group.clients.length})</button>
-                            ${onlineCount > 0 ? `<button data-filter="online" class="btn btn-xs rounded-lg font-semibold transition-all ${currentFilter === 'online' ? 'btn-success text-success-content' : 'btn-ghost text-success bg-success/10'}">● ${onlineCount} Online</button>` : ''}
-                            ${idleCount > 0 ? `<button data-filter="idle" class="btn btn-xs rounded-lg font-semibold transition-all ${currentFilter === 'idle' ? 'btn-warning text-warning-content' : 'btn-ghost text-warning bg-warning/10'}">● ${idleCount} Idle</button>` : ''}
-                            ${offlineCount > 0 ? `<button data-filter="offline" class="btn btn-xs rounded-lg font-semibold transition-all ${currentFilter === 'offline' ? 'btn-error text-error-content' : 'btn-ghost text-error bg-error/10'}">● ${offlineCount} Offline</button>` : ''}
-                        `;
-
-                        tabsContainer.querySelectorAll('button').forEach(btn => {
-                            btn.addEventListener('click', function() {
-                                currentFilter = this.getAttribute('data-filter');
-                                renderTabs();
-                                renderFilteredList();
-                            });
-                        });
-                    }
-                }
-
-                if (searchInput) {
-                    searchInput.oninput = function() {
-                        searchQuery = this.value.trim();
-                        if (clearSearchBtn) {
-                            if (searchQuery) clearSearchBtn.classList.remove('hidden');
-                            else clearSearchBtn.classList.add('hidden');
-                        }
-                        renderFilteredList();
-                    };
-                }
-
-                window.clearConfigSearch = function() {
-                    if (searchInput) searchInput.value = '';
-                    if (clearSearchBtn) clearSearchBtn.classList.add('hidden');
-                    searchQuery = '';
-                    renderFilteredList();
-                };
-
-                renderTabs();
-                renderFilteredList();
-
-                document.getElementById('cardListView').classList.remove('hidden');
-                document.getElementById('cardDetailView').classList.add('hidden');
-                openMapCard();
-            }
+            window.onCityMarkerClick(key);
         });
 
         marker.addTo(markerGroup);
