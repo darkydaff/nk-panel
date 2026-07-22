@@ -588,21 +588,21 @@ document.addEventListener('DOMContentLoaded', function() {
             else if (act.status === 'idle' && groupStatus !== 'online') groupStatus = 'idle';
         });
 
-        let pulseColorClass = 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.7)]';
-        let pingColorClass = 'bg-rose-500';
+        let pulseColorClass = 'bg-error shadow-[0_0_10px_oklch(var(--er))]';
+        let pingColorClass = 'bg-error';
         let isOnline = false;
 
         if (groupStatus === 'online') {
-            pulseColorClass = 'bg-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.8)]';
-            pingColorClass = 'bg-sky-400';
+            pulseColorClass = 'bg-success shadow-[0_0_12px_oklch(var(--su))]';
+            pingColorClass = 'bg-success';
             isOnline = true;
         } else if (groupStatus === 'idle') {
-            pulseColorClass = 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)]';
-            pingColorClass = 'bg-amber-400';
+            pulseColorClass = 'bg-warning shadow-[0_0_10px_oklch(var(--wa))]';
+            pingColorClass = 'bg-warning';
         }
 
         const countBadgeHtml = group.clients.length > 1
-            ? `<span class="absolute -top-1.5 -right-1.5 badge badge-xs badge-primary font-mono font-bold px-1.5 py-0.5 text-[9px] shadow-md z-10">${group.clients.length}</span>`
+            ? `<span class="indicator-item badge badge-xs badge-primary font-mono font-bold text-[9px] shadow-md z-10">${group.clients.length}</span>`
             : '';
 
         const pingHtml = isOnline
@@ -611,10 +611,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const customIcon = L.divIcon({
             className: 'custom-map-marker',
-            html: `<div class="relative flex items-center justify-center cursor-pointer" style="width:24px;height:24px;">
-                     ${pingHtml}
-                     <span class="relative inline-flex rounded-full ${pulseColorClass} border-2 border-base-100" style="width:12px;height:12px;"></span>
+            html: `<div class="indicator cursor-pointer">
                      ${countBadgeHtml}
+                     <div class="relative flex items-center justify-center w-6 h-6">
+                         ${pingHtml}
+                         <span class="relative inline-flex rounded-full ${pulseColorClass} border-2 border-base-100 w-3 h-3"></span>
+                     </div>
                    </div>`,
             iconSize: [24, 24],
             iconAnchor: [12, 12]
@@ -675,13 +677,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     const activity = getClientActivity(client.last_handshake);
                     const item = document.createElement('div');
                     item.className = 'flex items-center justify-between p-2 rounded-xl bg-base-300/50 border border-base-content/5 hover:bg-base-300 transition-colors';
-                    let dotColor = 'bg-error';
-                    if (activity.status === 'online') dotColor = 'bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.8)]';
-                    else if (activity.status === 'idle') dotColor = 'bg-warning';
+                    let dotColor = 'badge-error';
+                    if (activity.status === 'online') dotColor = 'badge-success shadow-[0_0_6px_oklch(var(--su))]';
+                    else if (activity.status === 'idle') dotColor = 'badge-warning';
                     
                     item.innerHTML = `
                         <div class="flex items-center gap-2 min-w-0">
-                            <span class="w-2 h-2 rounded-full ${dotColor} shrink-0"></span>
+                            <span class="badge badge-xs ${dotColor} p-1 shrink-0"></span>
                             <div class="flex flex-col min-w-0">
                                 <span class="text-xs font-semibold truncate max-w-[130px]">${client.name}</span>
                                 <span class="text-[9px] text-base-content/40 font-mono">${client.client_ip}</span>
