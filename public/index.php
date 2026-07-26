@@ -61,7 +61,8 @@ $appName = Config::get('APP_NAME', 'Nk-VPN Panel');
  * Helper function to authenticate user from JWT or session
  * Returns user array or null if unauthorized
  */
-function authenticateRequest(): ?array {
+function authenticateRequest(): ?array
+{
     // Check JWT token in Authorization header
     $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
     if ($authHeader && preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
@@ -71,12 +72,12 @@ function authenticateRequest(): ?array {
             return $user;
         }
     }
-    
+
     // Fallback to session
     if (isset($_SESSION['user_id'])) {
         return Auth::user();
     }
-    
+
     return null;
 }
 
@@ -101,19 +102,21 @@ View::init(__DIR__ . '/../templates', [
     'languages' => Translator::getSupportedLanguages(),
     'current_uri' => $_SERVER['REQUEST_URI'] ?? '/dashboard',
     'needs_db_sync' => $needsDbSync,
-    't' => function($key, $params = []) {
+    't' => function ($key, $params = []) {
         return Translator::t($key, $params);
     }
 ]);
 
 // Helper function for redirects
-function redirect(string $to): void {
+function redirect(string $to): void
+{
     header('Location: ' . $to);
     exit;
 }
 
 // Helper function to save a global setting uniquely (handling NULL user_id index gotchas)
-function saveGlobalSetting(string $namespace, string $key, $value): void {
+function saveGlobalSetting(string $namespace, string $key, $value): void
+{
     $pdo = DB::conn();
     $stmt = $pdo->prepare("SELECT id FROM settings WHERE user_id IS NULL AND namespace = ? AND `key` = ?");
     $stmt->execute([$namespace, $key]);
@@ -127,7 +130,8 @@ function saveGlobalSetting(string $namespace, string $key, $value): void {
     }
 }
 
-function isJsonRequest(): bool {
+function isJsonRequest(): bool
+{
     $accept = $_SERVER['HTTP_ACCEPT'] ?? '';
     $requestedWith = strtolower($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '');
     return stripos($accept, 'application/json') !== false || $requestedWith === 'xmlhttprequest';
@@ -145,7 +149,7 @@ if (in_array(strtoupper($requestMethod), ['POST', 'PUT', 'DELETE', 'PATCH'], tru
         '/api/auth/token',
     ];
 
-    $isExemptRoute = in_array($requestUri, $exemptRoutes, true) 
+    $isExemptRoute = in_array($requestUri, $exemptRoutes, true)
         || str_starts_with($requestUri, '/api/webhook/')
         || str_starts_with($requestUri, '/webhook/');
 
@@ -166,7 +170,8 @@ if (in_array(strtoupper($requestMethod), ['POST', 'PUT', 'DELETE', 'PATCH'], tru
 }
 
 // Helper function to require authentication
-function requireAuth(): void {
+function requireAuth(): void
+{
     if (!Auth::check()) {
         if (isJsonRequest()) {
             http_response_code(401);
@@ -190,7 +195,8 @@ function requireAuth(): void {
 }
 
 // Helper function to require admin
-function requireAdmin(): void {
+function requireAdmin(): void
+{
     requireAuth();
     if (!Auth::isAdmin()) {
         http_response_code(403);
@@ -200,14 +206,15 @@ function requireAdmin(): void {
 }
 
 // Helper function to calculate relative active status
-function getRelativeActiveStatus(?string $lastHandshake): array {
+function getRelativeActiveStatus(?string $lastHandshake): array
+{
     if (empty($lastHandshake) || $lastHandshake === '0000-00-00 00:00:00' || $lastHandshake === '1970-01-01 00:00:00') {
         return [
             'text' => 'Never',
             'class' => 'badge-error'
         ];
     }
-    
+
     $timestamp = strtotime($lastHandshake);
     if (!$timestamp) {
         return [
@@ -215,9 +222,9 @@ function getRelativeActiveStatus(?string $lastHandshake): array {
             'class' => 'badge-error'
         ];
     }
-    
+
     $diffSeconds = time() - $timestamp;
-    
+
     if ($diffSeconds < 300) {
         return [
             'text' => 'Active now',
@@ -247,7 +254,8 @@ function getRelativeActiveStatus(?string $lastHandshake): array {
 
 
 // Helper function to get authenticated user (JWT or session)
-function getAuthUser(): ?array {
+function getAuthUser(): ?array
+{
     // Try JWT first
     $token = JWT::getTokenFromHeader();
     if ($token !== null) {
@@ -256,26 +264,27 @@ function getAuthUser(): ?array {
             return $user;
         }
     }
-    
+
     // Fall back to session
     if (Auth::check()) {
         return Auth::user();
     }
-    
+
     return null;
 }
 
 // Helper function to require authentication (JWT or session) for API
-function requireApiAuth(): ?array {
+function requireApiAuth(): ?array
+{
     $user = getAuthUser();
-    
+
     if ($user === null) {
         http_response_code(401);
         header('Content-Type: application/json');
         echo json_encode(['error' => 'Authentication required']);
         return null;
     }
-    
+
     return $user;
 }
 
@@ -302,11 +311,11 @@ Router::get('/login', function () {
 Router::post('/login', function () {
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
-    
+
     if (Auth::login($email, $password)) {
         redirect('/dashboard');
     }
-    
+
     View::render('login.twig', ['error' => 'Invalid credentials']);
 });
 
@@ -322,17 +331,17 @@ Router::post('/register', function () {
     $name = trim($_POST['name'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
-    
+
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         View::render('register.twig', ['error' => 'Invalid email address']);
         return;
     }
-    
+
     if (strlen($password) < 6) {
         View::render('register.twig', ['error' => 'Password must be at least 6 characters']);
         return;
     }
-    
+
     try {
         $success = Auth::register($name, $email, $password);
         if ($success) {
@@ -342,7 +351,7 @@ Router::post('/register', function () {
     } catch (Throwable $e) {
         // Email already exists or other error
     }
-    
+
     View::render('register.twig', ['error' => 'Registration failed. Email may already be in use.']);
 });
 
@@ -360,13 +369,13 @@ Router::get('/logout', function () {
 Router::get('/dashboard', function () {
     requireAuth();
     $user = Auth::user();
-    
+
     // Get servers (admins see all, regular users see their own)
     $servers = Auth::isAdmin() ? VpnServer::listAll() : VpnServer::listByUser($user['id']);
-    
+
     // Get clients (admins see all, regular users see their own)
     $clients = Auth::isAdmin() ? VpnClient::listAll() : VpnClient::listByUser($user['id']);
-    
+
     // Get subscription health stats
     $subStats = [
         'active' => 0,
@@ -386,15 +395,15 @@ Router::get('/dashboard', function () {
         ");
         $rowStats = $subQuery->fetch(PDO::FETCH_ASSOC);
         if ($rowStats) {
-            $subStats['active'] = (int)($rowStats['active'] ?? 0);
-            $subStats['expiring_soon'] = (int)($rowStats['expiring_soon'] ?? 0);
-            $subStats['expired'] = (int)($rowStats['expired'] ?? 0);
-            $subStats['paused'] = (int)($rowStats['paused'] ?? 0);
+            $subStats['active'] = (int) ($rowStats['active'] ?? 0);
+            $subStats['expiring_soon'] = (int) ($rowStats['expiring_soon'] ?? 0);
+            $subStats['expired'] = (int) ($rowStats['expired'] ?? 0);
+            $subStats['paused'] = (int) ($rowStats['paused'] ?? 0);
         }
     } catch (Throwable $e) {
         // Table system_settings / ext_clients might not be created yet during first load
     }
-    
+
     View::render('dashboard.twig', [
         'servers' => $servers,
         'clients' => $clients,
@@ -406,11 +415,11 @@ Router::get('/dashboard', function () {
 Router::get('/servers', function () {
     requireAuth();
     $user = Auth::user();
-    
-    $servers = Auth::isAdmin() 
-        ? VpnServer::listAll() 
+
+    $servers = Auth::isAdmin()
+        ? VpnServer::listAll()
         : VpnServer::listByUser($user['id']);
-    
+
     View::render('servers/index.twig', ['servers' => $servers]);
 });
 
@@ -451,8 +460,8 @@ Router::post('/servers/ext-mapping', function () {
         $stmtUpd = $pdo->prepare("UPDATE vpn_servers SET ext_server_id = ? WHERE id = ?");
 
         foreach ($extMappings as $serverId => $extId) {
-            $serverId = (int)$serverId;
-            $extId = ($extId !== '' && $extId !== null) ? (int)$extId : null;
+            $serverId = (int) $serverId;
+            $extId = ($extId !== '' && $extId !== null) ? (int) $extId : null;
             $stmtUpd->execute([$extId, $serverId]);
         }
 
@@ -505,7 +514,7 @@ Router::post('/api/backups/ext-db/create', function () {
 // API / Action: Restore standalone External DB Backup
 Router::post('/api/backups/ext-db/restore/{id}', function ($params) {
     requireAdmin();
-    $backupId = (int)$params['id'];
+    $backupId = (int) $params['id'];
 
     try {
         $pdo = DB::conn();
@@ -543,7 +552,7 @@ Router::post('/api/backups/ext-db/restore/{id}', function ($params) {
 // Download backup by ID
 Router::get('/backups/{id}/download', function ($params) {
     requireAdmin();
-    $id = (int)$params['id'];
+    $id = (int) $params['id'];
     $pdo = DB::conn();
 
     $stmt = $pdo->prepare("SELECT backup_path, backup_name FROM server_backups WHERE id = ?");
@@ -569,11 +578,11 @@ Router::get('/backups/{id}/download', function ($params) {
 // Delete backup by ID (POST)
 Router::post('/api/backups/{id}', function ($params) {
     requireAdmin();
-    $id = (int)$params['id'];
+    $id = (int) $params['id'];
 
     try {
         VpnServer::deleteBackup($id);
-        
+
         if (isJsonRequest()) {
             header('Content-Type: application/json');
             echo json_encode(['success' => true, 'message' => 'Backup deleted successfully']);
@@ -601,7 +610,7 @@ Router::post('/api/servers/sync-ext-ids', function () {
 
     try {
         $syncedCount = ExtDB::syncAllClientServerIds();
-        
+
         if (isJsonRequest()) {
             header('Content-Type: application/json');
             echo json_encode(['success' => true, 'count' => $syncedCount]);
@@ -633,18 +642,18 @@ Router::get('/servers/create', function () {
 Router::post('/servers/create', function () {
     requireAuth();
     $user = Auth::user();
-    
+
     $name = trim($_POST['name'] ?? '');
     $host = trim($_POST['host'] ?? '');
-    $port = (int)($_POST['port'] ?? 22);
+    $port = (int) ($_POST['port'] ?? 22);
     $username = trim($_POST['username'] ?? 'root');
     $password = $_POST['password'] ?? '';
-    
+
     if (empty($name) || empty($host) || empty($password)) {
         View::render('servers/create.twig', ['error' => 'All fields are required']);
         return;
     }
-    
+
     try {
         $serverId = VpnServer::create([
             'user_id' => $user['id'],
@@ -653,14 +662,14 @@ Router::post('/servers/create', function () {
             'port' => $port,
             'username' => $username,
             'password' => $password,
-            'vpn_port' => !empty($_POST['vpn_port']) ? (int)$_POST['vpn_port'] : NULL,
+            'vpn_port' => !empty($_POST['vpn_port']) ? (int) $_POST['vpn_port'] : NULL,
             'mimicry_type' => $_POST['mimicry_type'] ?? 'quic'
         ]);
-        
+
         // Handle import if enabled
         if (!empty($_POST['enable_import']) && !empty($_POST['panel_type']) && isset($_FILES['backup_file'])) {
             $panelType = $_POST['panel_type'];
-            
+
             if (in_array($panelType, ['wg-easy', '3x-ui']) && $_FILES['backup_file']['error'] === UPLOAD_ERR_OK) {
                 // Store import info in session for processing after deployment
                 $_SESSION['pending_import'] = [
@@ -671,7 +680,7 @@ Router::post('/servers/create', function () {
                 ];
             }
         }
-        
+
         redirect('/servers/' . $serverId . '/deploy');
     } catch (Exception $e) {
         View::render('servers/create.twig', ['error' => $e->getMessage()]);
@@ -682,7 +691,7 @@ Router::post('/servers/create', function () {
 Router::post('/servers/{id}/delete', function ($params) {
     requireAuth();
     $user = Auth::user();
-    $serverId = (int)$params['id'];
+    $serverId = (int) $params['id'];
     $isAjax = isJsonRequest();
 
     // Require password confirmation
@@ -728,12 +737,12 @@ Router::post('/servers/{id}/delete', function ($params) {
 // Deploy server page
 Router::get('/servers/{id}/deploy', function ($params) {
     requireAuth();
-    $serverId = (int)$params['id'];
-    
+    $serverId = (int) $params['id'];
+
     try {
         $server = new VpnServer($serverId);
         $serverData = $server->getData();
-        
+
         // Check ownership
         $user = Auth::user();
         if ($serverData['user_id'] != $user['id'] && !Auth::isAdmin()) {
@@ -741,7 +750,7 @@ Router::get('/servers/{id}/deploy', function ($params) {
             echo 'Forbidden';
             return;
         }
-        
+
         View::render('servers/deploy.twig', ['server' => $serverData]);
     } catch (Exception $e) {
         http_response_code(404);
@@ -753,14 +762,14 @@ Router::get('/servers/{id}/deploy', function ($params) {
 Router::post('/servers/{id}/deploy', function ($params) {
     requireAuth();
     header('Content-Type: application/json');
-    
-    $serverId = (int)$params['id'];
+
+    $serverId = (int) $params['id'];
     ob_start();
-    
+
     try {
         $server = new VpnServer($serverId);
         $serverData = $server->getData();
-        
+
         // Check ownership
         $user = Auth::user();
         if ($serverData['user_id'] != $user['id'] && !Auth::isAdmin()) {
@@ -768,9 +777,9 @@ Router::post('/servers/{id}/deploy', function ($params) {
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
-        
+
         $result = $server->deploy();
-        $unexpectedOutput = trim((string)ob_get_clean());
+        $unexpectedOutput = trim((string) ob_get_clean());
         if ($unexpectedOutput !== '') {
             error_log('Deploy produced non-JSON output: ' . substr($unexpectedOutput, 0, 1000));
             http_response_code(500);
@@ -783,7 +792,7 @@ Router::post('/servers/{id}/deploy', function ($params) {
         }
         echo json_encode($result);
     } catch (Throwable $e) {
-        $unexpectedOutput = trim((string)ob_get_clean());
+        $unexpectedOutput = trim((string) ob_get_clean());
         http_response_code(500);
         error_log('Deploy failed: ' . $e->getMessage() . ' at ' . $e->getFile() . ':' . $e->getLine());
         if ($unexpectedOutput !== '') {
@@ -800,13 +809,13 @@ Router::post('/servers/{id}/deploy', function ($params) {
 // Update server bot access control settings
 Router::post('/servers/{id}/access-control', function ($params) {
     requireAdmin();
-    $serverId = (int)$params['id'];
-    
+    $serverId = (int) $params['id'];
+
     $showInBot = isset($_POST['show_in_bot']) ? 1 : 0;
     $allowedClients = trim($_POST['allowed_clients'] ?? '');
     $blockedClients = trim($_POST['blocked_clients'] ?? '');
     $description = trim($_POST['description'] ?? '');
-    
+
     try {
         $pdo = DB::conn();
         $stmt = $pdo->prepare("
@@ -815,7 +824,7 @@ Router::post('/servers/{id}/access-control', function ($params) {
             WHERE id = ?
         ");
         $stmt->execute([$showInBot, $allowedClients, $blockedClients, $description, $serverId]);
-        
+
         $_SESSION['success_message'] = 'Bot access control settings updated successfully';
         redirect('/servers/' . $serverId);
     } catch (Exception $e) {
@@ -827,12 +836,12 @@ Router::post('/servers/{id}/access-control', function ($params) {
 // View server
 Router::get('/servers/{id}', function ($params) {
     requireAuth();
-    $serverId = (int)$params['id'];
-    
+    $serverId = (int) $params['id'];
+
     try {
         $server = new VpnServer($serverId);
         $serverData = $server->getData();
-        
+
         // Check ownership
         $user = Auth::user();
         if ($serverData['user_id'] != $user['id'] && !Auth::isAdmin()) {
@@ -840,35 +849,35 @@ Router::get('/servers/{id}', function ($params) {
             echo 'Forbidden';
             return;
         }
-        
+
         // Get clients for this server
         $clients = VpnClient::listByServer($serverId);
-        
+
         // Check for pending import
         $importMessage = null;
         if (!empty($_SESSION['pending_import']) && $_SESSION['pending_import']['server_id'] == $serverId) {
             $pendingImport = $_SESSION['pending_import'];
-            
+
             // Only process import if server is active
             if ($serverData['status'] === 'active') {
                 try {
                     $backupContent = file_get_contents($pendingImport['backup_file']);
-                    
+
                     $importer = new PanelImporter($serverId, $user['id'], $pendingImport['panel_type']);
                     $importer->parseBackupFile($backupContent);
                     $result = $importer->import();
-                    
+
                     if ($result['success']) {
                         $importMessage = [
                             'type' => 'success',
                             'text' => "Successfully imported {$result['imported_count']} clients"
                         ];
                     }
-                    
+
                     // Clean up
                     @unlink($pendingImport['backup_file']);
                     unset($_SESSION['pending_import']);
-                    
+
                 } catch (Exception $e) {
                     $importMessage = [
                         'type' => 'error',
@@ -876,17 +885,17 @@ Router::get('/servers/{id}', function ($params) {
                     ];
                     unset($_SESSION['pending_import']);
                 }
-                
+
                 // Refresh clients list after import
                 $clients = VpnClient::listByServer($serverId);
             }
         }
-        
+
         $agentOnline = false;
         if (!empty($serverData['last_check_at'])) {
             $agentOnline = (time() - strtotime($serverData['last_check_at'])) < 120;
         }
-        
+
         View::render('servers/view.twig', [
             'server' => $serverData,
             'clients' => $clients,
@@ -907,37 +916,37 @@ Router::get('/servers/{id}', function ($params) {
 // Create client for server
 Router::post('/servers/{id}/clients/create', function ($params) {
     requireAuth();
-    $serverId = (int)$params['id'];
+    $serverId = (int) $params['id'];
     $clientName = trim($_POST['name'] ?? '');
-    
+
     // Handle expiration: either from dropdown (days) or custom input (seconds)
     $expiresInDays = null;
     if (!empty($_POST['expires_in_seconds'])) {
         // Convert seconds to days (round up)
-        $expiresInDays = (int)ceil((int)$_POST['expires_in_seconds'] / 86400);
+        $expiresInDays = (int) ceil((int) $_POST['expires_in_seconds'] / 86400);
     } elseif (!empty($_POST['expires_in_days']) && $_POST['expires_in_days'] !== 'custom') {
-        $expiresInDays = (int)$_POST['expires_in_days'];
+        $expiresInDays = (int) $_POST['expires_in_days'];
     }
-    
+
     // Handle traffic limit: either from dropdown (GB) or custom input (MB)
     $trafficLimitBytes = null;
     if (!empty($_POST['traffic_limit_mb'])) {
         // Convert MB to bytes
-        $trafficLimitBytes = (int)((float)$_POST['traffic_limit_mb'] * 1048576);
+        $trafficLimitBytes = (int) ((float) $_POST['traffic_limit_mb'] * 1048576);
     } elseif (!empty($_POST['traffic_limit_gb']) && $_POST['traffic_limit_gb'] !== 'custom') {
         // Convert GB to bytes
-        $trafficLimitBytes = (int)((float)$_POST['traffic_limit_gb'] * 1073741824);
+        $trafficLimitBytes = (int) ((float) $_POST['traffic_limit_gb'] * 1073741824);
     }
-    
+
     if (empty($clientName)) {
         redirect('/servers/' . $serverId . '?error=Client+name+is+required');
         return;
     }
-    
+
     try {
         $server = new VpnServer($serverId);
         $serverData = $server->getData();
-        
+
         // Check ownership
         $user = Auth::user();
         if ($serverData['user_id'] != $user['id'] && !Auth::isAdmin()) {
@@ -945,9 +954,9 @@ Router::post('/servers/{id}/clients/create', function ($params) {
             echo 'Forbidden';
             return;
         }
-        
+
         $clientId = VpnClient::create($serverId, $user['id'], $clientName, $expiresInDays);
-        
+
         // Set traffic limit if specified
         if ($trafficLimitBytes !== null && $trafficLimitBytes > 0) {
             $client = new VpnClient($clientId);
@@ -975,7 +984,7 @@ Router::post('/servers/{id}/clients/create', function ($params) {
                 error_log('Auto-link on create failed for client ' . $clientId . ': ' . $e->getMessage());
             }
         }
-        
+
         redirect('/clients/' . $clientId);
     } catch (Exception $e) {
         redirect('/servers/' . $serverId . '?error=' . urlencode($e->getMessage()));
@@ -986,19 +995,19 @@ Router::post('/servers/{id}/clients/create', function ($params) {
 Router::get('/clients', function () {
     requireAuth();
 
-    $search     = trim($_GET['search'] ?? '');
+    $search = trim($_GET['search'] ?? '');
     $codeFilter = trim($_GET['code'] ?? '');
-    $filter     = trim($_GET['filter'] ?? 'all');
-    $sort       = trim($_GET['sort'] ?? 'code');
-    $page       = max(1, (int)($_GET['page'] ?? 1));
-    $perPage    = 30;
-    $offset     = ($page - 1) * $perPage;
+    $filter = trim($_GET['filter'] ?? 'all');
+    $sort = trim($_GET['sort'] ?? 'code');
+    $page = max(1, (int) ($_GET['page'] ?? 1));
+    $perPage = 30;
+    $offset = ($page - 1) * $perPage;
 
-    $clients      = [];
-    $totalCount   = 0;
-    $totalPages   = 1;
-    $extDbError   = null;
-    $lastSync     = null;
+    $clients = [];
+    $totalCount = 0;
+    $totalPages = 1;
+    $extDbError = null;
+    $lastSync = null;
 
     // Check PostgreSQL connection status for header warning only
     try {
@@ -1018,21 +1027,13 @@ Router::get('/clients', function () {
             if ($lastSyncVal) {
                 $lastSync = date('d.m.Y H:i', strtotime($lastSyncVal));
             }
-        } catch (Throwable $e) {}
-
-        // Auto-sync payment info if external DB is reachable and local payment dates are not populated yet
-        try {
-            $chkPay = $pdo->query("SELECT COUNT(*) FROM ext_clients WHERE last_payment_date IS NOT NULL");
-            if ((int)$chkPay->fetchColumn() === 0 && ExtDB::isAvailable()) {
-                ExtDB::sync();
-            }
-        } catch (Throwable $e) {}
+        } catch (Throwable $e) {
+        }
 
         if ($codeFilter !== '') {
             // Exact match for the code filter
             $stmt = $pdo->prepare('
                 SELECT ec.code AS "Code", ec.name, ec.start_date, ec.sub, ec.func, ec.router, ec.bytes_sent, ec.bytes_received,
-                       ec.last_payment_date, ec.last_payment_amount,
                        r.id AS router_id, r.domain AS router_domain, r.status AS router_status, r.error_message AS router_error
                 FROM ext_clients ec
                 LEFT JOIN routers r ON r.ext_client_code = ec.code
@@ -1042,10 +1043,10 @@ Router::get('/clients', function () {
             $rowExt = $stmt->fetch();
             if ($rowExt) {
                 $totalCount = 1;
-                $rawCodes   = [$rowExt];
+                $rawCodes = [$rowExt];
             } else {
                 $totalCount = 0;
-                $rawCodes   = [];
+                $rawCodes = [];
             }
         } else {
             // Build WHERE clauses dynamically based on search & status filter
@@ -1080,9 +1081,9 @@ Router::get('/clients', function () {
             } elseif ($sort === 'expiry_desc') {
                 $orderBy = "CASE WHEN ec.func = 'WORK' AND ec.start_date IS NOT NULL AND ec.sub IS NOT NULL AND ec.sub > 0 THEN DATE_ADD(ec.start_date, INTERVAL (ec.sub * 30) DAY) ELSE '1970-01-01' END DESC, ec.code ASC";
             } elseif ($sort === 'payment_desc') {
-                $orderBy = "ec.last_payment_date DESC, ec.code ASC";
+                $orderBy = "CASE WHEN ec.last_payment_date IS NOT NULL THEN ec.last_payment_date ELSE '1970-01-01' END DESC, ec.code ASC";
             } elseif ($sort === 'payment_asc') {
-                $orderBy = "ec.last_payment_date ASC, ec.code ASC";
+                $orderBy = "CASE WHEN ec.last_payment_date IS NOT NULL THEN ec.last_payment_date ELSE '9999-12-31' END ASC, ec.code ASC";
             } elseif ($sort === 'traffic_desc') {
                 $orderBy = "(ec.bytes_sent + ec.bytes_received) DESC, ec.code ASC";
             } elseif ($sort === 'traffic_asc') {
@@ -1098,7 +1099,7 @@ Router::get('/clients', function () {
             ";
             $stmtCount = $pdo->prepare($countSql);
             $stmtCount->execute($queryParams);
-            $totalCount = (int)$stmtCount->fetchColumn();
+            $totalCount = (int) $stmtCount->fetchColumn();
 
             // Fetch list
             $selectSql = "
@@ -1122,7 +1123,7 @@ Router::get('/clients', function () {
             $stmt->execute();
             $rawCodes = $stmt->fetchAll();
         }
-        $totalPages = max(1, (int)ceil($totalCount / $perPage));
+        $totalPages = max(1, (int) ceil($totalCount / $perPage));
 
         // For each code, count and list linked vpn_clients in MySQL
         foreach ($rawCodes as $row) {
@@ -1171,10 +1172,10 @@ Router::get('/clients', function () {
                 $startDate = $row['start_date'] ?? null;
                 $sub = $row['sub'] ?? null;
                 if ($startDate && $sub !== null && $sub > 0) {
-                    $daysToAdd = (int)$sub * 30;
+                    $daysToAdd = (int) $sub * 30;
                     $expiryTimestamp = strtotime($startDate . " + $daysToAdd days");
                     $expiryDate = date('d.m.Y', $expiryTimestamp);
-                    $daysLeft = (int)round(($expiryTimestamp - strtotime(date('Y-m-d'))) / 86400);
+                    $daysLeft = (int) round(($expiryTimestamp - strtotime(date('Y-m-d'))) / 86400);
                 }
             }
 
@@ -1187,7 +1188,7 @@ Router::get('/clients', function () {
                     $lastPayDateFormatted = date('d.m.Y', $ts);
                 }
             }
-            $lastPayAmount = isset($row['last_payment_amount']) && $row['last_payment_amount'] !== null ? (float)$row['last_payment_amount'] : null;
+            $lastPayAmount = isset($row['last_payment_amount']) && $row['last_payment_amount'] !== null ? (float) $row['last_payment_amount'] : null;
             $lastPaymentFormatted = null;
             if ($lastPayAmount !== null) {
                 $decimals = ($lastPayAmount == floor($lastPayAmount)) ? 0 : 2;
@@ -1195,26 +1196,26 @@ Router::get('/clients', function () {
             }
 
             $clients[] = [
-                'Code'                  => $code,
-                'Name'                  => $row['name'] ?? null,
-                'Func'                  => $row['func'] ?? null,
-                'Router'                => $row['router'] ?? null,
-                'ExpiryDate'            => $expiryDate,
-                'DaysLeft'              => $daysLeft,
-                'LastPaymentDate'       => $lastPayDate,
+                'Code' => $code,
+                'Name' => $row['name'] ?? null,
+                'Func' => $row['func'] ?? null,
+                'Router' => $row['router'] ?? null,
+                'ExpiryDate' => $expiryDate,
+                'DaysLeft' => $daysLeft,
+                'LastPaymentDate' => $lastPayDate,
                 'LastPaymentDateFormatted' => $lastPayDateFormatted,
-                'LastPaymentAmount'     => $lastPayAmount,
-                'LastPaymentFormatted'  => $lastPaymentFormatted,
-                'BytesSent'             => (int)($row['bytes_sent'] ?? 0),
-                'BytesReceived'         => (int)($row['bytes_received'] ?? 0),
-                'configs'               => $processedConfigs,
-                'config_count'          => count($configs),
-                'LastActiveText'        => $clientLastActive['text'],
-                'LastActiveClass'       => $clientLastActive['class'],
-                'router_id'             => $row['router_id'] ?? null,
-                'router_domain'         => $row['router_domain'] ?? null,
-                'router_status'         => $row['router_status'] ?? null,
-                'router_error'          => $row['router_error'] ?? null,
+                'LastPaymentAmount' => $lastPayAmount,
+                'LastPaymentFormatted' => $lastPaymentFormatted,
+                'BytesSent' => (int) ($row['bytes_sent'] ?? 0),
+                'BytesReceived' => (int) ($row['bytes_received'] ?? 0),
+                'configs' => $processedConfigs,
+                'config_count' => count($configs),
+                'LastActiveText' => $clientLastActive['text'],
+                'LastActiveClass' => $clientLastActive['class'],
+                'router_id' => $row['router_id'] ?? null,
+                'router_domain' => $row['router_domain'] ?? null,
+                'router_status' => $row['router_status'] ?? null,
+                'router_error' => $row['router_error'] ?? null,
             ];
         }
     } catch (Throwable $e) {
@@ -1253,17 +1254,17 @@ Router::get('/clients', function () {
     $allServers = Auth::isAdmin() ? VpnServer::listAll() : VpnServer::listByUser($user['id']);
 
     View::render('clients/index.twig', [
-        'clients'      => $clients,
-        'total_count'  => $totalCount,
-        'total_pages'  => $totalPages,
+        'clients' => $clients,
+        'total_count' => $totalCount,
+        'total_pages' => $totalPages,
         'current_page' => $page,
-        'search'       => $search,
-        'filter'       => $filter,
-        'sort'         => $sort,
-        'last_sync'    => $lastSync,
-        'code_filter'  => $codeFilter,
+        'search' => $search,
+        'filter' => $filter,
+        'sort' => $sort,
+        'last_sync' => $lastSync,
+        'code_filter' => $codeFilter,
         'code_configs' => $codeConfigs,
-        'all_servers'  => $allServers,
+        'all_servers' => $allServers,
         'ext_db_error' => $extDbError,
     ]);
 });
@@ -1273,8 +1274,8 @@ Router::get('/api/ext-clients/search', function () {
     requireAuth();
     header('Content-Type: application/json');
 
-    $q     = trim($_GET['q'] ?? '');
-    $limit = min(20, max(1, (int)($_GET['limit'] ?? 15)));
+    $q = trim($_GET['q'] ?? '');
+    $limit = min(20, max(1, (int) ($_GET['limit'] ?? 15)));
 
     try {
         $pdo = DB::conn();
@@ -1307,12 +1308,12 @@ Router::post('/api/ext-clients/sync', function () {
 // View client
 Router::get('/clients/{id}', function ($params) {
     requireAuth();
-    $clientId = (int)$params['id'];
-    
+    $clientId = (int) $params['id'];
+
     try {
         $client = new VpnClient($clientId);
         $clientData = $client->getData();
-        
+
         // Check ownership
         $user = Auth::user();
         if ($clientData['user_id'] != $user['id'] && !Auth::isAdmin()) {
@@ -1321,11 +1322,11 @@ Router::get('/clients/{id}', function ($params) {
             return;
         }
         $stats = $client->getFormattedStats();
-        
+
         // Fetch server details for client breadcrumbs
         $server = new VpnServer($clientData['server_id']);
         $serverData = $server->getData();
-        
+
         // Fetch external client details if linked
         $extClient = null;
         if (!empty($clientData['ext_client_code'])) {
@@ -1341,35 +1342,35 @@ Router::get('/clients/{id}', function ($params) {
                     $startDate = $rowExt['start_date'] ?? null;
                     $sub = $rowExt['sub'] ?? null;
                     if ($startDate && $sub !== null && $sub > 0) {
-                        $daysToAdd = (int)$sub * 30;
+                        $daysToAdd = (int) $sub * 30;
                         $expiryTimestamp = strtotime($startDate . " + $daysToAdd days");
                         $expiryDate = date('d.m.Y', $expiryTimestamp);
-                        $daysLeft = (int)round(($expiryTimestamp - strtotime(date('Y-m-d'))) / 86400);
+                        $daysLeft = (int) round(($expiryTimestamp - strtotime(date('Y-m-d'))) / 86400);
                     }
                 }
 
                 $extClient = [
-                    'code'        => $rowExt['code'],
-                    'name'        => $rowExt['name'],
-                    'start_date'  => $rowExt['start_date'],
-                    'sub'         => $rowExt['sub'],
-                    'func'        => $rowExt['func'],
-                    'router'      => $rowExt['router'],
-                    'bytes_sent'  => (int)($rowExt['bytes_sent'] ?? 0),
-                    'bytes_received' => (int)($rowExt['bytes_received'] ?? 0),
+                    'code' => $rowExt['code'],
+                    'name' => $rowExt['name'],
+                    'start_date' => $rowExt['start_date'],
+                    'sub' => $rowExt['sub'],
+                    'func' => $rowExt['func'],
+                    'router' => $rowExt['router'],
+                    'bytes_sent' => (int) ($rowExt['bytes_sent'] ?? 0),
+                    'bytes_received' => (int) ($rowExt['bytes_received'] ?? 0),
                     'expiry_date' => $expiryDate,
-                    'days_left'   => $daysLeft,
+                    'days_left' => $daysLeft,
                 ];
             }
         }
-        
+
         $router = null;
         if (!empty($clientData['ext_client_code'])) {
             $stmtRouter = $pdo->prepare('SELECT * FROM routers WHERE ext_client_code = ? LIMIT 1');
             $stmtRouter->execute([$clientData['ext_client_code']]);
             $router = $stmtRouter->fetch() ?: null;
         }
-        
+
         $pdo = DB::conn();
         $stmtAllExt = $pdo->query('SELECT code, name FROM ext_clients ORDER BY code ASC');
         $allExtClients = $stmtAllExt->fetchAll(PDO::FETCH_ASSOC);
@@ -1391,12 +1392,12 @@ Router::get('/clients/{id}', function ($params) {
 // Update client settings
 Router::post('/clients/{id}/update', function ($params) {
     requireAuth();
-    $clientId = (int)$params['id'];
-    
+    $clientId = (int) $params['id'];
+
     try {
         $client = new VpnClient($clientId);
         $clientData = $client->getData();
-        
+
         // Check ownership
         $user = Auth::user();
         if ($clientData['user_id'] != $user['id'] && !Auth::isAdmin()) {
@@ -1423,21 +1424,21 @@ Router::post('/clients/{id}/update', function ($params) {
                 }
             }
         }
-        
+
         if (!empty($_POST['add_days'])) {
             if ($_POST['add_days'] === 'remove') {
                 VpnClient::setExpiration($clientId, null);
             } else {
-                $days = $_POST['add_days'] === 'custom' ? max(1, (int)($_POST['custom_seconds'] / 86400)) : (int)$_POST['add_days'];
+                $days = $_POST['add_days'] === 'custom' ? max(1, (int) ($_POST['custom_seconds'] / 86400)) : (int) $_POST['add_days'];
                 VpnClient::extendExpiration($clientId, $days);
             }
         }
-        
+
         if (!empty($_POST['new_limit_gb'])) {
             if ($_POST['new_limit_gb'] === 'remove') {
                 $client->setTrafficLimit(null);
             } else {
-                $mb = $_POST['new_limit_gb'] === 'custom' ? (int)$_POST['custom_mb'] : (int)$_POST['new_limit_gb'] * 1024;
+                $mb = $_POST['new_limit_gb'] === 'custom' ? (int) $_POST['custom_mb'] : (int) $_POST['new_limit_gb'] * 1024;
                 if ($mb > 0) {
                     $client->setTrafficLimit($mb * 1024 * 1024);
                 }
@@ -1453,12 +1454,12 @@ Router::post('/clients/{id}/update', function ($params) {
 // Download client config
 Router::get('/clients/{id}/download', function ($params) {
     requireAuth();
-    $clientId = (int)$params['id'];
-    
+    $clientId = (int) $params['id'];
+
     try {
         $client = new VpnClient($clientId);
         $clientData = $client->getData();
-        
+
         // Check ownership
         $user = Auth::user();
         if ($clientData['user_id'] != $user['id'] && !Auth::isAdmin()) {
@@ -1466,9 +1467,9 @@ Router::get('/clients/{id}/download', function ($params) {
             echo 'Forbidden';
             return;
         }
-        
+
         $config = $client->getConfig();
-        
+
         // Check if name contains non-Latin characters
         $hasNonLatin = preg_match('/[^a-zA-Z0-9_-]/', $clientData['name']);
         if ($hasNonLatin) {
@@ -1478,7 +1479,7 @@ Router::get('/clients/{id}/download', function ($params) {
             // Use client name for Latin characters
             $filename = $clientData['name'] . '.conf';
         }
-        
+
         header('Content-Type: application/octet-stream');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
         header('Content-Length: ' . strlen($config));
@@ -1492,12 +1493,12 @@ Router::get('/clients/{id}/download', function ($params) {
 // Revoke client access
 Router::post('/clients/{id}/revoke', function ($params) {
     requireAuth();
-    $clientId = (int)$params['id'];
-    
+    $clientId = (int) $params['id'];
+
     try {
         $client = new VpnClient($clientId);
         $clientData = $client->getData();
-        
+
         // Check ownership
         $user = Auth::user();
         if ($clientData['user_id'] != $user['id'] && !Auth::isAdmin()) {
@@ -1505,7 +1506,7 @@ Router::post('/clients/{id}/revoke', function ($params) {
             echo 'Forbidden';
             return;
         }
-        
+
         if ($client->revoke()) {
             redirect('/servers/' . $clientData['server_id'] . '?success=Client+revoked');
         } else {
@@ -1519,12 +1520,12 @@ Router::post('/clients/{id}/revoke', function ($params) {
 // Restore client access
 Router::post('/clients/{id}/restore', function ($params) {
     requireAuth();
-    $clientId = (int)$params['id'];
-    
+    $clientId = (int) $params['id'];
+
     try {
         $client = new VpnClient($clientId);
         $clientData = $client->getData();
-        
+
         // Check ownership
         $user = Auth::user();
         if ($clientData['user_id'] != $user['id'] && !Auth::isAdmin()) {
@@ -1532,7 +1533,7 @@ Router::post('/clients/{id}/restore', function ($params) {
             echo 'Forbidden';
             return;
         }
-        
+
         if ($client->restore()) {
             redirect('/servers/' . $clientData['server_id'] . '?success=Client+restored');
         } else {
@@ -1546,12 +1547,12 @@ Router::post('/clients/{id}/restore', function ($params) {
 // Delete client
 Router::post('/clients/{id}/delete', function ($params) {
     requireAuth();
-    $clientId = (int)$params['id'];
-    
+    $clientId = (int) $params['id'];
+
     try {
         $client = new VpnClient($clientId);
         $clientData = $client->getData();
-        
+
         // Check ownership
         $user = Auth::user();
         if ($clientData['user_id'] != $user['id'] && !Auth::isAdmin()) {
@@ -1559,9 +1560,9 @@ Router::post('/clients/{id}/delete', function ($params) {
             echo 'Forbidden';
             return;
         }
-        
+
         $serverId = $clientData['server_id'];
-        
+
         if ($client->delete()) {
             redirect('/servers/' . $serverId . '?success=Client+deleted');
         } else {
@@ -1575,14 +1576,14 @@ Router::post('/clients/{id}/delete', function ($params) {
 // Sync client stats
 Router::post('/clients/{id}/sync-stats', function ($params) {
     requireAuth();
-    $clientId = (int)$params['id'];
-    
+    $clientId = (int) $params['id'];
+
     header('Content-Type: application/json');
-    
+
     try {
         $client = new VpnClient($clientId);
         $clientData = $client->getData();
-        
+
         // Check ownership
         $user = Auth::user();
         if ($clientData['user_id'] != $user['id'] && !Auth::isAdmin()) {
@@ -1590,7 +1591,7 @@ Router::post('/clients/{id}/sync-stats', function ($params) {
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
-        
+
         if ($client->syncStats()) {
             // Reload client data
             $client = new VpnClient($clientId);
@@ -1608,12 +1609,12 @@ Router::post('/clients/{id}/sync-stats', function ($params) {
 // Reset traffic stats for client
 Router::post('/clients/{id}/reset-traffic', function ($params) {
     requireAuth();
-    $clientId = (int)$params['id'];
-    
+    $clientId = (int) $params['id'];
+
     try {
         $client = new VpnClient($clientId);
         $clientData = $client->getData();
-        
+
         // Check ownership
         $user = Auth::user();
         if ($clientData['user_id'] != $user['id'] && !Auth::isAdmin()) {
@@ -1621,18 +1622,18 @@ Router::post('/clients/{id}/reset-traffic', function ($params) {
             echo 'Forbidden';
             return;
         }
-        
+
         $pdo = DB::conn();
         $pdo->beginTransaction();
-        
+
         // 1. Reset client config traffic in vpn_clients
         $stmt = $pdo->prepare('UPDATE vpn_clients SET bytes_sent = 0, bytes_received = 0 WHERE id = ?');
         $stmt->execute([$clientId]);
-        
+
         // 2. Clear speed raw metrics in client_metrics
         $stmt = $pdo->prepare('DELETE FROM client_metrics WHERE client_id = ?');
         $stmt->execute([$clientId]);
-        
+
         // 3. Reset aggregate traffic in ext_clients to SUM of its linked configs
         if (!empty($clientData['ext_client_code'])) {
             $stmtExt = $pdo->prepare('
@@ -1644,7 +1645,7 @@ Router::post('/clients/{id}/reset-traffic', function ($params) {
             ');
             $stmtExt->execute([$clientData['ext_client_code']]);
         }
-        
+
         $pdo->commit();
         redirect('/clients/' . $clientId . '?success=Traffic+stats+reset');
     } catch (Exception $e) {
@@ -1658,12 +1659,12 @@ Router::post('/clients/{id}/reset-traffic', function ($params) {
 // Reset all clients traffic stats for server
 Router::post('/servers/{id}/reset-all-traffic', function ($params) {
     requireAuth();
-    $serverId = (int)$params['id'];
-    
+    $serverId = (int) $params['id'];
+
     try {
         $server = new VpnServer($serverId);
         $serverData = $server->getData();
-        
+
         // Check ownership
         $user = Auth::user();
         if ($serverData['user_id'] != $user['id'] && !Auth::isAdmin()) {
@@ -1671,21 +1672,21 @@ Router::post('/servers/{id}/reset-all-traffic', function ($params) {
             echo 'Forbidden';
             return;
         }
-        
+
         $pdo = DB::conn();
         $pdo->beginTransaction();
-        
+
         // 1. Reset client config traffic in vpn_clients for all clients on this server
         $stmt = $pdo->prepare('UPDATE vpn_clients SET bytes_sent = 0, bytes_received = 0 WHERE server_id = ?');
         $stmt->execute([$serverId]);
-        
+
         // 2. Clear speed raw metrics in client_metrics for all clients on this server
         $stmt = $pdo->prepare('
             DELETE FROM client_metrics 
             WHERE client_id IN (SELECT id FROM vpn_clients WHERE server_id = ?)
         ');
         $stmt->execute([$serverId]);
-        
+
         // 3. Reset aggregate traffic in ext_clients to SUM of linked configs
         $stmtExt = $pdo->prepare('
             UPDATE ext_clients ec
@@ -1695,7 +1696,7 @@ Router::post('/servers/{id}/reset-all-traffic', function ($params) {
             WHERE ec.code IN (SELECT DISTINCT ext_client_code FROM vpn_clients WHERE server_id = ? AND ext_client_code IS NOT NULL AND ext_client_code != "")
         ');
         $stmtExt->execute([$serverId]);
-        
+
         $pdo->commit();
         redirect('/servers/' . $serverId . '?success=All+client+traffic+stats+reset');
     } catch (Exception $e) {
@@ -1709,14 +1710,14 @@ Router::post('/servers/{id}/reset-all-traffic', function ($params) {
 // Sync all stats for server
 Router::post('/servers/{id}/sync-stats', function ($params) {
     requireAuth();
-    $serverId = (int)$params['id'];
-    
+    $serverId = (int) $params['id'];
+
     header('Content-Type: application/json');
-    
+
     try {
         $server = new VpnServer($serverId);
         $serverData = $server->getData();
-        
+
         // Check ownership
         $user = Auth::user();
         if ($serverData['user_id'] != $user['id'] && !Auth::isAdmin()) {
@@ -1724,7 +1725,7 @@ Router::post('/servers/{id}/sync-stats', function ($params) {
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
-        
+
         $synced = VpnClient::syncAllStatsForServer($serverId);
         echo json_encode(['success' => true, 'synced' => $synced]);
     } catch (Exception $e) {
@@ -1736,14 +1737,14 @@ Router::post('/servers/{id}/sync-stats', function ($params) {
 // Deploy monitoring agent for server
 Router::post('/servers/{id}/deploy-monitoring', function ($params) {
     requireAuth();
-    $serverId = (int)$params['id'];
-    
+    $serverId = (int) $params['id'];
+
     header('Content-Type: application/json');
-    
+
     try {
         $server = new VpnServer($serverId);
         $serverData = $server->getData();
-        
+
         // Check ownership
         $user = Auth::user();
         if ($serverData['user_id'] != $user['id'] && !Auth::isAdmin()) {
@@ -1751,12 +1752,12 @@ Router::post('/servers/{id}/deploy-monitoring', function ($params) {
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
-        
+
         $scheme = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
         $panelUrl = $scheme . '://' . $_SERVER['HTTP_HOST'];
-        
+
         $server->deployMonitoringAgent($panelUrl);
-        
+
         echo json_encode(['success' => true]);
     } catch (Exception $e) {
         http_response_code(500);
@@ -1768,57 +1769,58 @@ Router::post('/servers/{id}/deploy-monitoring', function ($params) {
 // API: Report metrics from remote server (used by push agent)
 Router::post('/api/servers/report-metrics', function () {
     header('Content-Type: application/json');
-    
+
     $raw = file_get_contents('php://input');
     $data = json_decode($raw, true);
-    
+
     $token = $data['token'] ?? '';
     if (empty($token)) {
         http_response_code(400);
         echo json_encode(['error' => 'Token is required']);
         return;
     }
-    
+
     $pdo = DB::conn();
-    
+
     // Find server by token
     $stmt = $pdo->prepare('SELECT id FROM vpn_servers WHERE secret_token = ?');
     $stmt->execute([$token]);
     $serverId = $stmt->fetchColumn();
-    
+
     if (!$serverId) {
         http_response_code(401);
         echo json_encode(['error' => 'Invalid server token']);
         return;
     }
-    
+
     try {
         $pdo->beginTransaction();
-        
+
         // Update last_check_at for the server to show the agent is online
         $stmt = $pdo->prepare('UPDATE vpn_servers SET last_check_at = NOW() WHERE id = ?');
         $stmt->execute([$serverId]);
-        
+
         // Process client metrics
         if (isset($data['clients']) && is_array($data['clients'])) {
             foreach ($data['clients'] as $c) {
                 $publicKey = $c['public_key'] ?? '';
-                if (empty($publicKey)) continue;
-                
+                if (empty($publicKey))
+                    continue;
+
                 // Find client by public_key and server_id (include ext_client_code)
                 $stmt = $pdo->prepare('SELECT id, bytes_sent, bytes_received, last_endpoint_ip, ext_client_code FROM vpn_clients WHERE server_id = ? AND public_key = ?');
                 $stmt->execute([$serverId, $publicKey]);
                 $client = $stmt->fetch(PDO::FETCH_ASSOC);
-                
+
                 if ($client) {
                     $clientId = $client['id'];
-                    
+
                     // Update GeoIP information if endpoint IP has changed
                     VpnClient::updateGeoIpForClient($clientId, $c['endpoint'] ?? null, $client['last_endpoint_ip'] ?? null);
-                    $rawBytesSent = (int)($c['bytes_sent'] ?? 0);
-                    $rawBytesReceived = (int)($c['bytes_received'] ?? 0);
-                    $lastHandshakeVal = (int)($c['last_handshake'] ?? 0);
-                    
+                    $rawBytesSent = (int) ($c['bytes_sent'] ?? 0);
+                    $rawBytesReceived = (int) ($c['bytes_received'] ?? 0);
+                    $lastHandshakeVal = (int) ($c['last_handshake'] ?? 0);
+
                     // Fetch latest recorded raw metrics to calculate speed and traffic deltas
                     $stmt = $pdo->prepare('
                         SELECT bytes_sent, bytes_received, collected_at 
@@ -1829,18 +1831,18 @@ Router::post('/api/servers/report-metrics', function () {
                     ');
                     $stmt->execute([$clientId]);
                     $prev = $stmt->fetch(PDO::FETCH_ASSOC);
-                    
+
                     $speedUp = 0;
                     $speedDown = 0;
                     $deltaSent = $rawBytesSent;
                     $deltaReceived = $rawBytesReceived;
-                    
+
                     if ($prev) {
                         $timeDiff = time() - strtotime($prev['collected_at']);
                         if ($timeDiff > 0) {
-                            $rawBytesDiffSent = $rawBytesSent - (int)$prev['bytes_sent'];
-                            $rawBytesDiffReceived = $rawBytesReceived - (int)$prev['bytes_received'];
-                            
+                            $rawBytesDiffSent = $rawBytesSent - (int) $prev['bytes_sent'];
+                            $rawBytesDiffReceived = $rawBytesReceived - (int) $prev['bytes_received'];
+
                             // Handle potential stats reset on container/interface restart
                             if ($rawBytesDiffSent >= 0) {
                                 $deltaSent = $rawBytesDiffSent;
@@ -1848,14 +1850,14 @@ Router::post('/api/servers/report-metrics', function () {
                             if ($rawBytesDiffReceived >= 0) {
                                 $deltaReceived = $rawBytesDiffReceived;
                             }
-                            
+
                             // speedUp = Client Upload = Sent by Client (deltaSent)
                             // speedDown = Client Download = Received by Client (deltaReceived)
                             $speedUp = round(($deltaSent * 8) / $timeDiff / 1000, 2);
                             $speedDown = round(($deltaReceived * 8) / $timeDiff / 1000, 2);
                         }
                     }
-                    
+
                     // Save raw client metrics for speed calculations
                     $stmt = $pdo->prepare('
                         INSERT INTO client_metrics 
@@ -1869,10 +1871,10 @@ Router::post('/api/servers/report-metrics', function () {
                         $speedUp,
                         $speedDown
                     ]);
-                    
+
                     // Accumulate client traffic in main table to prevent resets
-                    $newTotalSent = (int)$client['bytes_sent'] + $deltaSent;
-                    $newTotalReceived = (int)$client['bytes_received'] + $deltaReceived;
+                    $newTotalSent = (int) $client['bytes_sent'] + $deltaSent;
+                    $newTotalReceived = (int) $client['bytes_received'] + $deltaReceived;
 
                     // Increment persistent traffic aggregate in ext_clients
                     if (!empty($client['ext_client_code']) && ($deltaSent > 0 || $deltaReceived > 0)) {
@@ -1883,7 +1885,7 @@ Router::post('/api/servers/report-metrics', function () {
                         ');
                         $stmtExtInc->execute([$deltaSent, $deltaReceived, $client['ext_client_code']]);
                     }
-                    
+
                     $lastHandshake = $lastHandshakeVal > 0 ? date('Y-m-d H:i:s', $lastHandshakeVal) : null;
                     $stmt = $pdo->prepare('
                         UPDATE vpn_clients 
@@ -1906,18 +1908,18 @@ Router::post('/api/servers/report-metrics', function () {
                 }
             }
         }
-        
+
         $pdo->commit();
-        
+
         // Clean old metrics (older than 24h)
         ServerMonitoring::cleanOldMetrics();
-        
+
         // Fetch current monitoring interval
         $stmtInterval = $pdo->prepare("SELECT value FROM settings WHERE namespace = 'monitoring' AND `key` = 'interval'");
         $stmtInterval->execute();
         $intervalVal = $stmtInterval->fetchColumn();
-        $metricsInterval = $intervalVal ? (int)json_decode($intervalVal, true) : 30;
-        
+        $metricsInterval = $intervalVal ? (int) json_decode($intervalVal, true) : 30;
+
         echo json_encode(['success' => true, 'interval' => $metricsInterval]);
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
@@ -1931,17 +1933,17 @@ Router::post('/api/servers/report-metrics', function () {
 // API: Telegram Client Bot Webhook
 Router::post('/api/telegram-bot/webhook', function () {
     header('Content-Type: application/json');
-    
+
     require_once __DIR__ . '/../inc/TelegramClientBot.php';
     if (!TelegramClientBot::isEnabled()) {
         http_response_code(403);
         echo json_encode(['error' => 'Bot is disabled']);
         return;
     }
-    
+
     $input = file_get_contents('php://input');
     $update = json_decode($input, true);
-    
+
     if ($update) {
         try {
             TelegramClientBot::handleUpdate($update);
@@ -1949,7 +1951,7 @@ Router::post('/api/telegram-bot/webhook', function () {
             error_log("Telegram webhook handling error: " . $e->getMessage());
         }
     }
-    
+
     echo json_encode(['success' => true]);
 });
 
@@ -1960,23 +1962,23 @@ Router::post('/api/telegram-bot/webhook', function () {
 // API: Generate JWT token
 Router::post('/api/auth/token', function () {
     header('Content-Type: application/json');
-    
+
     $email = $_POST['email'] ?? '';
     $password = $_POST['password'] ?? '';
-    
+
     if (empty($email) || empty($password)) {
         http_response_code(400);
         echo json_encode(['error' => 'Email and password are required']);
         return;
     }
-    
+
     $user = Auth::getUserByEmail($email);
     if (!$user || !password_verify($password, $user['password_hash'])) {
         http_response_code(401);
         echo json_encode(['error' => 'Invalid credentials']);
         return;
     }
-    
+
     try {
         $token = JWT::generate($user['id']);
         echo json_encode([
@@ -1994,13 +1996,14 @@ Router::post('/api/auth/token', function () {
 // API: Create persistent API token
 Router::post('/api/tokens', function () {
     header('Content-Type: application/json');
-    
+
     $user = JWT::requireAuth();
-    if (!$user) return;
-    
+    if (!$user)
+        return;
+
     $name = $_POST['name'] ?? 'API Token';
-    $expiresIn = isset($_POST['expires_in']) ? (int)$_POST['expires_in'] : 2592000; // 30 days default
-    
+    $expiresIn = isset($_POST['expires_in']) ? (int) $_POST['expires_in'] : 2592000; // 30 days default
+
     try {
         $tokenData = JWT::createApiToken($user['id'], $name, $expiresIn);
         echo json_encode([
@@ -2016,10 +2019,11 @@ Router::post('/api/tokens', function () {
 // API: List user's API tokens
 Router::get('/api/tokens', function () {
     header('Content-Type: application/json');
-    
+
     $user = JWT::requireAuth();
-    if (!$user) return;
-    
+    if (!$user)
+        return;
+
     $stmt = DB::get()->prepare("
         SELECT id, name, token, expires_at, created_at, last_used_at
         FROM api_tokens
@@ -2028,22 +2032,23 @@ Router::get('/api/tokens', function () {
     ");
     $stmt->execute([$user['id']]);
     $tokens = $stmt->fetchAll();
-    
+
     // Don't expose full token in list
     foreach ($tokens as &$token) {
         $token['token'] = substr($token['token'], 0, 10) . '...';
     }
-    
+
     echo json_encode(['tokens' => $tokens]);
 });
 
 // API: Revoke API token
 Router::delete('/api/tokens/{id}', function ($params) {
     header('Content-Type: application/json');
-    
+
     $user = JWT::requireAuth();
-    if (!$user) return;
-    
+    if (!$user)
+        return;
+
     try {
         JWT::revokeApiToken($params['id'], $user['id']);
         echo json_encode(['success' => true]);
@@ -2056,14 +2061,14 @@ Router::delete('/api/tokens/{id}', function ($params) {
 // API: List servers
 Router::get('/api/servers', function () {
     header('Content-Type: application/json');
-    
+
     $user = authenticateRequest();
     if (!$user) {
         http_response_code(401);
         echo json_encode(['error' => 'Unauthorized']);
         return;
     }
-    
+
     // Admins see all servers, regular users see only their own
     $servers = ($user['role'] === 'admin') ? VpnServer::listAll() : VpnServer::listByUser($user['id']);
     echo json_encode(['servers' => $servers]);
@@ -2072,17 +2077,17 @@ Router::get('/api/servers', function () {
 // API: Get dashboard aggregated bandwidth metrics
 Router::get('/api/dashboard/metrics', function () {
     header('Content-Type: application/json');
-    
+
     $user = authenticateRequest();
     if (!$user) {
         http_response_code(401);
         echo json_encode(['error' => 'Unauthorized']);
         return;
     }
-    
-    $hours = isset($_GET['hours']) ? max(1, min(168, (float)$_GET['hours'])) : 24;
-    $serverId = isset($_GET['server_id']) && $_GET['server_id'] !== '' ? (int)$_GET['server_id'] : null;
-    
+
+    $hours = isset($_GET['hours']) ? max(1, min(168, (float) $_GET['hours'])) : 24;
+    $serverId = isset($_GET['server_id']) && $_GET['server_id'] !== '' ? (int) $_GET['server_id'] : null;
+
     // Determine interval in minutes (N) based on hours
     $bucketMinutes = 5;
     if ($hours <= 2) {
@@ -2099,10 +2104,10 @@ Router::get('/api/dashboard/metrics', function () {
         $bucketMinutes = 60;
     }
     $seconds = $bucketMinutes * 60;
-    
+
     $pdo = DB::conn();
-    $since = date('Y-m-d H:i:s', time() - (int)($hours * 3600));
-    
+    $since = date('Y-m-d H:i:s', time() - (int) ($hours * 3600));
+
     try {
         if ($serverId) {
             // Verify server ownership
@@ -2114,7 +2119,7 @@ Router::get('/api/dashboard/metrics', function () {
                 echo json_encode(['error' => 'Forbidden']);
                 return;
             }
-            
+
             $query = "
                 SELECT 
                     FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(t.collected_at) / ?) * ?) as time_bucket,
@@ -2181,18 +2186,18 @@ Router::get('/api/dashboard/metrics', function () {
                 $stmt->execute([$seconds, $seconds, $user['id'], $since]);
             }
         }
-        
+
         $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
+
         // Format results as numeric values in the JSON output
         foreach ($results as &$row) {
-            $row['speed_up'] = (float)$row['speed_up'];
-            $row['speed_down'] = (float)$row['speed_down'];
+            $row['speed_up'] = (float) $row['speed_up'];
+            $row['speed_down'] = (float) $row['speed_down'];
             if (isset($row['time_bucket'])) {
                 $row['time_bucket'] = str_replace(' ', 'T', $row['time_bucket']) . 'Z';
             }
         }
-        
+
         echo json_encode([
             'success' => true,
             'metrics' => $results
@@ -2206,24 +2211,25 @@ Router::get('/api/dashboard/metrics', function () {
 // API: Create server
 Router::post('/api/servers/create', function () {
     header('Content-Type: application/json');
-    
+
     $user = JWT::requireAuth();
-    if (!$user) return;
-    
+    if (!$user)
+        return;
+
     $input = json_decode(file_get_contents('php://input'), true);
-    
+
     $name = trim($input['name'] ?? '');
     $host = trim($input['host'] ?? '');
-    $port = (int)($input['port'] ?? 22);
+    $port = (int) ($input['port'] ?? 22);
     $username = trim($input['username'] ?? 'root');
     $password = $input['password'] ?? '';
-    
+
     if (empty($name) || empty($host) || empty($password)) {
         http_response_code(400);
         echo json_encode(['error' => 'Missing required fields: name, host, password']);
         return;
     }
-    
+
     try {
         $serverId = VpnServer::create([
             'user_id' => $user['id'],
@@ -2233,7 +2239,7 @@ Router::post('/api/servers/create', function () {
             'username' => $username,
             'password' => $password,
         ]);
-        
+
         http_response_code(201);
         echo json_encode([
             'success' => true,
@@ -2249,104 +2255,107 @@ Router::post('/api/servers/create', function () {
 // API: Delete server
 Router::delete('/api/servers/{id}/delete', function ($params) {
     header('Content-Type: application/json');
-    
+
     $user = JWT::requireAuth();
 
-// API: Import from existing panel
-Router::post('/api/servers/{id}/import', function ($params) {
-    header('Content-Type: application/json');
-    
-    $user = JWT::requireAuth();
-    if (!$user) return;
-    
-    $serverId = (int)$params['id'];
-    
-    // Validate server ownership
-    $server = VpnServer::getById($serverId);
-    if (!$server || $server['user_id'] != $user['id']) {
-        http_response_code(404);
-        echo json_encode(['error' => 'Server not found']);
-        return;
-    }
-    
-    $panelType = $_POST['panel_type'] ?? '';
-    
-    if (!in_array($panelType, ['wg-easy', '3x-ui'])) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Invalid panel type. Supported: wg-easy, 3x-ui']);
-        return;
-    }
-    
-    // Handle file upload
-    if (!isset($_FILES['backup_file']) || $_FILES['backup_file']['error'] !== UPLOAD_ERR_OK) {
-        http_response_code(400);
-        echo json_encode(['error' => 'No backup file uploaded']);
-        return;
-    }
-    
-    $backupContent = file_get_contents($_FILES['backup_file']['tmp_name']);
-    
-    try {
-        $importer = new PanelImporter($serverId, $user['id'], $panelType);
-        
-        if (!$importer->parseBackupFile($backupContent)) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Invalid backup file format']);
+    // API: Import from existing panel
+    Router::post('/api/servers/{id}/import', function ($params) {
+        header('Content-Type: application/json');
+
+        $user = JWT::requireAuth();
+        if (!$user)
+            return;
+
+        $serverId = (int) $params['id'];
+
+        // Validate server ownership
+        $server = VpnServer::getById($serverId);
+        if (!$server || $server['user_id'] != $user['id']) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Server not found']);
             return;
         }
-        
-        $result = $importer->import();
-        
-        echo json_encode($result);
-        
-    } catch (Exception $e) {
-        http_response_code(500);
-        echo json_encode([
-            'success' => false,
-            'error' => $e->getMessage()
-        ]);
-    }
-});
 
-// API: Get import history
-Router::get('/api/servers/{id}/imports', function ($params) {
-    header('Content-Type: application/json');
-    
-    $user = JWT::requireAuth();
-    if (!$user) return;
-    
-    $serverId = (int)$params['id'];
-    
-    // Validate server ownership
-    $server = VpnServer::getById($serverId);
-    if (!$server || $server['user_id'] != $user['id']) {
-        http_response_code(404);
-        echo json_encode(['error' => 'Server not found']);
+        $panelType = $_POST['panel_type'] ?? '';
+
+        if (!in_array($panelType, ['wg-easy', '3x-ui'])) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid panel type. Supported: wg-easy, 3x-ui']);
+            return;
+        }
+
+        // Handle file upload
+        if (!isset($_FILES['backup_file']) || $_FILES['backup_file']['error'] !== UPLOAD_ERR_OK) {
+            http_response_code(400);
+            echo json_encode(['error' => 'No backup file uploaded']);
+            return;
+        }
+
+        $backupContent = file_get_contents($_FILES['backup_file']['tmp_name']);
+
+        try {
+            $importer = new PanelImporter($serverId, $user['id'], $panelType);
+
+            if (!$importer->parseBackupFile($backupContent)) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Invalid backup file format']);
+                return;
+            }
+
+            $result = $importer->import();
+
+            echo json_encode($result);
+
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'error' => $e->getMessage()
+            ]);
+        }
+    });
+
+    // API: Get import history
+    Router::get('/api/servers/{id}/imports', function ($params) {
+        header('Content-Type: application/json');
+
+        $user = JWT::requireAuth();
+        if (!$user)
+            return;
+
+        $serverId = (int) $params['id'];
+
+        // Validate server ownership
+        $server = VpnServer::getById($serverId);
+        if (!$server || $server['user_id'] != $user['id']) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Server not found']);
+            return;
+        }
+
+        $imports = PanelImporter::getImportHistory($serverId);
+
+        echo json_encode([
+            'success' => true,
+            'imports' => $imports
+        ]);
+    });
+    if (!$user)
         return;
-    }
-    
-    $imports = PanelImporter::getImportHistory($serverId);
-    
-    echo json_encode([
-        'success' => true,
-        'imports' => $imports
-    ]);
-});
-    if (!$user) return;
-    
-    $serverId = (int)$params['id'];
-    
+
+    $serverId = (int) $params['id'];
+
     try {
         $server = new VpnServer($serverId);
         $serverData = $server->getData();
-        
+
         // Check ownership or admin
         if ($serverData['user_id'] != $user['id'] && $user['role'] !== 'admin') {
             http_response_code(403);
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
-        
+
         $server->delete();
         echo json_encode([
             'success' => true,
@@ -2361,26 +2370,27 @@ Router::get('/api/servers/{id}/imports', function ($params) {
 // API: Create backup
 Router::post('/api/servers/{id}/backup', function ($params) {
     header('Content-Type: application/json');
-    
+
     $user = requireApiAuth();
-    if (!$user) return;
-    
-    $serverId = (int)$params['id'];
-    
+    if (!$user)
+        return;
+
+    $serverId = (int) $params['id'];
+
     try {
         $server = new VpnServer($serverId);
         $serverData = $server->getData();
-        
+
         // Check ownership or admin
         if ($serverData['user_id'] != $user['id'] && $user['role'] !== 'admin') {
             http_response_code(403);
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
-        
+
         $backupId = $server->createBackup($user['id'], 'manual');
         $backup = VpnServer::getBackup($backupId);
-        
+
         echo json_encode([
             'success' => true,
             'backup' => $backup
@@ -2394,25 +2404,26 @@ Router::post('/api/servers/{id}/backup', function ($params) {
 // API: List backups
 Router::get('/api/servers/{id}/backups', function ($params) {
     header('Content-Type: application/json');
-    
+
     $user = requireApiAuth();
-    if (!$user) return;
-    
-    $serverId = (int)$params['id'];
-    
+    if (!$user)
+        return;
+
+    $serverId = (int) $params['id'];
+
     try {
         $server = new VpnServer($serverId);
         $serverData = $server->getData();
-        
+
         // Check ownership or admin
         if ($serverData['user_id'] != $user['id'] && $user['role'] !== 'admin') {
             http_response_code(403);
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
-        
+
         $backups = $server->listBackups();
-        
+
         echo json_encode([
             'success' => true,
             'backups' => $backups,
@@ -2427,38 +2438,39 @@ Router::get('/api/servers/{id}/backups', function ($params) {
 // API: Restore backup
 Router::post('/api/servers/{id}/restore', function ($params) {
     header('Content-Type: application/json');
-    
+
     $user = requireApiAuth();
-    if (!$user) return;
-    
-    $serverId = (int)$params['id'];
+    if (!$user)
+        return;
+
+    $serverId = (int) $params['id'];
     $raw = file_get_contents('php://input');
     $data = json_decode($raw, true);
-    
-    $backupId = (int)($data['backup_id'] ?? 0);
-    
+
+    $backupId = (int) ($data['backup_id'] ?? 0);
+
     if ($backupId <= 0) {
         http_response_code(400);
         echo json_encode(['error' => 'backup_id is required']);
         return;
     }
-    
+
     try {
         $server = new VpnServer($serverId);
         $serverData = $server->getData();
-        
+
         // Check ownership or admin
         if ($serverData['user_id'] != $user['id'] && $user['role'] !== 'admin') {
             http_response_code(403);
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
-        
+
         $result = $server->restoreBackup($backupId);
-        
+
         // Log the result for debugging
         error_log('Restore backup result: ' . json_encode($result));
-        
+
         // Always return the result, even if success is false
         echo json_encode($result);
     } catch (Exception $e) {
@@ -2471,34 +2483,35 @@ Router::post('/api/servers/{id}/restore', function ($params) {
 // API: Delete backup
 Router::delete('/api/backups/{id}', function ($params) {
     header('Content-Type: application/json');
-    
+
     $user = requireApiAuth();
-    if (!$user) return;
-    
-    $backupId = (int)$params['id'];
-    
+    if (!$user)
+        return;
+
+    $backupId = (int) $params['id'];
+
     try {
         $backup = VpnServer::getBackup($backupId);
-        
+
         if (!$backup) {
             http_response_code(404);
             echo json_encode(['error' => 'Backup not found']);
             return;
         }
-        
+
         // Get server to check ownership
         $server = new VpnServer($backup['server_id']);
         $serverData = $server->getData();
-        
+
         // Check ownership or admin
         if ($serverData['user_id'] != $user['id'] && $user['role'] !== 'admin') {
             http_response_code(403);
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
-        
+
         VpnServer::deleteBackup($backupId);
-        
+
         echo json_encode([
             'success' => true,
             'message' => 'Backup deleted successfully'
@@ -2512,10 +2525,11 @@ Router::delete('/api/backups/{id}', function ($params) {
 // API: List clients
 Router::get('/api/clients', function () {
     header('Content-Type: application/json');
-    
+
     $user = JWT::requireAuth();
-    if (!$user) return;
-    
+    if (!$user)
+        return;
+
     $clients = VpnClient::listByUser($user['id']);
     echo json_encode(['clients' => $clients]);
 });
@@ -2523,31 +2537,32 @@ Router::get('/api/clients', function () {
 // API: Get client details with stats
 Router::get('/api/clients/{id}/details', function ($params) {
     header('Content-Type: application/json');
-    
+
     $user = JWT::requireAuth();
-    if (!$user) return;
-    
-    $clientId = (int)$params['id'];
-    
+    if (!$user)
+        return;
+
+    $clientId = (int) $params['id'];
+
     try {
         $client = new VpnClient($clientId);
         $clientData = $client->getData();
-        
+
         // Check ownership
         if ($clientData['user_id'] != $user['id']) {
             http_response_code(403);
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
-        
+
         // Sync stats before returning
         $client->syncStats();
-        
+
         // Reload data
         $client = new VpnClient($clientId);
         $clientData = $client->getData();
         $stats = $client->getFormattedStats();
-        
+
         echo json_encode([
             'success' => true,
             'client' => [
@@ -2575,23 +2590,24 @@ Router::get('/api/clients/{id}/details', function ($params) {
 // API: Revoke client
 Router::post('/api/clients/{id}/revoke', function ($params) {
     header('Content-Type: application/json');
-    
+
     $user = JWT::requireAuth();
-    if (!$user) return;
-    
-    $clientId = (int)$params['id'];
-    
+    if (!$user)
+        return;
+
+    $clientId = (int) $params['id'];
+
     try {
         $client = new VpnClient($clientId);
         $clientData = $client->getData();
-        
+
         // Check ownership
         if ($clientData['user_id'] != $user['id']) {
             http_response_code(403);
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
-        
+
         if ($client->revoke()) {
             echo json_encode(['success' => true, 'message' => 'Client revoked']);
         } else {
@@ -2607,23 +2623,24 @@ Router::post('/api/clients/{id}/revoke', function ($params) {
 // API: Restore client
 Router::post('/api/clients/{id}/restore', function ($params) {
     header('Content-Type: application/json');
-    
+
     $user = JWT::requireAuth();
-    if (!$user) return;
-    
-    $clientId = (int)$params['id'];
-    
+    if (!$user)
+        return;
+
+    $clientId = (int) $params['id'];
+
     try {
         $client = new VpnClient($clientId);
         $clientData = $client->getData();
-        
+
         // Check ownership
         if ($clientData['user_id'] != $user['id']) {
             http_response_code(403);
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
-        
+
         if ($client->restore()) {
             echo json_encode(['success' => true, 'message' => 'Client restored']);
         } else {
@@ -2639,11 +2656,11 @@ Router::post('/api/clients/{id}/restore', function ($params) {
 // API: Get server metrics
 Router::get('/api/servers/{id}/metrics', function ($params) {
     header('Content-Type: application/json');
-    
+
     // Check authentication - either JWT or session
     $user = null;
     $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-    
+
     if ($authHeader && preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
         // JWT authentication
         $token = $matches[1];
@@ -2652,29 +2669,29 @@ Router::get('/api/servers/{id}/metrics', function ($params) {
         // Session authentication
         $user = Auth::user();
     }
-    
+
     if (!$user) {
         http_response_code(401);
         echo json_encode(['error' => 'Unauthorized']);
         return;
     }
-    
-    $serverId = (int)$params['id'];
-    $hours = isset($_GET['hours']) ? (float)$_GET['hours'] : 24;
-    
+
+    $serverId = (int) $params['id'];
+    $hours = isset($_GET['hours']) ? (float) $_GET['hours'] : 24;
+
     try {
         $server = new VpnServer($serverId);
         $serverData = $server->getData();
-        
+
         // Check ownership
         if ($serverData['user_id'] != $user['id'] && $user['role'] !== 'admin') {
             http_response_code(403);
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
-        
+
         $metrics = ServerMonitoring::getServerMetrics($serverId, $hours);
-        
+
         echo json_encode(['success' => true, 'metrics' => $metrics]);
     } catch (Exception $e) {
         http_response_code(500);
@@ -2685,11 +2702,11 @@ Router::get('/api/servers/{id}/metrics', function ($params) {
 // API: Get client metrics
 Router::get('/api/clients/{id}/metrics', function ($params) {
     header('Content-Type: application/json');
-    
+
     // Check authentication - either JWT or session
     $user = null;
     $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-    
+
     if ($authHeader && preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
         // JWT authentication
         $token = $matches[1];
@@ -2698,31 +2715,31 @@ Router::get('/api/clients/{id}/metrics', function ($params) {
         // Session authentication
         $user = Auth::user();
     }
-    
+
     if (!$user) {
         http_response_code(401);
         echo json_encode(['error' => 'Unauthorized']);
         return;
     }
-    
-    $clientId = (int)$params['id'];
-    $hours = isset($_GET['hours']) ? (float)$_GET['hours'] : 24;
-    
+
+    $clientId = (int) $params['id'];
+    $hours = isset($_GET['hours']) ? (float) $_GET['hours'] : 24;
+
     try {
         $client = new VpnClient($clientId);
         $clientData = $client->getData();
-        
+
         // Get server to check ownership
         $server = new VpnServer($clientData['server_id']);
         $serverData = $server->getData();
-        
+
         // Check ownership
         if ($serverData['user_id'] != $user['id'] && $user['role'] !== 'admin') {
             http_response_code(403);
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
-        
+
         $metrics = ServerMonitoring::getClientMetrics($clientId, $hours);
         foreach ($metrics as &$m) {
             if (isset($m['time_bucket'])) {
@@ -2730,7 +2747,7 @@ Router::get('/api/clients/{id}/metrics', function ($params) {
                 unset($m['time_bucket']);
             }
         }
-        
+
         echo json_encode(['success' => true, 'metrics' => $metrics]);
     } catch (Exception $e) {
         http_response_code(500);
@@ -2741,32 +2758,32 @@ Router::get('/api/clients/{id}/metrics', function ($params) {
 // API: Get server clients
 Router::get('/api/servers/{id}/clients', function ($params) {
     header('Content-Type: application/json');
-    
+
     $user = authenticateRequest();
     if (!$user) {
         http_response_code(401);
         echo json_encode(['error' => 'Unauthorized']);
         return;
     }
-    
-    $serverId = (int)$params['id'];
-    
+
+    $serverId = (int) $params['id'];
+
     try {
         $server = new VpnServer($serverId);
         $serverData = $server->getData();
-        
+
         // Check ownership
         if ($serverData['user_id'] != $user['id'] && $user['role'] !== 'admin') {
             http_response_code(403);
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
-        
+
         $agentOnline = false;
         if (!empty($serverData['last_check_at'])) {
             $agentOnline = (time() - strtotime($serverData['last_check_at'])) < 120;
         }
-        
+
         // Only run SSH-pull sync if the push agent is offline
         if (!$agentOnline) {
             try {
@@ -2775,17 +2792,17 @@ Router::get('/api/servers/{id}/clients', function ($params) {
                 // Ignore sync errors to prevent API crashes
             }
         }
-        
+
         $clients = VpnClient::listByServer($serverId);
         $clientsData = [];
-        
+
         foreach ($clients as $clientData) {
             $client = new VpnClient($clientData['id']);
             $stats = $client->getFormattedStats();
-            
+
             $lh = $clientData['last_handshake'];
             $isNever = !$lh || $lh === '0000-00-00 00:00:00' || $lh === '1970-01-01 00:00:00' || $lh === '0';
-            
+
             $clientsData[] = [
                 'id' => $clientData['id'],
                 'name' => $clientData['name'],
@@ -2800,9 +2817,9 @@ Router::get('/api/servers/{id}/clients', function ($params) {
                 'city' => $clientData['city'],
             ];
         }
-        
+
         echo json_encode([
-            'success' => true, 
+            'success' => true,
             'agent_online' => $agentOnline,
             'clients' => $clientsData
         ]);
@@ -2815,29 +2832,30 @@ Router::get('/api/servers/{id}/clients', function ($params) {
 // API: Create client
 Router::post('/api/clients/create', function () {
     header('Content-Type: application/json');
-    
+
     $user = JWT::requireAuth();
-    if (!$user) return;
-    
+    if (!$user)
+        return;
+
     $raw = file_get_contents('php://input');
     $data = json_decode($raw, true);
-    
-    $serverId = (int)($data['server_id'] ?? 0);
+
+    $serverId = (int) ($data['server_id'] ?? 0);
     $name = trim($data['name'] ?? '');
-    $expiresInDays = isset($data['expires_in_days']) ? (int)$data['expires_in_days'] : null;
-    
+    $expiresInDays = isset($data['expires_in_days']) ? (int) $data['expires_in_days'] : null;
+
     if ($serverId <= 0 || empty($name)) {
         http_response_code(400);
         echo json_encode(['error' => 'server_id and name are required']);
         return;
     }
-    
+
     try {
         $clientId = VpnClient::create($serverId, $user['id'], $name, $expiresInDays);
-        
+
         $client = new VpnClient($clientId);
         $clientData = $client->getData();
-        
+
         // Return client data
         echo json_encode([
             'success' => true,
@@ -2861,29 +2879,30 @@ Router::post('/api/clients/create', function () {
 // Set client expiration
 Router::post('/api/clients/{id}/set-expiration', function ($params) {
     header('Content-Type: application/json');
-    
+
     $user = JWT::requireAuth();
-    if (!$user) return;
-    
-    $clientId = (int)$params['id'];
+    if (!$user)
+        return;
+
+    $clientId = (int) $params['id'];
     $raw = file_get_contents('php://input');
     $data = json_decode($raw, true);
-    
+
     $expiresAt = $data['expires_at'] ?? null; // Y-m-d H:i:s format or null
-    
+
     try {
         $client = new VpnClient($clientId);
         $clientData = $client->getData();
-        
+
         // Check ownership
         if ($clientData['user_id'] != $user['id'] && $user['role'] !== 'admin') {
             http_response_code(403);
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
-        
+
         VpnClient::setExpiration($clientId, $expiresAt);
-        
+
         echo json_encode([
             'success' => true,
             'expires_at' => $expiresAt
@@ -2897,39 +2916,40 @@ Router::post('/api/clients/{id}/set-expiration', function ($params) {
 // Extend client expiration
 Router::post('/api/clients/{id}/extend', function ($params) {
     header('Content-Type: application/json');
-    
+
     $user = JWT::requireAuth();
-    if (!$user) return;
-    
-    $clientId = (int)$params['id'];
+    if (!$user)
+        return;
+
+    $clientId = (int) $params['id'];
     $raw = file_get_contents('php://input');
     $data = json_decode($raw, true);
-    
-    $days = (int)($data['days'] ?? 30);
-    
+
+    $days = (int) ($data['days'] ?? 30);
+
     if ($days <= 0) {
         http_response_code(400);
         echo json_encode(['error' => 'days must be positive']);
         return;
     }
-    
+
     try {
         $client = new VpnClient($clientId);
         $clientData = $client->getData();
-        
+
         // Check ownership
         if ($clientData['user_id'] != $user['id'] && $user['role'] !== 'admin') {
             http_response_code(403);
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
-        
+
         VpnClient::extendExpiration($clientId, $days);
-        
+
         // Get updated expiration
         $client = new VpnClient($clientId);
         $updated = $client->getData();
-        
+
         echo json_encode([
             'success' => true,
             'expires_at' => $updated['expires_at'],
@@ -2944,22 +2964,23 @@ Router::post('/api/clients/{id}/extend', function ($params) {
 // Get expiring clients
 Router::get('/api/clients/expiring', function () {
     header('Content-Type: application/json');
-    
+
     $user = JWT::requireAuth();
-    if (!$user) return;
-    
-    $days = (int)($_GET['days'] ?? 7);
-    
+    if (!$user)
+        return;
+
+    $days = (int) ($_GET['days'] ?? 7);
+
     try {
         $clients = VpnClient::getExpiringClients($days);
-        
+
         // Filter by user if not admin
         if ($user['role'] !== 'admin') {
-            $clients = array_filter($clients, function($c) use ($user) {
+            $clients = array_filter($clients, function ($c) use ($user) {
                 return $c['user_id'] == $user['id'];
             });
         }
-        
+
         echo json_encode([
             'success' => true,
             'clients' => array_values($clients),
@@ -2974,36 +2995,37 @@ Router::get('/api/clients/expiring', function () {
 // Set client traffic limit
 Router::post('/api/clients/{id}/set-traffic-limit', function ($params) {
     header('Content-Type: application/json');
-    
+
     $user = JWT::requireAuth();
-    if (!$user) return;
-    
-    $clientId = (int)$params['id'];
+    if (!$user)
+        return;
+
+    $clientId = (int) $params['id'];
     $raw = file_get_contents('php://input');
     $data = json_decode($raw, true);
-    
+
     // limit_bytes can be null (unlimited) or positive integer
-    $limitBytes = isset($data['limit_bytes']) ? (int)$data['limit_bytes'] : null;
-    
+    $limitBytes = isset($data['limit_bytes']) ? (int) $data['limit_bytes'] : null;
+
     if ($limitBytes !== null && $limitBytes < 0) {
         http_response_code(400);
         echo json_encode(['error' => 'limit_bytes must be positive or null for unlimited']);
         return;
     }
-    
+
     try {
         $client = new VpnClient($clientId);
         $clientData = $client->getData();
-        
+
         // Check ownership
         if ($clientData['user_id'] != $user['id'] && $user['role'] !== 'admin') {
             http_response_code(403);
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
-        
+
         $client->setTrafficLimit($limitBytes);
-        
+
         echo json_encode([
             'success' => true,
             'limit_bytes' => $limitBytes,
@@ -3018,25 +3040,26 @@ Router::post('/api/clients/{id}/set-traffic-limit', function ($params) {
 // Check client traffic limit status
 Router::get('/api/clients/{id}/traffic-limit-status', function ($params) {
     header('Content-Type: application/json');
-    
+
     $user = JWT::requireAuth();
-    if (!$user) return;
-    
-    $clientId = (int)$params['id'];
-    
+    if (!$user)
+        return;
+
+    $clientId = (int) $params['id'];
+
     try {
         $client = new VpnClient($clientId);
         $clientData = $client->getData();
-        
+
         // Check ownership
         if ($clientData['user_id'] != $user['id'] && $user['role'] !== 'admin') {
             http_response_code(403);
             echo json_encode(['error' => 'Forbidden']);
             return;
         }
-        
+
         $status = $client->getTrafficLimitStatus();
-        
+
         echo json_encode([
             'success' => true,
             'status' => $status
@@ -3050,20 +3073,21 @@ Router::get('/api/clients/{id}/traffic-limit-status', function ($params) {
 // Get clients over traffic limit
 Router::get('/api/clients/overlimit', function () {
     header('Content-Type: application/json');
-    
+
     $user = JWT::requireAuth();
-    if (!$user) return;
-    
+    if (!$user)
+        return;
+
     try {
         $clients = VpnClient::getClientsOverLimit();
-        
+
         // Filter by user if not admin
         if ($user['role'] !== 'admin') {
-            $clients = array_filter($clients, function($c) use ($user) {
+            $clients = array_filter($clients, function ($c) use ($user) {
                 return $c['user_id'] == $user['id'];
             });
         }
-        
+
         echo json_encode([
             'success' => true,
             'clients' => array_values($clients),
@@ -3082,7 +3106,7 @@ Router::get('/api/clients/overlimit', function () {
 // Settings page
 Router::get('/settings', function () {
     requireAuth();
-    
+
     require_once __DIR__ . '/../controllers/SettingsController.php';
     $controller = new SettingsController();
     $controller->index();
@@ -3091,7 +3115,7 @@ Router::get('/settings', function () {
 // Save API key
 Router::post('/settings/api-key', function () {
     requireAdmin();
-    
+
     require_once __DIR__ . '/../controllers/SettingsController.php';
     $controller = new SettingsController();
     $controller->saveApiKey();
@@ -3100,7 +3124,7 @@ Router::post('/settings/api-key', function () {
 // Change password
 Router::post('/settings/change-password', function () {
     requireAuth();
-    
+
     require_once __DIR__ . '/../controllers/SettingsController.php';
     $controller = new SettingsController();
     $controller->changePassword();
@@ -3109,7 +3133,7 @@ Router::post('/settings/change-password', function () {
 // Add user
 Router::post('/settings/add-user', function () {
     requireAdmin();
-    
+
     require_once __DIR__ . '/../controllers/SettingsController.php';
     $controller = new SettingsController();
     $controller->addUser();
@@ -3118,7 +3142,7 @@ Router::post('/settings/add-user', function () {
 // Delete user
 Router::post('/settings/delete-user/{id}', function ($params) {
     requireAdmin();
-    
+
     require_once __DIR__ . '/../controllers/SettingsController.php';
     $controller = new SettingsController();
     $controller->deleteUser($params['id']);
@@ -3131,7 +3155,7 @@ Router::post('/settings/backup-config', function () {
     $botToken = trim($_POST['bot_token'] ?? '');
     $chatId = trim($_POST['chat_id'] ?? '');
     $schedule = $_POST['schedule'] ?? 'disabled';
-    $retentionDays = (int)($_POST['retention_days'] ?? 7);
+    $retentionDays = (int) ($_POST['retention_days'] ?? 7);
 
     saveGlobalSetting('backup', 'telegram_settings', [
         'enabled' => $enabled,
@@ -3164,9 +3188,9 @@ Router::post('/settings/client-bot-config', function () {
 Router::post('/settings/client-bot-webhook-set', function () {
     requireAdmin();
     header('Content-Type: application/json');
-    
+
     $pdo = DB::conn();
-    
+
     // Get Bot Token
     $stmt = $pdo->prepare("SELECT value FROM settings WHERE namespace = 'client_bot' AND `key` = 'bot_token'");
     $stmt->execute();
@@ -3183,7 +3207,7 @@ Router::post('/settings/client-bot-webhook-set', function () {
     }
 
     $url = "https://api.telegram.org/bot{$botToken}/setWebhook?url=" . urlencode($webhookUrl);
-    
+
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
@@ -3202,9 +3226,9 @@ Router::post('/settings/client-bot-webhook-set', function () {
 Router::post('/settings/client-bot-webhook-delete', function () {
     requireAdmin();
     header('Content-Type: application/json');
-    
+
     $pdo = DB::conn();
-    
+
     // Get Bot Token
     $stmt = $pdo->prepare("SELECT value FROM settings WHERE namespace = 'client_bot' AND `key` = 'bot_token'");
     $stmt->execute();
@@ -3216,7 +3240,7 @@ Router::post('/settings/client-bot-webhook-delete', function () {
     }
 
     $url = "https://api.telegram.org/bot{$botToken}/deleteWebhook";
-    
+
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
@@ -3234,7 +3258,7 @@ Router::post('/settings/client-bot-webhook-delete', function () {
 // Save Monitoring Config
 Router::post('/settings/monitoring-config', function () {
     requireAdmin();
-    $interval = (int)($_POST['interval'] ?? 30);
+    $interval = (int) ($_POST['interval'] ?? 30);
 
     // Validate interval to prevent invalid configurations
     $allowed = [10, 30, 60, 120, 300];
@@ -3263,7 +3287,7 @@ Router::post('/settings/backup-test-telegram', function () {
 
     $message = "🔔 *Nk-VPN Panel Backup System Test*\nYour Telegram backup connection has been configured successfully! 🎉";
     $url = "https://api.telegram.org/bot" . $botToken . "/sendMessage";
-    
+
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_POST, true);
@@ -3273,7 +3297,7 @@ Router::post('/settings/backup-test-telegram', function () {
         'text' => $message,
         'parse_mode' => 'Markdown'
     ]);
-    
+
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
@@ -3338,15 +3362,15 @@ Router::post('/settings/backup-create', function () {
                 $_SESSION['settings_success'] = 'External PostgreSQL database backup successfully created and uploaded to Telegram.';
             }
         } else {
-            $serverId = (int)$target;
+            $serverId = (int) $target;
             $server = new VpnServer($serverId);
             $backupId = $server->createBackup($user['id']);
-            
+
             $pdo = DB::conn();
             $stmtBackup = $pdo->prepare("SELECT backup_path FROM server_backups WHERE id = ?");
             $stmtBackup->execute([$backupId]);
             $backupPath = $stmtBackup->fetchColumn();
-            
+
             if ($backupPath) {
                 $tgErr = '';
                 if (!$bm->sendToTelegram($backupPath, $tgErr)) {
@@ -3371,7 +3395,7 @@ Router::post('/settings/backup-create', function () {
 // Download Backup
 Router::get('/settings/backup-download/{id}', function ($params) {
     requireAdmin();
-    $id = (int)$params['id'];
+    $id = (int) $params['id'];
     $pdo = DB::conn();
 
     $stmt = $pdo->prepare("SELECT backup_path, backup_name FROM server_backups WHERE id = ?");
@@ -3396,7 +3420,7 @@ Router::get('/settings/backup-download/{id}', function ($params) {
 // Delete Backup
 Router::get('/settings/backup-delete/{id}', function ($params) {
     requireAdmin();
-    $id = (int)$params['id'];
+    $id = (int) $params['id'];
     VpnServer::deleteBackup($id);
     $_SESSION['settings_success'] = 'Backup deleted successfully';
     redirect('/settings#backups');
@@ -3447,14 +3471,18 @@ Router::post('/settings/backup-analyze', function () {
                 ];
             }
         }
-        
+
         // Recursive delete helper since PHP doesn't have standard rmdir recursive
-        $deleteDir = function($dir) use (&$deleteDir) {
-            if (!file_exists($dir)) return true;
-            if (!is_dir($dir)) return unlink($dir);
+        $deleteDir = function ($dir) use (&$deleteDir) {
+            if (!file_exists($dir))
+                return true;
+            if (!is_dir($dir))
+                return unlink($dir);
             foreach (scandir($dir) as $item) {
-                if ($item == '.' || $item == '..') continue;
-                if (!$deleteDir($dir . DIRECTORY_SEPARATOR . $item)) return false;
+                if ($item == '.' || $item == '..')
+                    continue;
+                if (!$deleteDir($dir . DIRECTORY_SEPARATOR . $item))
+                    return false;
             }
             return rmdir($dir);
         };
@@ -3472,7 +3500,7 @@ Router::post('/settings/backup-analyze', function () {
             echo json_encode(['error' => 'Invalid server JSON format']);
             return;
         }
-        
+
         $allServers = VpnServer::listAll();
 
         echo json_encode([
@@ -3515,7 +3543,7 @@ Router::post('/settings/backup-restore', function () {
             // Server JSON Restore
             $serverData = json_decode(file_get_contents($filepath), true);
             $action = $_POST['server_action'] ?? 'new';
-            $targetServerId = ($action === 'overwrite') ? (int)($_POST['target_server_id'] ?? 0) : null;
+            $targetServerId = ($action === 'overwrite') ? (int) ($_POST['target_server_id'] ?? 0) : null;
 
             // Inject SSH credentials supplied via the restore form (only relevant for 'new')
             if ($action === 'new') {
@@ -3524,7 +3552,7 @@ Router::post('/settings/backup-restore', function () {
             }
 
             $res = $bm->restoreServerBackup($serverData, $targetServerId);
-            
+
             if (isset($_POST['sync_keys'])) {
                 if (file_exists($filepath)) {
                     unlink($filepath);
@@ -3554,13 +3582,13 @@ Router::post('/settings/backup-restore', function () {
 // Change language
 Router::post('/language/change', function () {
     $lang = $_POST['language'] ?? '';
-    
+
     if (Translator::setLanguage($lang)) {
         $_SESSION['success'] = 'Language changed successfully';
     } else {
         $_SESSION['error'] = 'Invalid language';
     }
-    
+
     $redirect = $_POST['redirect'] ?? '/dashboard';
     redirect($redirect);
 });
@@ -3572,10 +3600,11 @@ Router::get('/language/change', function () {
 // API: Get translation statistics
 Router::get('/api/translations/stats', function () {
     header('Content-Type: application/json');
-    
+
     $user = JWT::requireAuth();
-    if (!$user) return;
-    
+    if (!$user)
+        return;
+
     $stats = Translator::getStatistics();
     echo json_encode(['stats' => $stats]);
 });
@@ -3583,21 +3612,22 @@ Router::get('/api/translations/stats', function () {
 // API: Auto-translate missing keys
 Router::post('/api/translations/auto-translate', function () {
     header('Content-Type: application/json');
-    
+
     $user = JWT::requireAuth();
-    if (!$user) return;
-    
+    if (!$user)
+        return;
+
     $raw = file_get_contents('php://input');
     $data = json_decode($raw, true);
-    
+
     $targetLang = $data['language'] ?? '';
-    
+
     if (empty($targetLang)) {
         http_response_code(400);
         echo json_encode(['error' => 'Language is required']);
         return;
     }
-    
+
     try {
         $stats = Translator::translateMissingKeys($targetLang);
         echo json_encode([
@@ -3613,12 +3643,13 @@ Router::post('/api/translations/auto-translate', function () {
 // API: Export translations
 Router::get('/api/translations/export/{lang}', function ($params) {
     header('Content-Type: application/json');
-    
+
     $user = JWT::requireAuth();
-    if (!$user) return;
-    
+    if (!$user)
+        return;
+
     $lang = $params['lang'];
-    
+
     try {
         $json = Translator::exportToJson($lang);
         header('Content-Disposition: attachment; filename="translations_' . $lang . '.json"');
@@ -3636,7 +3667,7 @@ Router::get('/api/translations/export/{lang}', function ($params) {
 // Router Management page
 Router::get('/routers', function () {
     requireAdmin();
-    
+
     $pdo = DB::conn();
     $stmt = $pdo->query("
         SELECT r.*, 
@@ -3655,7 +3686,7 @@ Router::get('/routers', function () {
         ORDER BY r.created_at DESC
     ");
     $routers = $stmt->fetchAll();
-    
+
     View::render('routers/index.twig', [
         'routers' => $routers
     ]);
@@ -3664,11 +3695,11 @@ Router::get('/routers', function () {
 // Routing Groups management page
 Router::get('/routing-groups', function () {
     requireAdmin();
-    
+
     $pdo = DB::conn();
     $stmt = $pdo->query("SELECT * FROM routing_groups ORDER BY name ASC");
     $groups = $stmt->fetchAll();
-    
+
     View::render('routing_groups.twig', [
         'groups' => $groups
     ]);
@@ -3677,20 +3708,20 @@ Router::get('/routing-groups', function () {
 // Telegram Bot Activity Logs page
 Router::get('/bot-logs', function () {
     requireAdmin();
-    
+
     $pdo = DB::conn();
-    
+
     $search = trim($_GET['search'] ?? '');
     $filter = trim($_GET['filter'] ?? 'all');
-    $page = max(1, (int)($_GET['page'] ?? 1));
+    $page = max(1, (int) ($_GET['page'] ?? 1));
     $perPage = 25;
     $offset = ($page - 1) * $perPage;
 
     // Stats counts
-    $totalCount = (int)$pdo->query("SELECT COUNT(*) FROM bot_activity_logs")->fetchColumn();
-    $uniqueUsers = (int)$pdo->query("SELECT COUNT(DISTINCT tg_id) FROM bot_activity_logs")->fetchColumn();
-    $serverSwitches = (int)$pdo->query("SELECT COUNT(*) FROM bot_activity_logs WHERE action = 'change_server_success'")->fetchColumn();
-    $errorsCount = (int)$pdo->query("SELECT COUNT(*) FROM bot_activity_logs WHERE action IN ('unauthorized', 'change_server_error')")->fetchColumn();
+    $totalCount = (int) $pdo->query("SELECT COUNT(*) FROM bot_activity_logs")->fetchColumn();
+    $uniqueUsers = (int) $pdo->query("SELECT COUNT(DISTINCT tg_id) FROM bot_activity_logs")->fetchColumn();
+    $serverSwitches = (int) $pdo->query("SELECT COUNT(*) FROM bot_activity_logs WHERE action = 'change_server_success'")->fetchColumn();
+    $errorsCount = (int) $pdo->query("SELECT COUNT(*) FROM bot_activity_logs WHERE action IN ('unauthorized', 'change_server_error')")->fetchColumn();
 
     // Trend data (last 7 days)
     $stmtTrend = $pdo->query("
@@ -3713,7 +3744,7 @@ Router::get('/bot-logs', function () {
     // Logs table filtering
     $whereClauses = [];
     $params = [];
-    
+
     if ($filter === 'switches') {
         $whereClauses[] = "action LIKE 'change_server%'";
     } elseif ($filter === 'access') {
@@ -3729,11 +3760,11 @@ Router::get('/bot-logs', function () {
     }
 
     $whereSql = !empty($whereClauses) ? 'WHERE ' . implode(' AND ', $whereClauses) : '';
-    
+
     $stmtFilteredCount = $pdo->prepare("SELECT COUNT(*) FROM bot_activity_logs {$whereSql}");
     $stmtFilteredCount->execute($params);
-    $filteredCount = (int)$stmtFilteredCount->fetchColumn();
-    $totalPages = max(1, (int)ceil($filteredCount / $perPage));
+    $filteredCount = (int) $stmtFilteredCount->fetchColumn();
+    $totalPages = max(1, (int) ceil($filteredCount / $perPage));
 
     $selectSql = "
         SELECT * FROM bot_activity_logs 
@@ -3752,17 +3783,17 @@ Router::get('/bot-logs', function () {
     $logs = $stmtLogs->fetchAll();
 
     View::render('bot_logs.twig', [
-        'total_count'     => $totalCount,
-        'unique_users'    => $uniqueUsers,
+        'total_count' => $totalCount,
+        'unique_users' => $uniqueUsers,
         'server_switches' => $serverSwitches,
-        'errors_count'    => $errorsCount,
-        'trend_data'      => $trendData,
-        'dist_data'       => $distData,
-        'logs'            => $logs,
-        'current_page'    => $page,
-        'total_pages'     => $totalPages,
-        'search'          => $search,
-        'filter'          => $filter,
+        'errors_count' => $errorsCount,
+        'trend_data' => $trendData,
+        'dist_data' => $distData,
+        'logs' => $logs,
+        'current_page' => $page,
+        'total_pages' => $totalPages,
+        'search' => $search,
+        'filter' => $filter,
     ]);
 });
 
@@ -3770,7 +3801,7 @@ Router::get('/bot-logs', function () {
 Router::get('/api/routers', function () {
     header('Content-Type: application/json');
     requireAdmin();
-    
+
     $pdo = DB::conn();
     $stmt = $pdo->query("SELECT * FROM routers ORDER BY created_at DESC");
     echo json_encode(['routers' => $stmt->fetchAll()]);
@@ -3780,7 +3811,7 @@ Router::get('/api/routers', function () {
 Router::post('/api/routers/sync', function () {
     header('Content-Type: application/json');
     requireAdmin();
-    
+
     try {
         require_once __DIR__ . '/../inc/KeeneticRouter.php';
         require_once __DIR__ . '/../inc/RouterManager.php';
@@ -3796,10 +3827,10 @@ Router::post('/api/routers/sync', function () {
 Router::post('/api/routers/{id}/push', function ($params) {
     header('Content-Type: application/json');
     requireAdmin();
-    
-    $id = (int)$params['id'];
-    $vpnClientId = isset($_GET['vpn_client_id']) ? (int)$_GET['vpn_client_id'] : (isset($_POST['vpn_client_id']) ? (int)$_POST['vpn_client_id'] : null);
-    
+
+    $id = (int) $params['id'];
+    $vpnClientId = isset($_GET['vpn_client_id']) ? (int) $_GET['vpn_client_id'] : (isset($_POST['vpn_client_id']) ? (int) $_POST['vpn_client_id'] : null);
+
     try {
         require_once __DIR__ . '/../inc/KeeneticRouter.php';
         require_once __DIR__ . '/../inc/RouterManager.php';
@@ -3815,25 +3846,25 @@ Router::post('/api/routers/{id}/push', function ($params) {
 Router::post('/api/routers/{id}/push-routing-groups', function ($params) {
     header('Content-Type: application/json');
     requireAdmin();
-    
-    $id = (int)$params['id'];
-    
+
+    $id = (int) $params['id'];
+
     // Read JSON payload or fall back to $_POST
     $input = json_decode(file_get_contents('php://input'), true);
     if (!$input) {
         $input = $_POST;
     }
-    
+
     $groupIds = $input['group_ids'] ?? [];
     if (empty($groupIds)) {
         http_response_code(400);
         echo json_encode(['error' => 'No routing groups selected.']);
         return;
     }
-    
+
     // Convert to integers
     $groupIds = array_map('intval', $groupIds);
-    
+
     try {
         require_once __DIR__ . '/../inc/KeeneticRouter.php';
         require_once __DIR__ . '/../inc/RouterManager.php';
@@ -3849,7 +3880,7 @@ Router::post('/api/routers/{id}/push-routing-groups', function ($params) {
 Router::get('/api/routing-groups', function () {
     header('Content-Type: application/json');
     requireAdmin();
-    
+
     $pdo = DB::conn();
     $stmt = $pdo->query("SELECT id, name, description FROM routing_groups ORDER BY name ASC");
     echo json_encode(['groups' => $stmt->fetchAll()]);
@@ -3859,18 +3890,18 @@ Router::get('/api/routing-groups', function () {
 Router::post('/api/routing-groups', function () {
     header('Content-Type: application/json');
     requireAdmin();
-    
+
     // Read JSON payload or $_POST
     $input = json_decode(file_get_contents('php://input'), true);
     if (!$input) {
         $input = $_POST;
     }
-    
-    $id = isset($input['id']) && $input['id'] !== '' ? (int)$input['id'] : null;
+
+    $id = isset($input['id']) && $input['id'] !== '' ? (int) $input['id'] : null;
     $name = trim($input['name'] ?? '');
     $description = trim($input['description'] ?? '');
     $contentRaw = trim($input['content'] ?? '');
-    
+
     if (empty($name)) {
         http_response_code(400);
         echo json_encode(['error' => 'Group name is required.']);
@@ -3882,7 +3913,8 @@ Router::post('/api/routing-groups', function () {
     $cleaned = [];
     foreach ($lines as $line) {
         $line = trim($line);
-        if (empty($line)) continue;
+        if (empty($line))
+            continue;
 
         // Strip http:// or https:// and trailing slash if accidentally pasted
         $line = preg_replace('#^https?://#i', '', $line);
@@ -3903,7 +3935,7 @@ Router::post('/api/routing-groups', function () {
     }
 
     $content = implode("\n", $cleaned);
-    
+
     $pdo = DB::conn();
     try {
         if ($id) {
@@ -3924,9 +3956,9 @@ Router::post('/api/routing-groups', function () {
 Router::post('/api/routing-groups/{id}/delete', function ($params) {
     header('Content-Type: application/json');
     requireAdmin();
-    
-    $id = (int)$params['id'];
-    
+
+    $id = (int) $params['id'];
+
     $pdo = DB::conn();
     try {
         $stmt = $pdo->prepare("DELETE FROM routing_groups WHERE id = ?");
@@ -3942,9 +3974,9 @@ Router::post('/api/routing-groups/{id}/delete', function ($params) {
 Router::post('/api/routers/{id}/check', function ($params) {
     header('Content-Type: application/json');
     requireAdmin();
-    
-    $id = (int)$params['id'];
-    
+
+    $id = (int) $params['id'];
+
     try {
         require_once __DIR__ . '/../inc/KeeneticRouter.php';
         require_once __DIR__ . '/../inc/RouterManager.php';
@@ -3960,45 +3992,45 @@ Router::post('/api/routers/{id}/check', function ($params) {
 Router::post('/api/routers/{id}/credentials', function ($params) {
     header('Content-Type: application/json');
     requireAdmin();
-    
-    $id = (int)$params['id'];
-    
+
+    $id = (int) $params['id'];
+
     $data = json_decode(file_get_contents('php://input'), true);
     $domain = trim($data['domain'] ?? '');
     $login = trim($data['login'] ?? 'admin');
     $password = $data['password'] ?? '';
-    
+
     if (empty($domain)) {
         http_response_code(400);
         echo json_encode(['error' => 'Domain/IP is required.']);
         return;
     }
-    
+
     try {
         $pdo = DB::conn();
-        
+
         $stmt = $pdo->prepare("SELECT password FROM routers WHERE id = ?");
         $stmt->execute([$id]);
         $existing = $stmt->fetch();
-        
+
         if (!$existing) {
             http_response_code(404);
             echo json_encode(['error' => 'Router not found.']);
             return;
         }
-        
+
         // If password is blank, retain the old password
         if ($password === '') {
             $password = $existing['password'];
         }
-        
+
         $stmtUpdate = $pdo->prepare("
             UPDATE routers 
             SET domain = ?, login = ?, password = ?, status = 'pending', error_message = NULL 
             WHERE id = ?
         ");
         $stmtUpdate->execute([$domain, $login, $password, $id]);
-        
+
         echo json_encode(['success' => true]);
     } catch (Exception $e) {
         http_response_code(500);
@@ -4010,9 +4042,9 @@ Router::post('/api/routers/{id}/credentials', function ($params) {
 Router::post('/api/routers/{id}/remove-wg', function ($params) {
     header('Content-Type: application/json');
     requireAdmin();
-    
-    $id = (int)$params['id'];
-    
+
+    $id = (int) $params['id'];
+
     try {
         require_once __DIR__ . '/../inc/KeeneticRouter.php';
         require_once __DIR__ . '/../inc/RouterManager.php';
@@ -4028,7 +4060,7 @@ Router::post('/api/routers/{id}/remove-wg', function ($params) {
 Router::post('/api/routers/check-all', function () {
     header('Content-Type: application/json');
     requireAdmin();
-    
+
     try {
         require_once __DIR__ . '/../inc/KeeneticRouter.php';
         require_once __DIR__ . '/../inc/RouterManager.php';
@@ -4044,24 +4076,24 @@ Router::post('/api/routers/check-all', function () {
 Router::post('/api/routers/push-all', function () {
     header('Content-Type: application/json');
     requireAdmin();
-    
+
     try {
         require_once __DIR__ . '/../inc/KeeneticRouter.php';
         require_once __DIR__ . '/../inc/RouterManager.php';
-        
+
         $pdo = DB::conn();
         $stmt = $pdo->query("SELECT id FROM routers WHERE status IN ('pending', 'error', 'offline')");
         $ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
-        
+
         $results = [];
         foreach ($ids as $id) {
             try {
-                $results[$id] = RouterManager::pushConfigToRouter((int)$id);
+                $results[$id] = RouterManager::pushConfigToRouter((int) $id);
             } catch (Exception $e) {
                 $results[$id] = ['success' => false, 'error' => $e->getMessage()];
             }
         }
-        
+
         echo json_encode(['success' => true, 'results' => $results]);
     } catch (Exception $e) {
         http_response_code(500);
@@ -4073,22 +4105,22 @@ Router::post('/api/routers/push-all', function () {
 Router::get('/api/routers/{id}/interfaces', function ($params) {
     header('Content-Type: application/json');
     requireAdmin();
-    
-    $id = (int)$params['id'];
-    
+
+    $id = (int) $params['id'];
+
     try {
         require_once __DIR__ . '/../inc/KeeneticRouter.php';
         $pdo = DB::conn();
         $stmt = $pdo->prepare("SELECT * FROM routers WHERE id = ?");
         $stmt->execute([$id]);
         $router = $stmt->fetch();
-        
+
         if (!$router) {
             http_response_code(404);
             echo json_encode(['error' => 'Router not found']);
             return;
         }
-        
+
         $login = $router['login'] ?: 'admin';
         $adapter = new KeeneticRouter($router['domain'], $router['password'], $login);
         $adapter->setTimeout(5);
@@ -4104,10 +4136,10 @@ Router::get('/api/routers/{id}/interfaces', function ($params) {
 Router::get('/api/routers/{id}/configs', function ($params) {
     header('Content-Type: application/json');
     requireAdmin();
-    
-    $routerId = (int)$params['id'];
+
+    $routerId = (int) $params['id'];
     $pdo = DB::conn();
-    
+
     // Get router client code
     $stmt = $pdo->prepare("SELECT ext_client_code FROM routers WHERE id = ?");
     $stmt->execute([$routerId]);
@@ -4117,7 +4149,7 @@ Router::get('/api/routers/{id}/configs', function ($params) {
         echo json_encode(['error' => 'Router not found']);
         return;
     }
-    
+
     // Get active configurations
     $stmtConfigs = $pdo->prepare("
         SELECT c.id, c.name, c.client_ip, c.bytes_sent, c.bytes_received, c.last_handshake, s.name AS server_name 
@@ -4128,17 +4160,17 @@ Router::get('/api/routers/{id}/configs', function ($params) {
     ");
     $stmtConfigs->execute([$router['ext_client_code']]);
     $rawConfigs = $stmtConfigs->fetchAll(PDO::FETCH_ASSOC);
-    
+
     $configs = [];
     foreach ($rawConfigs as $cfg) {
         $statusInfo = getRelativeActiveStatus($cfg['last_handshake'] ?? null);
         $cfg['last_active_text'] = $statusInfo['text'];
         $cfg['last_active_class'] = $statusInfo['class'];
-        $cfg['bytes_sent'] = (int)($cfg['bytes_sent'] ?? 0);
-        $cfg['bytes_received'] = (int)($cfg['bytes_received'] ?? 0);
+        $cfg['bytes_sent'] = (int) ($cfg['bytes_sent'] ?? 0);
+        $cfg['bytes_received'] = (int) ($cfg['bytes_received'] ?? 0);
         $configs[] = $cfg;
     }
-    
+
     echo json_encode(['configs' => $configs]);
 });
 
@@ -4157,7 +4189,8 @@ Router::get('/finances', function () {
 Router::get('/api/finances/stats', function () {
     header('Content-Type: application/json');
     $user = requireApiAuth();
-    if (!$user) return;
+    if (!$user)
+        return;
 
     try {
         if (!Finances::isAvailable()) {
@@ -4201,7 +4234,8 @@ Router::get('/api/finances/stats', function () {
 Router::get('/api/finances/transactions', function () {
     header('Content-Type: application/json');
     $user = requireApiAuth();
-    if (!$user) return;
+    if (!$user)
+        return;
 
     try {
         if (!Finances::isAvailable()) {
@@ -4232,7 +4266,8 @@ Router::get('/api/finances/transactions', function () {
 
 Router::get('/api/finances/export', function () {
     $user = requireApiAuth();
-    if (!$user) return;
+    if (!$user)
+        return;
 
     try {
         if (!Finances::isAvailable()) {
@@ -4258,7 +4293,7 @@ Router::get('/api/finances/export', function () {
 
         $output = fopen('php://output', 'w');
         // Add UTF-8 BOM for Excel compatibility
-        fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
+        fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF));
         fputcsv($output, ['ID', 'Date', 'Type', 'Amount', 'Description', 'Client_ID', 'VLESS_ID', 'Updated At']);
 
         foreach ($rows as $r) {

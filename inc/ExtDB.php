@@ -6,25 +6,28 @@
  * This class is only instantiated on Clients-related routes; Postgres being
  * unreachable will NOT affect the main MySQL-backed app.
  */
-class ExtDB {
+class ExtDB
+{
     private static ?PDO $pdo = null;
 
-    public static function conn(): PDO {
-        if (self::$pdo) return self::$pdo;
+    public static function conn(): PDO
+    {
+        if (self::$pdo)
+            return self::$pdo;
 
-        $host   = Config::get('EXT_PG_HOST', '157.22.175.250');
-        $port   = Config::get('EXT_PG_PORT', '5434');
-        $db     = Config::get('EXT_PG_DB',   'nocodb');
-        $user   = Config::get('EXT_PG_USER', 'nocodb');
-        $pass   = Config::get('EXT_PG_PASSWORD', 'nocodb');
+        $host = Config::get('EXT_PG_HOST', '157.22.175.250');
+        $port = Config::get('EXT_PG_PORT', '5434');
+        $db = Config::get('EXT_PG_DB', 'nocodb');
+        $user = Config::get('EXT_PG_USER', 'nocodb');
+        $pass = Config::get('EXT_PG_PASSWORD', 'nocodb');
         $schema = Config::get('EXT_PG_SCHEMA', 'public');
 
         $dsn = sprintf('pgsql:host=%s;port=%s;dbname=%s', $host, $port, $db);
 
         $options = [
-            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES   => false,
+            PDO::ATTR_EMULATE_PREPARES => false,
         ];
 
         self::$pdo = new PDO($dsn, $user, $pass, $options);
@@ -38,14 +41,16 @@ class ExtDB {
     /**
      * Reset the connection (useful after a connection failure, for retry logic).
      */
-    public static function reset(): void {
+    public static function reset(): void
+    {
         self::$pdo = null;
     }
 
     /**
      * Test whether the external DB is reachable.
      */
-    public static function isAvailable(): bool {
+    public static function isAvailable(): bool
+    {
         try {
             self::conn()->query('SELECT 1');
             return true;
@@ -62,8 +67,9 @@ class ExtDB {
      * @param int    $offset    Row offset for pagination.
      * @return array            Array of rows with at least a 'Code' key.
      */
-    public static function searchClients(string $search = '', int $limit = 50, int $offset = 0): array {
-        $pdo   = self::conn();
+    public static function searchClients(string $search = '', int $limit = 50, int $offset = 0): array
+    {
+        $pdo = self::conn();
         $table = Config::get('EXT_PG_CLIENTS_TABLE', 'Clients');
 
         if ($search !== '') {
@@ -71,14 +77,14 @@ class ExtDB {
                 "SELECT \"Code\" FROM \"{$table}\" WHERE \"Code\" ILIKE ? ORDER BY \"Code\" LIMIT ? OFFSET ?"
             );
             $stmt->bindValue(1, '%' . $search . '%', PDO::PARAM_STR);
-            $stmt->bindValue(2, $limit,  PDO::PARAM_INT);
+            $stmt->bindValue(2, $limit, PDO::PARAM_INT);
             $stmt->bindValue(3, $offset, PDO::PARAM_INT);
             $stmt->execute();
         } else {
             $stmt = $pdo->prepare(
                 "SELECT \"Code\" FROM \"{$table}\" ORDER BY \"Code\" LIMIT ? OFFSET ?"
             );
-            $stmt->bindValue(1, $limit,  PDO::PARAM_INT);
+            $stmt->bindValue(1, $limit, PDO::PARAM_INT);
             $stmt->bindValue(2, $offset, PDO::PARAM_INT);
             $stmt->execute();
         }
@@ -89,7 +95,8 @@ class ExtDB {
     /**
      * Check whether a given Code exists in the external Clients table.
      */
-    public static function clientCodeExists(string $code): bool {
+    public static function clientCodeExists(string $code): bool
+    {
         $pdo = self::conn();
         $table = Config::get('EXT_PG_CLIENTS_TABLE', 'Clients');
         $stmt = $pdo->prepare("SELECT 1 FROM \"{$table}\" WHERE \"Code\" = ? LIMIT 1");
@@ -100,7 +107,8 @@ class ExtDB {
     /**
      * Count total clients matching optional search term.
      */
-    public static function countClients(string $search = ''): int {
+    public static function countClients(string $search = ''): int
+    {
         $pdo = self::conn();
         $table = Config::get('EXT_PG_CLIENTS_TABLE', 'Clients');
 
@@ -111,7 +119,7 @@ class ExtDB {
             $stmt = $pdo->query("SELECT COUNT(*) FROM \"{$table}\"");
         }
 
-        return (int)$stmt->fetchColumn();
+        return (int) $stmt->fetchColumn();
     }
 
     /**
@@ -121,7 +129,8 @@ class ExtDB {
      * @return array Array containing success status, records synced count, and warning/error messages.
      * @throws Exception If PostgreSQL connection fails.
      */
-    public static function sync(): array {
+    public static function sync(): array
+    {
         $pdo = DB::conn();
 
         // 1. Acquire execution lock
@@ -154,57 +163,32 @@ class ExtDB {
             $paymentsMap = [];
             try {
                 $payStmt = $pgPdo->query("
-                    SELECT TRIM(\"Client_id\"::text) AS client_id, \"Date\"::text AS date, \"Amount\"::numeric AS amount, id
+                    SELECT DISTINCT ON (\"Client_id\") \"Client_id\"::text AS client_id, \"Date\"::text AS date, \"Amount\"::numeric AS amount
                     FROM \"Finances_2026\"
                     WHERE TRIM(LOWER(\"Type\"::text)) = 'income' AND \"Client_id\" IS NOT NULL AND TRIM(\"Client_id\"::text) != ''
-                    ORDER BY id ASC
+                    ORDER BY \"Client_id\", \"Date\"::text DESC, id DESC
                 ");
                 $rawPayments = $payStmt->fetchAll(PDO::FETCH_ASSOC);
                 foreach ($rawPayments as $p) {
                     $cid = trim($p['client_id'] ?? '');
-                    if ($cid === '') continue;
+                    if ($cid === '')
+                        continue;
 
                     $rawDate = trim($p['date'] ?? '');
                     $normDate = null;
-                    $ts = 0;
                     if (!empty($rawDate)) {
                         if (preg_match('/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/', $rawDate, $m)) {
                             $normDate = sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]);
-                            $ts = strtotime($normDate);
-                        } elseif (preg_match('/^\d{4}-\d{2}-\d{2}$/', $rawDate)) {
-                            $normDate = $rawDate;
-                            $ts = strtotime($normDate);
-                        } elseif (($parsedTs = strtotime($rawDate)) !== false) {
-                            $normDate = date('Y-m-d', $parsedTs);
-                            $ts = $parsedTs;
+                        } elseif (strtotime($rawDate) !== false) {
+                            $normDate = date('Y-m-d', strtotime($rawDate));
                         }
                     }
 
-                    $amt = (isset($p['amount']) && $p['amount'] !== '') ? (float)$p['amount'] : null;
-
-                    // Generate variants of code for robust matching (with/without #, uppercase)
-                    $cleanId = ltrim($cid, '#');
-                    $keysToStore = array_unique([
-                        $cid,
-                        mb_strtoupper($cid),
-                        mb_strtolower($cid),
-                        $cleanId,
-                        mb_strtoupper($cleanId),
-                        mb_strtolower($cleanId),
-                        '#' . $cleanId,
-                        mb_strtoupper('#' . $cleanId),
-                        mb_strtolower('#' . $cleanId),
-                    ]);
-
-                    foreach ($keysToStore as $k) {
-                        if (!isset($paymentsMap[$k]) || ($ts > 0 && $ts >= ($paymentsMap[$k]['ts'] ?? 0))) {
-                            $paymentsMap[$k] = [
-                                'date'   => $normDate,
-                                'amount' => $amt,
-                                'ts'     => $ts,
-                            ];
-                        }
-                    }
+                    $amt = (isset($p['amount']) && $p['amount'] !== '') ? (float) $p['amount'] : null;
+                    $paymentsMap[$cid] = [
+                        'date' => $normDate,
+                        'amount' => $amt,
+                    ];
                 }
             } catch (Throwable $e) {
                 error_log("ExtDB sync payment fetch notice: " . $e->getMessage());
@@ -244,39 +228,24 @@ class ExtDB {
 
                 foreach ($rawClients as $row) {
                     $code = trim($row['Code'] ?? '');
-                    if ($code === '') continue;
+                    if ($code === '')
+                        continue;
                     $activeCodes[] = $code;
-                    
+
                     $name = isset($row['Name']) ? trim($row['Name']) : null;
                     $startDate = isset($row['Start_Date']) ? trim($row['Start_Date']) : null;
-                    if ($startDate === '') $startDate = null;
-                    $sub = isset($row['Sub']) ? (int)$row['Sub'] : null;
+                    if ($startDate === '')
+                        $startDate = null;
+                    $sub = isset($row['Sub']) ? (int) $row['Sub'] : null;
                     $func = isset($row['Func']) ? trim($row['Func']) : null;
                     $router = isset($row['Router']) ? trim($row['Router']) : null;
                     $domain = isset($row['Domain']) ? trim($row['Domain']) : null;
                     $pass = isset($row['Pass']) ? trim($row['Pass']) : null;
                     $tgid = isset($row['tgid']) ? trim($row['tgid']) : null;
-                    if ($tgid === '') $tgid = null;
+                    if ($tgid === '')
+                        $tgid = null;
 
-                    $cleanCode = ltrim($code, '#');
-                    $codeLookups = array_unique([
-                        $code,
-                        mb_strtoupper($code),
-                        mb_strtolower($code),
-                        $cleanCode,
-                        mb_strtoupper($cleanCode),
-                        '#' . $cleanCode,
-                        mb_strtoupper('#' . $cleanCode),
-                    ]);
-
-                    $payInfo = null;
-                    foreach ($codeLookups as $lk) {
-                        if (isset($paymentsMap[$lk])) {
-                            $payInfo = $paymentsMap[$lk];
-                            break;
-                        }
-                    }
-
+                    $payInfo = $paymentsMap[$code] ?? null;
                     $lastPayDate = $payInfo['date'] ?? null;
                     $lastPayAmt = $payInfo['amount'] ?? null;
 
@@ -338,8 +307,9 @@ class ExtDB {
             // Cleanup lock on failure
             try {
                 $pdo->prepare("DELETE FROM system_settings WHERE `key` = 'ext_clients_sync_running'")->execute();
-            } catch (Throwable $lockEx) {}
-            
+            } catch (Throwable $lockEx) {
+            }
+
             throw $e;
         }
     }
@@ -349,7 +319,8 @@ class ExtDB {
      *
      * @return array Array of server records with keys: id, Servers (name), Country, Exp_Date
      */
-    public static function getExternalServers(): array {
+    public static function getExternalServers(): array
+    {
         if (!self::isAvailable()) {
             return [];
         }
@@ -367,9 +338,11 @@ class ExtDB {
     /**
      * Get the latest server record (from MySQL) connected/assigned to a client code.
      */
-    public static function getLatestServerForClientCode(string $code): ?array {
+    public static function getLatestServerForClientCode(string $code): ?array
+    {
         $code = trim($code);
-        if ($code === '') return null;
+        if ($code === '')
+            return null;
 
         $rawCode = ltrim($code, '#');
         $hashCode = '#' . $rawCode;
@@ -387,7 +360,8 @@ class ExtDB {
         ");
         $stmtRouter->execute([$code, $hashCode]);
         $server = $stmtRouter->fetch(PDO::FETCH_ASSOC);
-        if ($server) return $server;
+        if ($server)
+            return $server;
 
         // 2. Fall back to active vpn_clients configs
         $stmtClient = $pdo->prepare("
@@ -407,13 +381,15 @@ class ExtDB {
     /**
      * Synchronize a specific client's Servers_id in external PostgreSQL based on their latest panel server.
      */
-    public static function syncClientServerId(string $code): bool {
+    public static function syncClientServerId(string $code): bool
+    {
         if (!self::isAvailable()) {
             return false;
         }
 
         $code = trim($code);
-        if ($code === '') return false;
+        if ($code === '')
+            return false;
 
         $localServer = self::getLatestServerForClientCode($code);
         if (!$localServer) {
@@ -422,7 +398,7 @@ class ExtDB {
 
         $extServerId = null;
         if (!empty($localServer['ext_server_id'])) {
-            $extServerId = (int)$localServer['ext_server_id'];
+            $extServerId = (int) $localServer['ext_server_id'];
         } else {
             // Find server by name in external Postgres "Servers" table
             $pgPdo = self::conn();
@@ -430,7 +406,7 @@ class ExtDB {
             $stmtSearch->execute([trim($localServer['name'])]);
             $foundId = $stmtSearch->fetchColumn();
             if ($foundId !== false) {
-                $extServerId = (int)$foundId;
+                $extServerId = (int) $foundId;
             }
         }
 
@@ -451,7 +427,8 @@ class ExtDB {
     /**
      * Synchronize all clients' Servers_id in external PostgreSQL based on their latest panel servers.
      */
-    public static function syncAllClientServerIds(): int {
+    public static function syncAllClientServerIds(): int
+    {
         if (!self::isAvailable()) {
             return 0;
         }
@@ -490,7 +467,8 @@ class ExtDB {
      * @return string Path to the created .sql backup file
      * @throws Exception If PostgreSQL is unreachable or dump fails
      */
-    public static function createBackup(int $userId = 1, string $type = 'manual'): string {
+    public static function createBackup(int $userId = 1, string $type = 'manual'): string
+    {
         if (!self::isAvailable()) {
             throw new Exception("External PostgreSQL database is unreachable.");
         }
@@ -506,14 +484,14 @@ class ExtDB {
 
         $pgHost = Config::get('EXT_PG_HOST', '157.22.175.250');
         $pgPort = Config::get('EXT_PG_PORT', '5434');
-        $pgDb   = Config::get('EXT_PG_DB',   'nocodb');
+        $pgDb = Config::get('EXT_PG_DB', 'nocodb');
         $pgUser = Config::get('EXT_PG_USER', 'nocodb');
         $pgPass = Config::get('EXT_PG_PASSWORD', 'nocodb');
 
         $pgHostEsc = escapeshellarg($pgHost);
         $pgPortEsc = escapeshellarg($pgPort);
         $pgUserEsc = escapeshellarg($pgUser);
-        $pgDbEsc   = escapeshellarg($pgDb);
+        $pgDbEsc = escapeshellarg($pgDb);
         $backupPathEsc = escapeshellarg($backupPath);
 
         $errPath = "/tmp/ext_pg_dump_{$timestamp}.err";
@@ -565,7 +543,8 @@ class ExtDB {
     /**
      * Native PHP/PDO fallback SQL dumper for the whole external PostgreSQL database.
      */
-    private static function dumpPostgresViaPdo(string $outputPath): void {
+    private static function dumpPostgresViaPdo(string $outputPath): void
+    {
         $pgPdo = self::conn();
 
         $tablesStmt = $pgPdo->query("
@@ -653,7 +632,8 @@ class ExtDB {
      * @return bool True on success
      * @throws Exception If restoration fails
      */
-    public static function restoreBackup(string $backupPath): bool {
+    public static function restoreBackup(string $backupPath): bool
+    {
         if (!file_exists($backupPath)) {
             throw new Exception("Backup file not found at: {$backupPath}");
         }
@@ -664,14 +644,14 @@ class ExtDB {
 
         $pgHost = Config::get('EXT_PG_HOST', '157.22.175.250');
         $pgPort = Config::get('EXT_PG_PORT', '5434');
-        $pgDb   = Config::get('EXT_PG_DB',   'nocodb');
+        $pgDb = Config::get('EXT_PG_DB', 'nocodb');
         $pgUser = Config::get('EXT_PG_USER', 'nocodb');
         $pgPass = Config::get('EXT_PG_PASSWORD', 'nocodb');
 
         $pgHostEsc = escapeshellarg($pgHost);
         $pgPortEsc = escapeshellarg($pgPort);
         $pgUserEsc = escapeshellarg($pgUser);
-        $pgDbEsc   = escapeshellarg($pgDb);
+        $pgDbEsc = escapeshellarg($pgDb);
         $backupPathEsc = escapeshellarg($backupPath);
 
         $errPath = "/tmp/ext_pg_restore_" . time() . ".err";
@@ -682,7 +662,8 @@ class ExtDB {
         @exec($cmd, $output, $returnVar);
 
         if ($returnVar === 0) {
-            if (file_exists($errPath)) @unlink($errPath);
+            if (file_exists($errPath))
+                @unlink($errPath);
             return true;
         }
 
@@ -695,7 +676,8 @@ class ExtDB {
         $pgPdo = self::conn();
         $pgPdo->exec($sqlContent);
 
-        if (file_exists($errPath)) @unlink($errPath);
+        if (file_exists($errPath))
+            @unlink($errPath);
         return true;
     }
 }
@@ -704,7 +686,8 @@ class ExtDB {
  * pg_escape_identifier_compat — wraps the schema name safely.
  * Falls back to simple quoting if the native function is not available.
  */
-function pg_escape_identifier_compat(string $id): string {
+function pg_escape_identifier_compat(string $id): string
+{
     // Replace any double quotes inside the identifier to prevent injection
     return '"' . str_replace('"', '""', $id) . '"';
 }
