@@ -21,6 +21,7 @@
                 {% endif %}
 
                 <form class="space-y-4" method="POST" action="/login">
+                    {{ csrf_field() }}
                     <div class="form-control">
                         <label class="label py-1" for="email">
                             <span class="label-text font-medium text-xs">Email Address</span>

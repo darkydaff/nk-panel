@@ -57,7 +57,14 @@ class View {
     });
     self::$twig->addFunction($flagFunc);
 
+    // Add CSRF helper function
+    $csrfFunc = new TwigFunction('csrf_field', function () {
+      return Csrf::field();
+    }, ['is_safe' => ['html']]);
+    self::$twig->addFunction($csrfFunc);
+
     // Add globals
+    self::$twig->addGlobal('csrf_token', Csrf::getToken());
     foreach ($globals as $k => $v) self::$twig->addGlobal($k, $v);
   }
 

@@ -1,6 +1,7 @@
 <?php
 class DB {
   private static ?PDO $pdo = null;
+  private static bool $migrationsChecked = false;
 
   public static function conn(): PDO {
     if (self::$pdo) return self::$pdo;
@@ -23,369 +24,128 @@ class DB {
     // Standardize MySQL connection timezone to UTC
     self::$pdo->exec("SET time_zone = '+00:00'");
     
-    // Auto-run schema updates if columns are missing
-    self::checkAndRunMigrations(self::$pdo);
+    // Auto-run schema updates if not checked yet during this request
+    if (!self::$migrationsChecked) {
+      self::checkAndRunMigrations(self::$pdo);
+      self::$migrationsChecked = true;
+    }
     
     return self::$pdo;
   }
 
   private static function checkAndRunMigrations(PDO $pdo): void {
     try {
-      // Check if secret_token column exists in vpn_servers
-      $stmt = $pdo->query("SHOW COLUMNS FROM vpn_servers LIKE 'secret_token'");
-      $hasSecretToken = $stmt->rowCount() > 0;
-      
-      if (!$hasSecretToken) {
-        // Run migration script
-        $sqlPath = __DIR__ . '/../migrations/017_add_server_secret_token_and_speeds.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
+      // 1. Ensure migration tracking table exists
+      $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `schema_migrations` (
+          `migration` VARCHAR(255) NOT NULL PRIMARY KEY,
+          `executed_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      ");
+
+      // 2. Fetch set of already executed migrations
+      $stmt = $pdo->query("SELECT `migration` FROM `schema_migrations`");
+      $executedMap = array_fill_keys($stmt->fetchAll(PDO::FETCH_COLUMN), true);
+
+      // 3. Scan migrations directory
+      $migrationsDir = __DIR__ . '/../migrations';
+      if (!is_dir($migrationsDir)) {
+        return;
+      }
+
+      $files = glob($migrationsDir . '/*.sql');
+      if (empty($files)) {
+        return;
+      }
+
+      sort($files, SORT_STRING);
+
+      // 4. Backwards compatibility: If tracking table is empty, detect existing schema to mark legacy migrations as executed
+      if (empty($executedMap)) {
+        $legacyExecuted = self::detectLegacyExecutedMigrations($pdo, $files);
+        foreach ($legacyExecuted as $filename) {
+          $insStmt = $pdo->prepare("INSERT IGNORE INTO `schema_migrations` (`migration`) VALUES (?)");
+          $insStmt->execute([$filename]);
+          $executedMap[$filename] = true;
         }
       }
 
-      // Check if last_endpoint_ip column exists in vpn_clients
-      $stmt2 = $pdo->query("SHOW COLUMNS FROM vpn_clients LIKE 'last_endpoint_ip'");
-      $hasGeoIP = $stmt2->rowCount() > 0;
-      
-      if (!$hasGeoIP) {
-        // Run GeoIP migration script
-        $sqlPath = __DIR__ . '/../migrations/018_add_client_geoip.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
+      // 5. Execute pending migrations
+      $insStmt = $pdo->prepare("INSERT INTO `schema_migrations` (`migration`) VALUES (?)");
+      foreach ($files as $filePath) {
+        $filename = basename($filePath);
+        if (isset($executedMap[$filename])) {
+          continue;
         }
-      }
 
-      // Check if latitude column exists in vpn_clients
-      $stmt3 = $pdo->query("SHOW COLUMNS FROM vpn_clients LIKE 'latitude'");
-      $hasCoords = $stmt3->rowCount() > 0;
-      
-      if (!$hasCoords) {
-        // Run Coordinates migration script
-        $sqlPath = __DIR__ . '/../migrations/019_add_client_coordinates.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
+        $sql = file_get_contents($filePath);
+        if ($sql !== false && trim($sql) !== '') {
+          try {
+            $pdo->exec($sql);
+          } catch (Throwable $e) {
+            // Ignore duplicate column/table errors if a migration was partially applied before
+            $msg = $e->getMessage();
+            if (str_contains($msg, 'Duplicate column name') || 
+                str_contains($msg, 'already exists') || 
+                str_contains($msg, 'Duplicate key name')) {
+              error_log("Notice: Migration {$filename} skipped duplicate DDL: " . $msg);
+            } else {
+              throw $e;
+            }
+          }
         }
-      }
 
-      // Check if ext_client_code column exists in vpn_clients
-      $stmt4 = $pdo->query("SHOW COLUMNS FROM vpn_clients LIKE 'ext_client_code'");
-      $hasExtClientCode = $stmt4->rowCount() > 0;
-
-      if (!$hasExtClientCode) {
-        // Run external client link migration
-        $sqlPath = __DIR__ . '/../migrations/020_add_client_entity_link.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
-        }
-      }
-
-      // Check if ext_clients table exists
-      try {
-        $pdo->query("SELECT 1 FROM ext_clients LIMIT 1");
-        $hasExtClientsTable = true;
-      } catch (Throwable $e) {
-        $hasExtClientsTable = false;
-      }
-
-      if (!$hasExtClientsTable) {
-        // Run external clients table migration
-        $sqlPath = __DIR__ . '/../migrations/021_create_ext_clients_table.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
-        }
-      }
-
-      // Check if name column exists in ext_clients
-      try {
-        $stmtExtCols = $pdo->query("SHOW COLUMNS FROM ext_clients LIKE 'name'");
-        $hasNameCol = $stmtExtCols->rowCount() > 0;
-      } catch (Throwable $e) {
-        $hasNameCol = false;
-      }
-
-      if (!$hasNameCol) {
-        // Run migration to add name, start_date, and sub fields
-        $sqlPath = __DIR__ . '/../migrations/022_add_fields_to_ext_clients.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
-        }
-      }
-
-      // Check if func column exists in ext_clients
-      try {
-        $stmtExtCols2 = $pdo->query("SHOW COLUMNS FROM ext_clients LIKE 'func'");
-        $hasFuncCol = $stmtExtCols2->rowCount() > 0;
-      } catch (Throwable $e) {
-        $hasFuncCol = false;
-      }
-
-      if (!$hasFuncCol) {
-        // Run migration to add func and router fields
-        $sqlPath = __DIR__ . '/../migrations/023_add_func_to_ext_clients.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
-        }
-      }
-
-      // Check if system_settings table exists
-      try {
-        $stmtSettings = $pdo->query("SHOW TABLES LIKE 'system_settings'");
-        $hasSettingsTable = $stmtSettings->rowCount() > 0;
-      } catch (Throwable $e) {
-        $hasSettingsTable = false;
-      }
-
-      if (!$hasSettingsTable) {
-        // Run migration to create system_settings table
-        $sqlPath = __DIR__ . '/../migrations/024_create_settings_table.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
-        }
-      }
-
-      // Check if bytes_sent column exists in ext_clients
-      try {
-        $stmtExtCols3 = $pdo->query("SHOW COLUMNS FROM ext_clients LIKE 'bytes_sent'");
-        $hasTrafficCols = $stmtExtCols3->rowCount() > 0;
-      } catch (Throwable $e) {
-        $hasTrafficCols = false;
-      }
-
-      if (!$hasTrafficCols) {
-        // Run migration to add bytes_sent and bytes_received fields
-        $sqlPath = __DIR__ . '/../migrations/025_add_traffic_to_ext_clients.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
-        }
-      }
-
-      // Check if backup_scope column exists in server_backups
-      try {
-        $stmtBackupCols = $pdo->query("SHOW COLUMNS FROM server_backups LIKE 'backup_scope'");
-        $hasBackupScope = $stmtBackupCols->rowCount() > 0;
-      } catch (Throwable $e) {
-        $hasBackupScope = false;
-      }
-
-      if (!$hasBackupScope) {
-        // Run migration to support comprehensive backups
-        $sqlPath = __DIR__ . '/../migrations/026_backup_restore_system_support.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
-        }
-      }
-
-      // Check if routers table exists
-      try {
-        $pdo->query("SELECT 1 FROM routers LIMIT 1");
-        $hasRoutersTable = true;
-      } catch (Throwable $e) {
-        $hasRoutersTable = false;
-      }
-
-      if (!$hasRoutersTable) {
-        $sqlPath = __DIR__ . '/../migrations/028_create_routers_table.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
-        }
-      }
-
-      // Check if domain column exists in ext_clients
-      try {
-        $stmtExtCols4 = $pdo->query("SHOW COLUMNS FROM ext_clients LIKE 'domain'");
-        $hasDomainCol = $stmtExtCols4->rowCount() > 0;
-      } catch (Throwable $e) {
-        $hasDomainCol = false;
-      }
-
-      if (!$hasDomainCol) {
-        $sqlPath = __DIR__ . '/../migrations/029_add_domain_pass_to_ext_clients.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
-        }
-      }
-
-      // Check if routing_groups table exists
-      try {
-        $pdo->query("SELECT 1 FROM routing_groups LIMIT 1");
-        $hasRoutingGroupsTable = true;
-      } catch (Throwable $e) {
-        $hasRoutingGroupsTable = false;
-      }
-
-      if (!$hasRoutingGroupsTable) {
-        $sqlPath = __DIR__ . '/../migrations/030_create_routing_groups.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
-        }
-      }
-
-      // Check if tgid column exists in ext_clients
-      try {
-        $stmtExtCols5 = $pdo->query("SHOW COLUMNS FROM ext_clients LIKE 'tgid'");
-        $hasTgidCol = $stmtExtCols5->rowCount() > 0;
-      } catch (Throwable $e) {
-        $hasTgidCol = false;
-      }
-
-      if (!$hasTgidCol) {
-        $sqlPath = __DIR__ . '/../migrations/031_add_tgid_to_ext_clients.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
-        }
-      }
-
-      // Always run clean duplicate settings migration on startup
-      $sqlPath = __DIR__ . '/../migrations/032_clean_duplicate_settings.sql';
-      if (file_exists($sqlPath)) {
-        $sql = file_get_contents($sqlPath);
-        $pdo->exec($sql);
-      }
-
-      // Check if last_notified_status column exists in ext_clients
-      try {
-        $stmtExtCols6 = $pdo->query("SHOW COLUMNS FROM ext_clients LIKE 'last_notified_status'");
-        $hasLastNotifiedStatus = $stmtExtCols6->rowCount() > 0;
-      } catch (Throwable $e) {
-        $hasLastNotifiedStatus = false;
-      }
-
-      if (!$hasLastNotifiedStatus) {
-        $sqlPath = __DIR__ . '/../migrations/033_add_last_notified_status_to_ext_clients.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
-        }
-      }
-
-      // Check if last_router_id column exists in ext_clients
-      try {
-        $stmtExtCols7 = $pdo->query("SHOW COLUMNS FROM ext_clients LIKE 'last_router_id'");
-        $hasLastRouterId = $stmtExtCols7->rowCount() > 0;
-      } catch (Throwable $e) {
-        $hasLastRouterId = false;
-      }
-
-      if (!$hasLastRouterId) {
-        $sqlPath = __DIR__ . '/../migrations/040_add_last_router_id_to_ext_clients.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
-        }
-      }
-
-      // Check if show_in_bot column exists in vpn_servers
-      try {
-        $stmtServerCols = $pdo->query("SHOW COLUMNS FROM vpn_servers LIKE 'show_in_bot'");
-        $hasShowInBot = $stmtServerCols->rowCount() > 0;
-      } catch (Throwable $e) {
-        $hasShowInBot = false;
-      }
-
-      if (!$hasShowInBot) {
-        $sqlPath = __DIR__ . '/../migrations/034_add_bot_access_control_to_vpn_servers.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
-        }
-      }
-
-      // Check if description column exists in vpn_servers
-      try {
-        $stmtDescCol = $pdo->query("SHOW COLUMNS FROM vpn_servers LIKE 'description'");
-        $hasDescription = $stmtDescCol->rowCount() > 0;
-      } catch (Throwable $e) {
-        $hasDescription = false;
-      }
-
-      if (!$hasDescription) {
-        $sqlPath = __DIR__ . '/../migrations/036_add_description_to_vpn_servers.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
-        }
-      }
-
-      // Check if bot_activity_logs table exists
-      try {
-        $pdo->query("SELECT 1 FROM bot_activity_logs LIMIT 1");
-        $hasLogsTable = true;
-      } catch (Throwable $e) {
-        $hasLogsTable = false;
-      }
-
-      if (!$hasLogsTable) {
-        $sqlPath = __DIR__ . '/../migrations/035_create_bot_activity_logs_table.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
-        }
-      }
-
-      // Check if last_ping_ms column exists in routers table
-      try {
-        $pdo->query("SELECT last_ping_ms FROM routers LIMIT 1");
-        $hasLastPingColumn = true;
-      } catch (Throwable $e) {
-        $hasLastPingColumn = false;
-      }
-
-      if (!$hasLastPingColumn) {
-        $sqlPath = __DIR__ . '/../migrations/037_add_last_ping_ms_to_routers.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
-        }
-      }
-
-      // Check if ext_server_id column exists in vpn_servers table
-      try {
-        $stmtExtServCol = $pdo->query("SHOW COLUMNS FROM vpn_servers LIKE 'ext_server_id'");
-        $hasExtServerId = $stmtExtServCol->rowCount() > 0;
-      } catch (Throwable $e) {
-        $hasExtServerId = false;
-      }
-
-      if (!$hasExtServerId) {
-        $sqlPath = __DIR__ . '/../migrations/038_add_ext_server_id_to_vpn_servers.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
-        }
-      }
-
-      // Check if backup_scope enum includes ext_db
-      try {
-        $stmtScopeCol = $pdo->query("SHOW COLUMNS FROM server_backups LIKE 'backup_scope'");
-        $scopeRow = $stmtScopeCol->fetch(PDO::FETCH_ASSOC);
-        $hasExtDbScope = isset($scopeRow['Type']) && str_contains($scopeRow['Type'], 'ext_db');
-      } catch (Throwable $e) {
-        $hasExtDbScope = false;
-      }
-
-      if (!$hasExtDbScope) {
-        $sqlPath = __DIR__ . '/../migrations/039_add_ext_db_scope_to_server_backups.sql';
-        if (file_exists($sqlPath)) {
-          $sql = file_get_contents($sqlPath);
-          $pdo->exec($sql);
-        }
+        $insStmt->execute([$filename]);
+        $executedMap[$filename] = true;
       }
     } catch (Throwable $e) {
       error_log("Database self-healing migration failed: " . $e->getMessage());
     }
+  }
+
+  /**
+   * Detect legacy migrations executed before schema_migrations tracking table was introduced
+   */
+  private static function detectLegacyExecutedMigrations(PDO $pdo, array $files): array {
+    $executed = [];
+    
+    $hasVpnServers = false;
+    $hasExtClients = false;
+    $hasLastRouterId = false;
+
+    try {
+      $stmt = $pdo->query("SHOW TABLES LIKE 'vpn_servers'");
+      $hasVpnServers = $stmt->rowCount() > 0;
+    } catch (Throwable $e) {}
+
+    try {
+      $stmt = $pdo->query("SHOW TABLES LIKE 'ext_clients'");
+      $hasExtClients = $stmt->rowCount() > 0;
+    } catch (Throwable $e) {}
+
+    if ($hasExtClients) {
+      try {
+        $stmt = $pdo->query("SHOW COLUMNS FROM ext_clients LIKE 'last_router_id'");
+        $hasLastRouterId = $stmt->rowCount() > 0;
+      } catch (Throwable $e) {}
+    }
+
+    foreach ($files as $filePath) {
+      $filename = basename($filePath);
+      
+      if ($hasLastRouterId) {
+        $executed[] = $filename;
+      } elseif ($hasExtClients) {
+        if ($filename <= '021_create_ext_clients_table.sql') {
+          $executed[] = $filename;
+        }
+      } elseif ($hasVpnServers) {
+        if ($filename <= '001_init.sql') {
+          $executed[] = $filename;
+        }
+      }
+    }
+
+    return $executed;
   }
 }

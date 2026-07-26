@@ -57,6 +57,7 @@
             </div>
             <div class="card-body p-5">
                 <form method="POST" action="/settings/change-password" class="max-w-md space-y-4">
+                    {{ csrf_field() }}
                     <div class="form-control">
                         <label class="label py-1"><span class="label-text text-xs font-medium">{{ t('settings.current_password') }}</span></label>
                         <input type="password" name="current_password" required class="input input-bordered input-sm font-mono w-full">
@@ -90,6 +91,7 @@
             </div>
             <div class="card-body p-5">
                 <form method="POST" action="/settings/add-user">
+                    {{ csrf_field() }}
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
                         <div class="form-control">
                             <label class="label py-1"><span class="label-text text-xs font-medium">{{ t('auth.name') }}</span></label>
@@ -157,6 +159,7 @@
                             <td class="text-right">
                                 {% if u.id != user.id %}
                                 <form method="POST" action="/settings/delete-user/{{ u.id }}" class="inline" onsubmit="return confirm('Delete user {{ u.name }}?')">
+                                    {{ csrf_field() }}
                                     <button type="submit" class="btn btn-ghost btn-xs text-error"><i class="fas fa-trash"></i></button>
                                 </form>
                                 {% else %}
@@ -181,6 +184,7 @@
                 </div>
                 <div class="card-body p-5">
                     <form method="POST" action="/settings/backup-config" class="space-y-4">
+                        {{ csrf_field() }}
                         <div class="form-control">
                             <label class="label cursor-pointer justify-start gap-3">
                                 <input type="checkbox" name="enabled" value="1" {% if backup_settings.enabled %}checked{% endif %} class="toggle toggle-primary toggle-sm">
@@ -223,6 +227,7 @@
                 <div class="card-body p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
                     <!-- Create Backup -->
                     <form method="POST" action="/settings/backup-create" class="space-y-4">
+                        {{ csrf_field() }}
                         <h3 class="text-sm font-semibold">Create Backup</h3>
                         <div class="form-control">
                             <label class="label py-1"><span class="label-text text-xs font-medium">Backup Target</span></label>
@@ -321,6 +326,7 @@
             </div>
             <div class="card-body p-5">
                 <form method="POST" action="/settings/monitoring-config" class="space-y-4">
+                    {{ csrf_field() }}
                     <div class="form-control">
                         <label class="label py-1"><span class="label-text text-xs font-medium">Metrics Update Interval</span></label>
                         <select name="interval" class="select select-bordered select-sm w-full">
@@ -348,6 +354,7 @@
                 </div>
                 <div class="card-body p-5">
                     <form method="POST" action="/settings/client-bot-config" class="space-y-4">
+                        {{ csrf_field() }}
                         <div class="form-control">
                             <label class="label cursor-pointer justify-start gap-3">
                                 <input type="checkbox" name="enabled" value="1" {% if client_bot_settings.enabled %}checked{% endif %} class="toggle toggle-primary toggle-sm">
@@ -410,6 +417,7 @@
         </div>
 
         <form id="restore-form" method="POST" action="/settings/backup-restore">
+            {{ csrf_field() }}
             <input type="hidden" name="filepath" id="restore-filepath">
             <input type="hidden" name="scope" id="restore-scope">
 

@@ -179,6 +179,7 @@
             </h3>
             
             <form method="POST" action="/clients/{{ client.id }}/update" class="mb-4 space-y-4">
+                {{ csrf_field() }}
                 <div class="form-control">
                     <label class="label py-1">
                         <span class="label-text font-medium text-xs">Client Name</span>
@@ -235,6 +236,7 @@
                     
                     {% if client.status != 'active' %}
                     <form method="POST" action="/clients/{{ client.id }}/restore">
+                        {{ csrf_field() }}
                         <button type="submit" class="btn btn-outline btn-info btn-sm w-full gap-2">
                             <i class="fas fa-check"></i>Restore Client
                         </button>
@@ -242,12 +244,14 @@
                     {% endif %}
 
                     <form method="POST" action="/clients/{{ client.id }}/reset-traffic" onsubmit="return confirm('Are you sure you want to reset traffic statistics for this client to 0?')">
+                        {{ csrf_field() }}
                         <button type="submit" class="btn btn-outline btn-warning btn-sm w-full gap-2">
                             <i class="fas fa-undo"></i>Reset Traffic Stats
                         </button>
                     </form>
 
                     <form method="POST" action="/clients/{{ client.id }}/delete" onsubmit="return confirm('Delete this client permanently?')">
+                        {{ csrf_field() }}
                         <button type="submit" class="btn btn-outline btn-error btn-sm w-full gap-2">
                             <i class="fas fa-trash-alt"></i>Delete Client
                         </button>
