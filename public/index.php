@@ -1020,10 +1020,19 @@ Router::get('/clients', function () {
             }
         } catch (Throwable $e) {}
 
+        // Auto-sync payment info if external DB is reachable and local payment dates are not populated yet
+        try {
+            $chkPay = $pdo->query("SELECT COUNT(*) FROM ext_clients WHERE last_payment_date IS NOT NULL");
+            if ((int)$chkPay->fetchColumn() === 0 && ExtDB::isAvailable()) {
+                ExtDB::sync();
+            }
+        } catch (Throwable $e) {}
+
         if ($codeFilter !== '') {
             // Exact match for the code filter
             $stmt = $pdo->prepare('
                 SELECT ec.code AS "Code", ec.name, ec.start_date, ec.sub, ec.func, ec.router, ec.bytes_sent, ec.bytes_received,
+                       ec.last_payment_date, ec.last_payment_amount,
                        r.id AS router_id, r.domain AS router_domain, r.status AS router_status, r.error_message AS router_error
                 FROM ext_clients ec
                 LEFT JOIN routers r ON r.ext_client_code = ec.code
@@ -1071,9 +1080,9 @@ Router::get('/clients', function () {
             } elseif ($sort === 'expiry_desc') {
                 $orderBy = "CASE WHEN ec.func = 'WORK' AND ec.start_date IS NOT NULL AND ec.sub IS NOT NULL AND ec.sub > 0 THEN DATE_ADD(ec.start_date, INTERVAL (ec.sub * 30) DAY) ELSE '1970-01-01' END DESC, ec.code ASC";
             } elseif ($sort === 'payment_desc') {
-                $orderBy = "CASE WHEN ec.last_payment_date IS NOT NULL THEN ec.last_payment_date ELSE '1970-01-01' END DESC, ec.code ASC";
+                $orderBy = "ec.last_payment_date DESC, ec.code ASC";
             } elseif ($sort === 'payment_asc') {
-                $orderBy = "CASE WHEN ec.last_payment_date IS NOT NULL THEN ec.last_payment_date ELSE '9999-12-31' END ASC, ec.code ASC";
+                $orderBy = "ec.last_payment_date ASC, ec.code ASC";
             } elseif ($sort === 'traffic_desc') {
                 $orderBy = "(ec.bytes_sent + ec.bytes_received) DESC, ec.code ASC";
             } elseif ($sort === 'traffic_asc') {

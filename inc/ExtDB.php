@@ -154,10 +154,10 @@ class ExtDB {
             $paymentsMap = [];
             try {
                 $payStmt = $pgPdo->query("
-                    SELECT DISTINCT ON (\"Client_id\") \"Client_id\"::text AS client_id, \"Date\"::text AS date, \"Amount\"::numeric AS amount
+                    SELECT TRIM(\"Client_id\"::text) AS client_id, \"Date\"::text AS date, \"Amount\"::numeric AS amount, id
                     FROM \"Finances_2026\"
                     WHERE TRIM(LOWER(\"Type\"::text)) = 'income' AND \"Client_id\" IS NOT NULL AND TRIM(\"Client_id\"::text) != ''
-                    ORDER BY \"Client_id\", \"Date\"::text DESC, id DESC
+                    ORDER BY id ASC
                 ");
                 $rawPayments = $payStmt->fetchAll(PDO::FETCH_ASSOC);
                 foreach ($rawPayments as $p) {
@@ -166,19 +166,45 @@ class ExtDB {
 
                     $rawDate = trim($p['date'] ?? '');
                     $normDate = null;
+                    $ts = 0;
                     if (!empty($rawDate)) {
                         if (preg_match('/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/', $rawDate, $m)) {
                             $normDate = sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]);
-                        } elseif (strtotime($rawDate) !== false) {
-                            $normDate = date('Y-m-d', strtotime($rawDate));
+                            $ts = strtotime($normDate);
+                        } elseif (preg_match('/^\d{4}-\d{2}-\d{2}$/', $rawDate)) {
+                            $normDate = $rawDate;
+                            $ts = strtotime($normDate);
+                        } elseif (($parsedTs = strtotime($rawDate)) !== false) {
+                            $normDate = date('Y-m-d', $parsedTs);
+                            $ts = $parsedTs;
                         }
                     }
 
                     $amt = (isset($p['amount']) && $p['amount'] !== '') ? (float)$p['amount'] : null;
-                    $paymentsMap[$cid] = [
-                        'date'   => $normDate,
-                        'amount' => $amt,
-                    ];
+
+                    // Generate variants of code for robust matching (with/without #, uppercase)
+                    $cleanId = ltrim($cid, '#');
+                    $keysToStore = array_unique([
+                        $cid,
+                        mb_strtoupper($cid),
+                        mb_strtolower($cid),
+                        $cleanId,
+                        mb_strtoupper($cleanId),
+                        mb_strtolower($cleanId),
+                        '#' . $cleanId,
+                        mb_strtoupper('#' . $cleanId),
+                        mb_strtolower('#' . $cleanId),
+                    ]);
+
+                    foreach ($keysToStore as $k) {
+                        if (!isset($paymentsMap[$k]) || ($ts > 0 && $ts >= ($paymentsMap[$k]['ts'] ?? 0))) {
+                            $paymentsMap[$k] = [
+                                'date'   => $normDate,
+                                'amount' => $amt,
+                                'ts'     => $ts,
+                            ];
+                        }
+                    }
                 }
             } catch (Throwable $e) {
                 error_log("ExtDB sync payment fetch notice: " . $e->getMessage());
@@ -232,7 +258,25 @@ class ExtDB {
                     $tgid = isset($row['tgid']) ? trim($row['tgid']) : null;
                     if ($tgid === '') $tgid = null;
 
-                    $payInfo = $paymentsMap[$code] ?? null;
+                    $cleanCode = ltrim($code, '#');
+                    $codeLookups = array_unique([
+                        $code,
+                        mb_strtoupper($code),
+                        mb_strtolower($code),
+                        $cleanCode,
+                        mb_strtoupper($cleanCode),
+                        '#' . $cleanCode,
+                        mb_strtoupper('#' . $cleanCode),
+                    ]);
+
+                    $payInfo = null;
+                    foreach ($codeLookups as $lk) {
+                        if (isset($paymentsMap[$lk])) {
+                            $payInfo = $paymentsMap[$lk];
+                            break;
+                        }
+                    }
+
                     $lastPayDate = $payInfo['date'] ?? null;
                     $lastPayAmt = $payInfo['amount'] ?? null;
 
