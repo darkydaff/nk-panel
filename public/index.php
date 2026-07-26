@@ -16,6 +16,7 @@ require_once __DIR__ . '/../inc/Config.php';
 require_once __DIR__ . '/../inc/DB.php';
 require_once __DIR__ . '/../inc/Auth.php';
 require_once __DIR__ . '/../inc/Router.php';
+require_once __DIR__ . '/../inc/Csrf.php';
 require_once __DIR__ . '/../inc/View.php';
 require_once __DIR__ . '/../inc/VpnServer.php';
 require_once __DIR__ . '/../inc/VpnClient.php';
@@ -130,6 +131,38 @@ function isJsonRequest(): bool {
     $accept = $_SERVER['HTTP_ACCEPT'] ?? '';
     $requestedWith = strtolower($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '');
     return stripos($accept, 'application/json') !== false || $requestedWith === 'xmlhttprequest';
+}
+
+// Global CSRF Validation Middleware for state-changing requests
+$requestMethod = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+if (in_array(strtoupper($requestMethod), ['POST', 'PUT', 'DELETE', 'PATCH'], true)) {
+    $requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?? '';
+
+    // Webhook, agent push, and stateless authentication routes exempt from CSRF checks
+    $exemptRoutes = [
+        '/api/telegram-bot/webhook',
+        '/api/servers/report-metrics',
+        '/api/auth/token',
+    ];
+
+    $isExemptRoute = in_array($requestUri, $exemptRoutes, true) 
+        || str_starts_with($requestUri, '/api/webhook/')
+        || str_starts_with($requestUri, '/webhook/');
+
+    // Stateless requests using Bearer JWT authentication do not use cookie sessions and are exempt from CSRF
+    $hasBearerToken = !empty($_SERVER['HTTP_AUTHORIZATION']) && preg_match('/Bearer\s+/i', $_SERVER['HTTP_AUTHORIZATION']);
+
+    if (!$hasBearerToken && !$isExemptRoute) {
+        if (!Csrf::validateRequest()) {
+            http_response_code(403);
+            if (isJsonRequest()) {
+                header('Content-Type: application/json');
+                echo json_encode(['error' => 'Invalid or missing CSRF token']);
+                exit;
+            }
+            die('403 Forbidden: Invalid or missing CSRF token');
+        }
+    }
 }
 
 // Helper function to require authentication
@@ -1037,6 +1070,10 @@ Router::get('/clients', function () {
                 $orderBy = "CASE WHEN ec.func = 'WORK' AND ec.start_date IS NOT NULL AND ec.sub IS NOT NULL AND ec.sub > 0 THEN DATE_ADD(ec.start_date, INTERVAL (ec.sub * 30) DAY) ELSE '9999-12-31' END ASC, ec.code ASC";
             } elseif ($sort === 'expiry_desc') {
                 $orderBy = "CASE WHEN ec.func = 'WORK' AND ec.start_date IS NOT NULL AND ec.sub IS NOT NULL AND ec.sub > 0 THEN DATE_ADD(ec.start_date, INTERVAL (ec.sub * 30) DAY) ELSE '1970-01-01' END DESC, ec.code ASC";
+            } elseif ($sort === 'payment_desc') {
+                $orderBy = "CASE WHEN ec.last_payment_date IS NOT NULL THEN ec.last_payment_date ELSE '1970-01-01' END DESC, ec.code ASC";
+            } elseif ($sort === 'payment_asc') {
+                $orderBy = "CASE WHEN ec.last_payment_date IS NOT NULL THEN ec.last_payment_date ELSE '9999-12-31' END ASC, ec.code ASC";
             } elseif ($sort === 'traffic_desc') {
                 $orderBy = "(ec.bytes_sent + ec.bytes_received) DESC, ec.code ASC";
             } elseif ($sort === 'traffic_asc') {
@@ -1057,6 +1094,7 @@ Router::get('/clients', function () {
             // Fetch list
             $selectSql = "
                 SELECT DISTINCT ec.code AS \"Code\", ec.name, ec.start_date, ec.sub, ec.func, ec.router, ec.bytes_sent, ec.bytes_received,
+                       ec.last_payment_date, ec.last_payment_amount,
                        r.id AS router_id, r.domain AS router_domain, r.status AS router_status, r.error_message AS router_error
                 FROM ext_clients ec
                 LEFT JOIN vpn_clients vc ON vc.ext_client_code = ec.code
@@ -1131,23 +1169,42 @@ Router::get('/clients', function () {
                 }
             }
 
+            // Format last payment info
+            $lastPayDate = $row['last_payment_date'] ?? null;
+            $lastPayDateFormatted = null;
+            if ($lastPayDate) {
+                $ts = strtotime($lastPayDate);
+                if ($ts) {
+                    $lastPayDateFormatted = date('d.m.Y', $ts);
+                }
+            }
+            $lastPayAmount = isset($row['last_payment_amount']) && $row['last_payment_amount'] !== null ? (float)$row['last_payment_amount'] : null;
+            $lastPaymentFormatted = null;
+            if ($lastPayAmount !== null) {
+                $lastPaymentFormatted = '$' . number_format($lastPayAmount, 2);
+            }
+
             $clients[] = [
-                'Code'            => $code,
-                'Name'            => $row['name'] ?? null,
-                'Func'            => $row['func'] ?? null,
-                'Router'          => $row['router'] ?? null,
-                'ExpiryDate'      => $expiryDate,
-                'DaysLeft'        => $daysLeft,
-                'BytesSent'       => (int)($row['bytes_sent'] ?? 0),
-                'BytesReceived'   => (int)($row['bytes_received'] ?? 0),
-                'configs'         => $processedConfigs,
-                'config_count'    => count($configs),
-                'LastActiveText'  => $clientLastActive['text'],
-                'LastActiveClass' => $clientLastActive['class'],
-                'router_id'       => $row['router_id'] ?? null,
-                'router_domain'   => $row['router_domain'] ?? null,
-                'router_status'   => $row['router_status'] ?? null,
-                'router_error'    => $row['router_error'] ?? null,
+                'Code'                  => $code,
+                'Name'                  => $row['name'] ?? null,
+                'Func'                  => $row['func'] ?? null,
+                'Router'                => $row['router'] ?? null,
+                'ExpiryDate'            => $expiryDate,
+                'DaysLeft'              => $daysLeft,
+                'LastPaymentDate'       => $lastPayDate,
+                'LastPaymentDateFormatted' => $lastPayDateFormatted,
+                'LastPaymentAmount'     => $lastPayAmount,
+                'LastPaymentFormatted'  => $lastPaymentFormatted,
+                'BytesSent'             => (int)($row['bytes_sent'] ?? 0),
+                'BytesReceived'         => (int)($row['bytes_received'] ?? 0),
+                'configs'               => $processedConfigs,
+                'config_count'          => count($configs),
+                'LastActiveText'        => $clientLastActive['text'],
+                'LastActiveClass'       => $clientLastActive['class'],
+                'router_id'             => $row['router_id'] ?? null,
+                'router_domain'         => $row['router_domain'] ?? null,
+                'router_status'         => $row['router_status'] ?? null,
+                'router_error'          => $row['router_error'] ?? null,
             ];
         }
     } catch (Throwable $e) {

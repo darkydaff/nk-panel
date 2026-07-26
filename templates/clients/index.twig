@@ -56,8 +56,9 @@
     </div>
     {% endif %}
 
-    <!-- Filter & Sort Controls -->
+    <!-- Filter, Sort & View Controls -->
     <div class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-base-200 p-4 border border-base-300 rounded-xl">
+        <!-- Status Filter Buttons -->
         <div class="flex flex-wrap gap-1.5">
             <a href="/clients?filter=all&sort={{ sort }}&search={{ search|url_encode }}" class="btn btn-sm {% if filter == 'all' or filter == '' %}btn-primary{% else %}btn-ghost{% endif %}">All</a>
             <a href="/clients?filter=active&sort={{ sort }}&search={{ search|url_encode }}" class="btn btn-sm {% if filter == 'active' %}btn-success{% else %}btn-ghost{% endif %} gap-1.5">
@@ -74,20 +75,35 @@
             </a>
         </div>
 
-        <div class="flex items-center gap-2">
-            <span class="text-xs font-medium text-base-content/50 uppercase tracking-wider whitespace-nowrap">Sort by:</span>
-            <select onchange="window.location.href='/clients?filter={{ filter }}&search={{ search|url_encode }}&sort=' + this.value"
-                    class="select select-bordered select-sm min-w-[170px]">
-                <option value="code" {% if sort == 'code' or sort == '' %}selected{% endif %}>Client Code (A-Z)</option>
-                <option value="expiry_asc" {% if sort == 'expiry_asc' %}selected{% endif %}>Expiration (Soonest first)</option>
-                <option value="expiry_desc" {% if sort == 'expiry_desc' %}selected{% endif %}>Expiration (Latest first)</option>
-                <option value="traffic_desc" {% if sort == 'traffic_desc' %}selected{% endif %}>Traffic (Highest first)</option>
-                <option value="traffic_asc" {% if sort == 'traffic_asc' %}selected{% endif %}>Traffic (Lowest first)</option>
-            </select>
+        <div class="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
+            <!-- Sort dropdown -->
+            <div class="flex items-center gap-2">
+                <span class="text-xs font-medium text-base-content/50 uppercase tracking-wider whitespace-nowrap">Sort by:</span>
+                <select onchange="window.location.href='/clients?filter={{ filter }}&search={{ search|url_encode }}&sort=' + this.value"
+                        class="select select-bordered select-sm min-w-[180px]">
+                    <option value="code" {% if sort == 'code' or sort == '' %}selected{% endif %}>Client Code (A-Z)</option>
+                    <option value="expiry_asc" {% if sort == 'expiry_asc' %}selected{% endif %}>Expiration (Soonest first)</option>
+                    <option value="expiry_desc" {% if sort == 'expiry_desc' %}selected{% endif %}>Expiration (Latest first)</option>
+                    <option value="payment_desc" {% if sort == 'payment_desc' %}selected{% endif %}>Latest Payment (Recent first)</option>
+                    <option value="payment_asc" {% if sort == 'payment_asc' %}selected{% endif %}>Latest Payment (Oldest first)</option>
+                    <option value="traffic_desc" {% if sort == 'traffic_desc' %}selected{% endif %}>Traffic (Highest first)</option>
+                    <option value="traffic_asc" {% if sort == 'traffic_asc' %}selected{% endif %}>Traffic (Lowest first)</option>
+                </select>
+            </div>
+
+            <!-- View Switcher Toggle -->
+            <div class="join border border-base-300 rounded-lg p-0.5 bg-base-300/40 shrink-0">
+                <button type="button" onclick="setClientViewMode('grid')" id="viewBtnGrid" class="join-item btn btn-xs btn-ghost gap-1.5 active-view-btn">
+                    <i class="fas fa-th-large text-xs"></i><span class="hidden sm:inline">Grid</span>
+                </button>
+                <button type="button" onclick="setClientViewMode('table')" id="viewBtnTable" class="join-item btn btn-xs btn-ghost gap-1.5">
+                    <i class="fas fa-list text-xs"></i><span class="hidden sm:inline">Table</span>
+                </button>
+            </div>
         </div>
     </div>
 
-    <!-- Clients Grid -->
+    <!-- Clients Container -->
     {% if clients is empty %}
     <div class="card bg-base-200 border border-base-300">
         <div class="card-body items-center text-center py-16">
@@ -99,102 +115,257 @@
         </div>
     </div>
     {% else %}
-    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
+
+    <!-- ── GRID VIEW ────────────────────────────────────────────────────────── -->
+    <div id="clientsGridView" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
         {% for client in clients %}
-        <div class="card bg-base-200 border border-base-300 shadow hover:border-primary/30 hover:-translate-y-0.5 transition-all duration-200 group">
+        <div class="card bg-base-200 border border-base-300 shadow-md hover:shadow-xl hover:border-primary/40 hover:-translate-y-0.5 transition-all duration-200 group">
             <div class="card-body p-5">
-                <!-- Header row -->
-                <div class="flex items-start justify-between mb-4">
+                <!-- Header row: Avatar + Code & Name + Subscription Badge -->
+                <div class="flex items-start justify-between gap-2 mb-3 pb-3 border-b border-base-300">
                     <div class="flex items-center gap-3 min-w-0">
-                        <div class="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
+                        <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
                             <i class="fas fa-user text-sm"></i>
                         </div>
                         <div class="min-w-0">
-                            <div class="flex items-baseline gap-1.5 flex-wrap">
-                                <span class="font-semibold font-mono text-sm tracking-wide shrink-0">{{ client.Code }}</span>
-                                <span class="text-xs text-base-content/60 font-medium truncate max-w-[130px]" title="{{ client.Name }}">{{ client.Name|default('No Name') }}</span>
+                            <div class="flex items-center gap-2">
+                                <span class="font-semibold font-mono text-base tracking-wide shrink-0">{{ client.Code }}</span>
+                                <span class="badge badge-xs badge-ghost font-mono opacity-80">{{ client.config_count }} cfg</span>
                             </div>
-                            <p class="text-[10px] text-base-content/40 mt-0.5 uppercase tracking-wider">Client Code &amp; Name</p>
+                            <p class="text-xs text-base-content/60 font-medium truncate max-w-[170px]" title="{{ client.Name }}">
+                                {{ client.Name|default('No Name') }}
+                            </p>
                         </div>
                     </div>
-                    <span class="badge badge-sm badge-ghost font-mono shrink-0">{{ client.config_count }} config{{ client.config_count != 1 ? 's' : '' }}</span>
-                </div>
 
-                <!-- Subscription status & Router badge -->
-                <div class="mb-4 flex flex-wrap gap-2 items-center">
-                    {% if client.Func == 'PAUSE' %}
-                        <span class="badge badge-info gap-1.5 badge-sm"><i class="fas fa-pause-circle text-[10px]"></i>Paused</span>
-                    {% elseif client.ExpiryDate %}
-                        {% if client.DaysLeft > 10 %}
-                            <span class="badge badge-success gap-1.5 badge-sm"><i class="fas fa-calendar-check text-[10px]"></i>Expires: {{ client.ExpiryDate }} ({{ client.DaysLeft }} days)</span>
-                        {% elseif client.DaysLeft > 0 %}
-                            <span class="badge badge-warning gap-1.5 badge-sm animate-pulse"><i class="fas fa-calendar-minus text-[10px]"></i>Expires soon: {{ client.ExpiryDate }} ({{ client.DaysLeft }} days)</span>
+                    <!-- Status Badge -->
+                    <div class="shrink-0">
+                        {% if client.Func == 'PAUSE' %}
+                            <span class="badge badge-info gap-1 badge-sm"><i class="fas fa-pause-circle text-[9px]"></i>Paused</span>
+                        {% elseif client.ExpiryDate %}
+                            {% if client.DaysLeft > 10 %}
+                                <span class="badge badge-success gap-1 badge-sm"><i class="fas fa-calendar-check text-[9px]"></i>Active</span>
+                            {% elseif client.DaysLeft > 0 %}
+                                <span class="badge badge-warning gap-1 badge-sm animate-pulse"><i class="fas fa-exclamation-triangle text-[9px]"></i>Soon</span>
+                            {% else %}
+                                <span class="badge badge-error gap-1 badge-sm"><i class="fas fa-calendar-times text-[9px]"></i>Expired</span>
+                            {% endif %}
                         {% else %}
-                            <span class="badge badge-error gap-1.5 badge-sm"><i class="fas fa-calendar-times text-[10px]"></i>{% if client.DaysLeft == 0 %}Expired today!{% else %}Expired: {{ client.ExpiryDate }} ({{ client.DaysLeft|abs }} days ago){% endif %}</span>
+                            <span class="badge badge-ghost badge-sm text-[10px]">No Sub</span>
                         {% endif %}
-                    {% else %}
-                        <span class="badge badge-ghost badge-sm"><i class="fas fa-calendar-alt text-[10px] opacity-60"></i>No subscription data</span>
-                    {% endif %}
-
-                    {% if client.Router %}
-                        <span class="badge badge-ghost badge-sm font-mono gap-1"><i class="fas fa-network-wired text-[8px] opacity-75"></i>{{ client.Router }}</span>
-                    {% endif %}
-                </div>
-
-                <!-- Traffic -->
-                <div class="mb-3 flex items-center justify-between text-xs bg-base-300/50 border border-base-content/5 px-3 py-2 rounded-lg font-mono">
-                    <span class="text-base-content/40 text-[10px] uppercase font-sans font-semibold tracking-wider">Total Traffic</span>
-                    <div class="flex items-center gap-2">
-                        <span class="text-info">↑{{ client.BytesSent|default(0)|format_bytes }}</span>
-                        <span class="text-base-content/20">|</span>
-                        <span class="text-indigo-400">↓{{ client.BytesReceived|default(0)|format_bytes }}</span>
                     </div>
                 </div>
 
-                <!-- Last Active -->
-                <div class="mb-4 flex items-center justify-between text-xs bg-base-300/50 border border-base-content/5 px-3 py-2 rounded-lg">
-                    <span class="text-base-content/40 text-[10px] uppercase font-semibold tracking-wider">Last Active</span>
-                    <span class="{{ client.LastActiveClass }} text-[10px] px-2 py-0.5 rounded font-semibold">{{ client.LastActiveText }}</span>
+                <!-- Structured Metrics Grid (2 columns x 2 rows) -->
+                <div class="grid grid-cols-2 gap-2 mb-3 bg-base-300/40 border border-base-content/5 p-2.5 rounded-xl text-xs">
+                    <!-- Metric 1: Subscription Expiry -->
+                    <div class="flex flex-col justify-center">
+                        <span class="text-[10px] text-base-content/40 uppercase font-semibold tracking-wider flex items-center gap-1">
+                            <i class="fas fa-calendar-alt text-[9px] text-primary/70"></i>Subscription
+                        </span>
+                        <div class="mt-0.5 font-medium truncate">
+                            {% if client.ExpiryDate %}
+                                <span class="font-mono">{{ client.ExpiryDate }}</span>
+                                <span class="text-[10px] text-base-content/50">({{ client.DaysLeft }}d)</span>
+                            {% else %}
+                                <span class="text-base-content/30 italic">Not set</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Metric 2: Latest Payment Info -->
+                    <div class="flex flex-col justify-center">
+                        <span class="text-[10px] text-base-content/40 uppercase font-semibold tracking-wider flex items-center gap-1">
+                            <i class="fas fa-wallet text-[9px] text-emerald-400"></i>Latest Paid
+                        </span>
+                        <div class="mt-0.5 font-medium truncate">
+                            {% if client.LastPaymentFormatted %}
+                                <span class="text-emerald-400 font-semibold font-mono">{{ client.LastPaymentFormatted }}</span>
+                                {% if client.LastPaymentDateFormatted %}
+                                    <span class="text-[10px] text-base-content/50 font-mono">({{ client.LastPaymentDateFormatted }})</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-base-content/30 italic">No records</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Metric 3: Total Traffic -->
+                    <div class="flex flex-col justify-center">
+                        <span class="text-[10px] text-base-content/40 uppercase font-semibold tracking-wider flex items-center gap-1">
+                            <i class="fas fa-exchange-alt text-[9px] text-info/70"></i>Traffic
+                        </span>
+                        <div class="mt-0.5 font-mono text-[11px] flex items-center gap-1">
+                            <span class="text-info">↑{{ client.BytesSent|default(0)|format_bytes }}</span>
+                            <span class="text-base-content/20">|</span>
+                            <span class="text-indigo-400">↓{{ client.BytesReceived|default(0)|format_bytes }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Metric 4: Last Active -->
+                    <div class="flex flex-col justify-center">
+                        <span class="text-[10px] text-base-content/40 uppercase font-semibold tracking-wider flex items-center gap-1">
+                            <i class="fas fa-bolt text-[9px] text-warning/70"></i>Last Active
+                        </span>
+                        <div class="mt-0.5">
+                            <span class="{{ client.LastActiveClass }} text-[10px] px-1.5 py-0.5 rounded font-semibold">{{ client.LastActiveText }}</span>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Config chips -->
-                {% if client.configs is not empty %}
-                <div class="flex flex-wrap gap-1.5 mb-4">
-                    {% for cfg in client.configs|slice(0, 5) %}
-                    <a href="/clients/{{ cfg.id }}" title="Last active: {{ cfg.last_active_text }}"
-                       class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-base-300/80 hover:bg-base-300 text-xs hover:text-base-content border border-base-content/10 hover:border-base-content/20 transition-all">
-                        <i class="fas fa-server text-[9px] text-base-content/30"></i>
-                        <span class="font-mono truncate max-w-[100px]">{{ cfg.name }}</span>
-                        {% if cfg.status != 'active' %}
-                            <span class="w-1.5 h-1.5 rounded-full bg-base-content/20 shrink-0"></span>
-                        {% elseif cfg.last_active_class == 'badge-active' %}
-                            <span class="w-1.5 h-1.5 rounded-full bg-info shadow-[0_0_6px_rgba(56,189,248,0.6)] shrink-0"></span>
-                        {% elseif cfg.last_active_class == 'badge-warning' %}
-                            <span class="w-1.5 h-1.5 rounded-full bg-warning shrink-0"></span>
-                        {% else %}
-                            <span class="w-1.5 h-1.5 rounded-full bg-error shrink-0"></span>
+                <!-- Configs & Router Bar -->
+                <div class="mb-4">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="text-[10px] text-base-content/40 uppercase font-semibold tracking-wider">Linked Configs</span>
+                        {% if client.Router %}
+                            <span class="badge badge-ghost badge-xs font-mono gap-1 text-[9px]" title="Router assigned"><i class="fas fa-network-wired text-[8px] opacity-75"></i>{{ client.Router }}</span>
                         {% endif %}
-                    </a>
-                    {% endfor %}
-                    {% if client.config_count > 5 %}<span class="inline-flex items-center px-2.5 py-1 rounded-md bg-base-300/50 text-xs text-base-content/40 border border-base-content/5">+{{ client.config_count - 5 }} more</span>{% endif %}
-                </div>
-                {% else %}
-                <p class="text-xs text-base-content/30 italic mb-4">No configs yet</p>
-                {% endif %}
+                    </div>
 
-                <!-- Footer actions -->
-                <div class="card-actions border-t border-base-300 pt-3 flex flex-wrap gap-2">
-                    <a href="/clients?code={{ client.Code|url_encode }}" class="btn btn-ghost btn-sm flex-1 gap-1.5 min-w-[100px]"><i class="fas fa-eye"></i>All Configs</a>
-                    <button onclick="openCreateForClient('{{ client.Code|e('js') }}')" class="btn btn-outline btn-primary btn-sm flex-1 gap-1.5 min-w-[100px]"><i class="fas fa-plus"></i>New Config</button>
-                    {% if client.router_id %}
-                    <button onclick="openPushDomainsModal({{ client.router_id }}, '{{ client.Router|default('Router')|escape('js') }}')" class="btn btn-outline btn-secondary btn-sm w-full gap-1.5">
-                        <i class="fas fa-route"></i>Push Domains
+                    {% if client.configs is not empty %}
+                    <div class="flex flex-wrap gap-1">
+                        {% for cfg in client.configs|slice(0, 4) %}
+                        <a href="/clients/{{ cfg.id }}" title="Server: {{ cfg.server_name }} | Last active: {{ cfg.last_active_text }}"
+                           class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-base-300/80 hover:bg-base-300 text-xs border border-base-content/10 transition-colors">
+                            <i class="fas fa-server text-[8px] text-base-content/30"></i>
+                            <span class="font-mono text-[11px] truncate max-w-[90px]">{{ cfg.name }}</span>
+                            {% if cfg.status != 'active' %}
+                                <span class="w-1.5 h-1.5 rounded-full bg-base-content/20 shrink-0"></span>
+                            {% elseif cfg.last_active_class == 'badge-active' %}
+                                <span class="w-1.5 h-1.5 rounded-full bg-info shadow-[0_0_6px_rgba(56,189,248,0.6)] shrink-0"></span>
+                            {% elseif cfg.last_active_class == 'badge-warning' %}
+                                <span class="w-1.5 h-1.5 rounded-full bg-warning shrink-0"></span>
+                            {% else %}
+                                <span class="w-1.5 h-1.5 rounded-full bg-error shrink-0"></span>
+                            {% endif %}
+                        </a>
+                        {% endfor %}
+                        {% if client.config_count > 4 %}<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-base-300/50 text-[10px] text-base-content/40 border border-base-content/5">+{{ client.config_count - 4 }}</span>{% endif %}
+                    </div>
+                    {% else %}
+                    <p class="text-xs text-base-content/30 italic">No configs linked yet</p>
+                    {% endif %}
+                </div>
+
+                <!-- Footer Actions -->
+                <div class="card-actions border-t border-base-300 pt-3 flex items-center gap-2">
+                    <a href="/clients?code={{ client.Code|url_encode }}" class="btn btn-ghost btn-sm flex-1 gap-1.5">
+                        <i class="fas fa-eye text-xs"></i>All Configs
+                    </a>
+                    <button onclick="openCreateForClient('{{ client.Code|e('js') }}')" class="btn btn-outline btn-primary btn-sm flex-1 gap-1.5">
+                        <i class="fas fa-plus text-xs"></i>New Config
                     </button>
+                    
+                    {% if client.router_id %}
+                    <div class="dropdown dropdown-top dropdown-end">
+                        <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-square"><i class="fas fa-ellipsis-v"></i></div>
+                        <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-300 rounded-box z-[10] w-44 p-1 shadow-xl border border-base-content/10 mb-1">
+                            <li>
+                                <button onclick="openPushDomainsModal({{ client.router_id }}, '{{ client.Router|default('Router')|escape('js') }}')" class="text-secondary gap-2">
+                                    <i class="fas fa-route"></i>Push Domains
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
                     {% endif %}
                 </div>
             </div>
         </div>
         {% endfor %}
+    </div>
+
+    <!-- ── TABLE VIEW (HIGH-DENSITY COMPACT MODE) ──────────────────────────── -->
+    <div id="clientsTableView" class="card bg-base-200 border border-base-300 shadow overflow-x-auto mb-6 hidden">
+        <table class="table table-zebra w-full text-xs">
+            <thead>
+                <tr class="bg-base-300/50 text-base-content/60 font-semibold uppercase text-[10px]">
+                    <th>Client Code &amp; Name</th>
+                    <th>Status &amp; Expiry</th>
+                    <th>Latest Payment</th>
+                    <th>Traffic (Up/Down)</th>
+                    <th>Last Active</th>
+                    <th>Configs</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for client in clients %}
+                <tr class="hover:bg-base-300/30 transition-colors">
+                    <!-- Client Code & Name -->
+                    <td>
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                                <i class="fas fa-user text-[10px]"></i>
+                            </div>
+                            <div>
+                                <div class="font-mono font-semibold text-sm">{{ client.Code }}</div>
+                                <div class="text-base-content/50 text-[11px] truncate max-w-[140px]">{{ client.Name|default('No Name') }}</div>
+                            </div>
+                        </div>
+                    </td>
+
+                    <!-- Status & Expiry -->
+                    <td>
+                        {% if client.Func == 'PAUSE' %}
+                            <span class="badge badge-info gap-1 badge-sm"><i class="fas fa-pause-circle text-[9px]"></i>Paused</span>
+                        {% elseif client.ExpiryDate %}
+                            {% if client.DaysLeft > 10 %}
+                                <span class="badge badge-success gap-1 badge-sm"><i class="fas fa-calendar-check text-[9px]"></i>{{ client.ExpiryDate }} ({{ client.DaysLeft }}d)</span>
+                            {% elseif client.DaysLeft > 0 %}
+                                <span class="badge badge-warning gap-1 badge-sm"><i class="fas fa-exclamation-triangle text-[9px]"></i>{{ client.ExpiryDate }} ({{ client.DaysLeft }}d)</span>
+                            {% else %}
+                                <span class="badge badge-error gap-1 badge-sm"><i class="fas fa-calendar-times text-[9px]"></i>Expired {{ client.ExpiryDate }}</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-base-content/30 italic">No sub</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Latest Payment -->
+                    <td>
+                        {% if client.LastPaymentFormatted %}
+                            <div class="font-mono font-semibold text-emerald-400">{{ client.LastPaymentFormatted }}</div>
+                            {% if client.LastPaymentDateFormatted %}<div class="text-[10px] text-base-content/40 font-mono">{{ client.LastPaymentDateFormatted }}</div>{% endif %}
+                        {% else %}
+                            <span class="text-base-content/30 italic">No payments</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Traffic -->
+                    <td class="font-mono">
+                        <div class="text-info">↑{{ client.BytesSent|default(0)|format_bytes }}</div>
+                        <div class="text-indigo-400">↓{{ client.BytesReceived|default(0)|format_bytes }}</div>
+                    </td>
+
+                    <!-- Last Active -->
+                    <td>
+                        <span class="{{ client.LastActiveClass }} text-[10px] px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">{{ client.LastActiveText }}</span>
+                    </td>
+
+                    <!-- Configs -->
+                    <td>
+                        <div class="flex items-center gap-1">
+                            <span class="badge badge-ghost badge-sm font-mono">{{ client.config_count }} cfg</span>
+                            {% if client.Router %}
+                                <span class="badge badge-ghost badge-xs font-mono text-[9px]" title="Router"><i class="fas fa-network-wired text-[8px] mr-1"></i>{{ client.Router }}</span>
+                            {% endif %}
+                        </div>
+                    </td>
+
+                    <!-- Actions -->
+                    <td class="text-right">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="/clients?code={{ client.Code|url_encode }}" class="btn btn-ghost btn-xs gap-1" title="View configs"><i class="fas fa-eye"></i></a>
+                            <button onclick="openCreateForClient('{{ client.Code|e('js') }}')" class="btn btn-ghost btn-xs text-primary gap-1" title="New config"><i class="fas fa-plus"></i></button>
+                            {% if client.router_id %}
+                            <button onclick="openPushDomainsModal({{ client.router_id }}, '{{ client.Router|default('Router')|escape('js') }}')" class="btn btn-ghost btn-xs text-secondary gap-1" title="Push domains"><i class="fas fa-route"></i></button>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 
     <!-- Pagination -->
@@ -282,6 +453,7 @@
         </p>
 
         <form method="POST" id="createForClientForm" action="" onsubmit="submitCreateForClient(event)" class="space-y-4">
+            {{ csrf_field() }}
             <input type="hidden" name="ext_client_code" id="modalExtClientCode">
             <div class="form-control">
                 <label class="label py-1"><span class="label-text text-xs font-medium uppercase tracking-wide text-base-content/50">Server</span></label>
@@ -308,6 +480,34 @@
 </dialog>
 
 <script>
+// View Switcher (Grid vs Table) with LocalStorage persistence
+function setClientViewMode(mode) {
+    const gridView = document.getElementById('clientsGridView');
+    const tableView = document.getElementById('clientsTableView');
+    const btnGrid = document.getElementById('viewBtnGrid');
+    const btnTable = document.getElementById('viewBtnTable');
+
+    if (mode === 'table') {
+        if (gridView) gridView.classList.add('hidden');
+        if (tableView) tableView.classList.remove('hidden');
+        if (btnGrid) { btnGrid.classList.remove('btn-active', 'bg-base-100', 'shadow-sm'); }
+        if (btnTable) { btnTable.classList.add('btn-active', 'bg-base-100', 'shadow-sm'); }
+        localStorage.setItem('nk_clients_view_mode', 'table');
+    } else {
+        if (tableView) tableView.classList.add('hidden');
+        if (gridView) gridView.classList.remove('hidden');
+        if (btnTable) { btnTable.classList.remove('btn-active', 'bg-base-100', 'shadow-sm'); }
+        if (btnGrid) { btnGrid.classList.add('btn-active', 'bg-base-100', 'shadow-sm'); }
+        localStorage.setItem('nk_clients_view_mode', 'grid');
+    }
+}
+
+// Restore saved view mode on page load
+document.addEventListener('DOMContentLoaded', () => {
+    const savedMode = localStorage.getItem('nk_clients_view_mode') || 'grid';
+    setClientViewMode(savedMode);
+});
+
 function openCreateForClient(code) {
     document.getElementById('modalClientCodeDisplay').textContent = code;
     document.getElementById('modalExtClientCode').value = code;
@@ -406,21 +606,6 @@ function triggerRouterPush(routerId, vpnClientId) {
         .then(res => {
             if (res.status === 200 && res.body.success) { alert('Config pushed successfully!\nModel: ' + res.body.router_model + '\nInterface: ' + res.body.interface_id); window.location.reload(); }
             else { alert('Push failed: ' + (res.body.error || 'Unknown error')); icon.className = oldClass; btn.disabled = false; }
-        })
-        .catch(err => { alert('Error: ' + err.message); icon.className = oldClass; btn.disabled = false; });
-}
-
-function triggerRouterCheck(routerId) {
-    const btn = event.currentTarget;
-    const icon = btn.querySelector('i');
-    const oldClass = icon.className;
-    icon.className = 'fas fa-spinner fa-spin text-info';
-    btn.disabled = true;
-    fetch('/api/routers/' + routerId + '/check', { method: 'POST' })
-        .then(r => r.json().then(data => ({ status: r.status, body: data })))
-        .then(res => {
-            if (res.status === 200 && res.body.success) { alert('Status check completed!\nStatus: ' + res.body.status + '\nModel: ' + res.body.router_model + (res.body.error ? '\nError: ' + res.body.error : '')); window.location.reload(); }
-            else { alert('Check failed: ' + (res.body.error || 'Unknown error')); icon.className = oldClass; btn.disabled = false; }
         })
         .catch(err => { alert('Error: ' + err.message); icon.className = oldClass; btn.disabled = false; });
 }

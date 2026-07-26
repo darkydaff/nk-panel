@@ -150,6 +150,40 @@ class ExtDB {
             $stmt = $pgPdo->query("SELECT \"Code\", \"Name\", \"Start_Date\", \"Sub\", \"Func\", \"Router\", \"Domain\", \"Pass\", \"tgid\" FROM \"{$table}\" WHERE \"Code\" IS NOT NULL");
             $rawClients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+            // Fetch latest income payment per client from Finances_2026 table
+            $paymentsMap = [];
+            try {
+                $payStmt = $pgPdo->query("
+                    SELECT DISTINCT ON (\"Client_id\") \"Client_id\"::text AS client_id, \"Date\"::text AS date, \"Amount\"::numeric AS amount
+                    FROM \"Finances_2026\"
+                    WHERE TRIM(LOWER(\"Type\"::text)) = 'income' AND \"Client_id\" IS NOT NULL AND TRIM(\"Client_id\"::text) != ''
+                    ORDER BY \"Client_id\", \"Date\"::text DESC, id DESC
+                ");
+                $rawPayments = $payStmt->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($rawPayments as $p) {
+                    $cid = trim($p['client_id'] ?? '');
+                    if ($cid === '') continue;
+
+                    $rawDate = trim($p['date'] ?? '');
+                    $normDate = null;
+                    if (!empty($rawDate)) {
+                        if (preg_match('/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/', $rawDate, $m)) {
+                            $normDate = sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]);
+                        } elseif (strtotime($rawDate) !== false) {
+                            $normDate = date('Y-m-d', strtotime($rawDate));
+                        }
+                    }
+
+                    $amt = (isset($p['amount']) && $p['amount'] !== '') ? (float)$p['amount'] : null;
+                    $paymentsMap[$cid] = [
+                        'date'   => $normDate,
+                        'amount' => $amt,
+                    ];
+                }
+            } catch (Throwable $e) {
+                error_log("ExtDB sync payment fetch notice: " . $e->getMessage());
+            }
+
             // 3. Import to MySQL in transaction
             $pdo->beginTransaction();
             $syncedCount = 0;
@@ -157,8 +191,8 @@ class ExtDB {
 
             if (!empty($rawClients)) {
                 $insertStmt = $pdo->prepare('
-                    INSERT INTO ext_clients (code, name, start_date, sub, func, router, domain, pass, tgid) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO ext_clients (code, name, start_date, sub, func, router, domain, pass, tgid, last_payment_date, last_payment_amount) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON DUPLICATE KEY UPDATE 
                         name = VALUES(name), 
                         start_date = VALUES(start_date), 
@@ -167,7 +201,9 @@ class ExtDB {
                         router = VALUES(router),
                         domain = VALUES(domain),
                         pass = VALUES(pass),
-                        tgid = VALUES(tgid)
+                        tgid = VALUES(tgid),
+                        last_payment_date = VALUES(last_payment_date),
+                        last_payment_amount = VALUES(last_payment_amount)
                 ');
 
                 foreach ($rawClients as $row) {
@@ -186,7 +222,11 @@ class ExtDB {
                     $tgid = isset($row['tgid']) ? trim($row['tgid']) : null;
                     if ($tgid === '') $tgid = null;
 
-                    $insertStmt->execute([$code, $name, $startDate, $sub, $func, $router, $domain, $pass, $tgid]);
+                    $payInfo = $paymentsMap[$code] ?? null;
+                    $lastPayDate = $payInfo['date'] ?? null;
+                    $lastPayAmt = $payInfo['amount'] ?? null;
+
+                    $insertStmt->execute([$code, $name, $startDate, $sub, $func, $router, $domain, $pass, $tgid, $lastPayDate, $lastPayAmt]);
                     $syncedCount++;
                 }
 
