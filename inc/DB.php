@@ -71,9 +71,20 @@ class DB {
       }
 
       // 5. Execute pending migrations
-      $insStmt = $pdo->prepare("INSERT INTO `schema_migrations` (`migration`) VALUES (?)");
+      $insStmt = $pdo->prepare("INSERT INTO `schema_migrations` (`migration`) VALUES (?) ON DUPLICATE KEY UPDATE `executed_at` = VALUES(`executed_at`)");
       foreach ($files as $filePath) {
         $filename = basename($filePath);
+
+        // Self-healing check: if 041 was falsely recorded as executed when column is missing
+        if ($filename === '041_add_last_payment_to_ext_clients.sql' && isset($executedMap[$filename])) {
+          try {
+            $chk = $pdo->query("SHOW COLUMNS FROM ext_clients LIKE 'last_payment_date'");
+            if ($chk->rowCount() === 0) {
+              unset($executedMap[$filename]);
+            }
+          } catch (Throwable $e) {}
+        }
+
         if (isset($executedMap[$filename])) {
           continue;
         }
@@ -134,7 +145,9 @@ class DB {
       $filename = basename($filePath);
       
       if ($hasLastRouterId) {
-        $executed[] = $filename;
+        if ($filename <= '040_add_last_router_id_to_ext_clients.sql') {
+          $executed[] = $filename;
+        }
       } elseif ($hasExtClients) {
         if ($filename <= '021_create_ext_clients_table.sql') {
           $executed[] = $filename;

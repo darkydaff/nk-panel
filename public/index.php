@@ -1181,7 +1181,8 @@ Router::get('/clients', function () {
             $lastPayAmount = isset($row['last_payment_amount']) && $row['last_payment_amount'] !== null ? (float)$row['last_payment_amount'] : null;
             $lastPaymentFormatted = null;
             if ($lastPayAmount !== null) {
-                $lastPaymentFormatted = '$' . number_format($lastPayAmount, 2);
+                $decimals = ($lastPayAmount == floor($lastPayAmount)) ? 0 : 2;
+                $lastPaymentFormatted = number_format($lastPayAmount, $decimals);
             }
 
             $clients[] = [

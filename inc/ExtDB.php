@@ -184,6 +184,16 @@ class ExtDB {
                 error_log("ExtDB sync payment fetch notice: " . $e->getMessage());
             }
 
+            // Ensure last_payment_date column exists in local ext_clients table
+            try {
+                $colCheck = $pdo->query("SHOW COLUMNS FROM ext_clients LIKE 'last_payment_date'");
+                if ($colCheck->rowCount() === 0) {
+                    $pdo->exec("ALTER TABLE ext_clients ADD COLUMN last_payment_date DATE NULL, ADD COLUMN last_payment_amount DECIMAL(10,2) NULL");
+                }
+            } catch (Throwable $e) {
+                error_log("ExtDB sync column check notice: " . $e->getMessage());
+            }
+
             // 3. Import to MySQL in transaction
             $pdo->beginTransaction();
             $syncedCount = 0;
