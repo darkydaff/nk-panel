@@ -367,7 +367,6 @@ RUN git clone --depth 1 --branch \${AMNEZIAWG_GO_REF} https://github.com/amnezia
 # Build amneziawg-tools
 RUN git clone --depth 1 --branch \${AMNEZIAWG_TOOLS_REF} https://github.com/amnezia-vpn/amneziawg-tools.git /build/amneziawg-tools && \
     cd /build/amneziawg-tools/src && \
-    sed -i 's/add_if() {/add_if() { if [[ -n \$WG_QUICK_USERSPACE_IMPLEMENTATION ]]; then \$WG_QUICK_USERSPACE_IMPLEMENTATION "\$INTERFACE"; return 0; fi;/' wg-quick/linux.bash && \
     make && \
     make install PREFIX=/usr
 
@@ -421,7 +420,6 @@ done
 # Start WireGuard
 if [ -f /opt/amnezia/awg/wg0.conf ]; then
     chmod 600 /opt/amnezia/awg/wg0.conf 2>/dev/null || true
-    export WG_QUICK_USERSPACE_IMPLEMENTATION=/usr/local/bin/amneziawg-go
     export WG_SUDO=1
     /usr/local/bin/awg-quick up /opt/amnezia/awg/wg0.conf
     echo "WireGuard started"
@@ -491,7 +489,7 @@ BASH;
         $containerName = $this->data['container_name'];
 
         $runCmd = sprintf(
-            'docker run -d --restart always --privileged --cap-add=NET_ADMIN --cap-add=SYS_MODULE -p %d:%d/udp -v /lib/modules:/lib/modules -e WG_QUICK_USERSPACE_IMPLEMENTATION=/usr/local/bin/amneziawg-go -e WG_THREADS=4 --name %s %s 2>&1',
+            'docker run -d --restart always --privileged --cap-add=NET_ADMIN --cap-add=SYS_MODULE -p %d:%d/udp -v /lib/modules:/lib/modules -e WG_THREADS=4 --name %s %s 2>&1',
             $vpnPort,
             $vpnPort,
             $containerName,
@@ -653,9 +651,13 @@ public static function getMimicryPresets(): array
         $wgConfig .= "ListenPort = {$vpnPort}\n";
         $wgConfig .= "MTU = 1280\n";
 
+        $kernelKeys = ['Jc', 'Jmin', 'Jmax', 'S1', 'S2', 'H1', 'H2', 'H3', 'H4'];
         foreach ($awgParams as $key => $value) {
-            if (empty($value) || $key === 'mimicry_type')
+            if (empty($value) || $key === 'mimicry_type' || !in_array($key, $kernelKeys, true))
                 continue;
+            if (in_array($key, ['H1', 'H2', 'H3', 'H4'], true) && is_string($value) && strpos($value, '-') !== false) {
+                $value = (int)explode('-', $value)[0];
+            }
             $wgConfig .= "{$key} = {$value}\n";
         }
         $wgConfig .= "\n";
@@ -1370,8 +1372,12 @@ BASH;
         $wgConfig .= "Address = {$subnetBase}.1/24\n";
         $wgConfig .= "ListenPort = {$vpnPort}\n";
         $wgConfig .= "MTU = 1280\n";
+        $kernelKeys = ['Jc', 'Jmin', 'Jmax', 'S1', 'S2', 'H1', 'H2', 'H3', 'H4'];
         foreach ($awgParams as $key => $value) {
-            if (empty($value) || $key === 'mimicry_type') continue;
+            if (empty($value) || $key === 'mimicry_type' || !in_array($key, $kernelKeys, true)) continue;
+            if (in_array($key, ['H1', 'H2', 'H3', 'H4'], true) && is_string($value) && strpos($value, '-') !== false) {
+                $value = (int)explode('-', $value)[0];
+            }
             $wgConfig .= "{$key} = {$value}\n";
         }
         $wgConfig .= "\n";
