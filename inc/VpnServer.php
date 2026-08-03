@@ -367,7 +367,7 @@ RUN git clone --depth 1 --branch \${AMNEZIAWG_GO_REF} https://github.com/amnezia
 # Build amneziawg-tools
 RUN git clone --depth 1 --branch \${AMNEZIAWG_TOOLS_REF} https://github.com/amnezia-vpn/amneziawg-tools.git /build/amneziawg-tools && \
     cd /build/amneziawg-tools/src && \
-    sed -i 's/if ret="\$(ip link add dev "\$INTERFACE" type amneziawg 2>\&1)"; then/if [[ -n \$WG_QUICK_USERSPACE_IMPLEMENTATION ]]; then \$WG_QUICK_USERSPACE_IMPLEMENTATION "\$INTERFACE"; return 0; fi; if ret="\$(ip link add dev "\$INTERFACE" type amneziawg 2>\&1)"; then/' wg-quick/linux.bash && \
+    sed -i 's/add_if() {/add_if() { if [[ -n \$WG_QUICK_USERSPACE_IMPLEMENTATION ]]; then \$WG_QUICK_USERSPACE_IMPLEMENTATION "\$INTERFACE"; return 0; fi;/' wg-quick/linux.bash && \
     make && \
     make install PREFIX=/usr
 
