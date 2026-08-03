@@ -356,7 +356,7 @@ FROM golang:alpine AS builder
 RUN apk add --no-cache git make build-base bash libmnl-dev pkgconfig
 
 ARG AMNEZIAWG_GO_REF=master
-ARG AMNEZIAWG_TOOLS_REF=61e741780e8465a67a7d7fb6cffe14a8a15d624a
+ARG AMNEZIAWG_TOOLS_REF=v3.0.20260730
 
 # Build amneziawg-go
 RUN git clone --depth 1 --branch \${AMNEZIAWG_GO_REF} https://github.com/amnezia-vpn/amneziawg-go.git /build/amneziawg-go && \
@@ -365,10 +365,8 @@ RUN git clone --depth 1 --branch \${AMNEZIAWG_GO_REF} https://github.com/amnezia
     cp amneziawg-go /usr/local/bin/
 
 # Build amneziawg-tools
-RUN git clone https://github.com/amnezia-vpn/amneziawg-tools.git /build/amneziawg-tools && \
-    cd /build/amneziawg-tools && \
-    git checkout \${AMNEZIAWG_TOOLS_REF} && \
-    cd src && \
+RUN git clone --depth 1 --branch \${AMNEZIAWG_TOOLS_REF} https://github.com/amnezia-vpn/amneziawg-tools.git /build/amneziawg-tools && \
+    cd /build/amneziawg-tools/src && \
     make && \
     make install PREFIX=/usr
 
