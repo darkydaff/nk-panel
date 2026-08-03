@@ -1,6 +1,11 @@
 .env
+/node_modules/
+/vendor/
+/scratch/
+/domain/
 .agent
 .skills
 .superpowers
 .claude/
-OVERVIEW.md
+OVERVIEW.md
+*.log
