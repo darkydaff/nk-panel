@@ -653,13 +653,9 @@ BASH;
         $wgConfig .= "ListenPort = {$vpnPort}\n";
         $wgConfig .= "MTU = 1280\n";
 
-        $kernelKeys = ['Jc', 'Jmin', 'Jmax', 'S1', 'S2', 'H1', 'H2', 'H3', 'H4'];
         foreach ($awgParams as $key => $value) {
-            if ($value === null || $value === '' || $key === 'mimicry_type' || !in_array($key, $kernelKeys, true))
+            if ($value === null || $value === '' || $key === 'mimicry_type')
                 continue;
-            if (in_array($key, ['H1', 'H2', 'H3', 'H4'], true) && is_string($value) && strpos($value, '-') !== false) {
-                $value = (int) explode('-', $value)[0];
-            }
             $wgConfig .= "{$key} = {$value}\n";
         }
         $wgConfig .= "\n";
@@ -1376,13 +1372,9 @@ BASH;
         $wgConfig .= "Address = {$subnetBase}.1/24\n";
         $wgConfig .= "ListenPort = {$vpnPort}\n";
         $wgConfig .= "MTU = 1280\n";
-        $kernelKeys = ['Jc', 'Jmin', 'Jmax', 'S1', 'S2', 'H1', 'H2', 'H3', 'H4'];
         foreach ($awgParams as $key => $value) {
-            if ($value === null || $value === '' || $key === 'mimicry_type' || !in_array($key, $kernelKeys, true))
+            if ($value === null || $value === '' || $key === 'mimicry_type')
                 continue;
-            if (in_array($key, ['H1', 'H2', 'H3', 'H4'], true) && is_string($value) && strpos($value, '-') !== false) {
-                $value = (int) explode('-', $value)[0];
-            }
             $wgConfig .= "{$key} = {$value}\n";
         }
         $wgConfig .= "\n";
