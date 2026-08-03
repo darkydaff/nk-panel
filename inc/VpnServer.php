@@ -262,52 +262,57 @@ class VpnServer
      */
     private function installKernelModule(): void
     {
-        // Check if already loaded
-        $check = $this->executeCommand('lsmod | grep -c amneziawg');
-        if (trim($check) === '1') {
-            return; // Already loaded
+        // Check if already loaded and version 1.0.x
+        $version = trim($this->executeCommand('modinfo -F version amneziawg 2>/dev/null || true'));
+        if (!empty($version) && strpos($version, '1.0.') === 0) {
+            $check = trim($this->executeCommand('lsmod | grep -c amneziawg 2>/dev/null || true'));
+            if ($check === '1') {
+                return; // Supported AWG 2.0 kernel module is already loaded
+            }
         }
 
         // Check for apt-get (Debian/Ubuntu)
         $hasApt = $this->executeCommand('which apt-get');
         if (empty(trim($hasApt))) {
-            return; // Not a debian-based system, skip kernel module (will fallback to userspace)
+            return; // Not a debian-based system
         }
 
-        // Install common dependencies
+        // Install dependencies
         $this->executeCommand('apt-get update', true);
-        $this->executeCommand('apt-get install -y gnupg2 ca-certificates dkms', true);
+        $this->executeCommand('apt-get install -y git build-essential dkms ca-certificates || apt-get install -y git build-base dkms ca-certificates', true);
 
-        // Handle XanMod headers
+        // Handle kernel headers
         $uname = $this->executeCommand('uname -r');
         if (stripos($uname, 'xanmod') !== false) {
-            // Find specific xanmod headers
             $this->executeCommand('apt-get install -y linux-headers-xanmod-edge || apt-get install -y linux-headers-xanmod-lts || apt-get install -y linux-headers-xanmod', true);
         } else {
             $this->executeCommand('apt-get install -y linux-headers-$(uname -r)', true);
         }
 
-        // Manual PPA addition (Works on both Debian and Ubuntu)
-        $this->executeCommand('apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 57290828', true);
-        $ppaUrl = "https://ppa.launchpadcontent.net/amnezia/ppa/ubuntu focal main";
-        $this->executeCommand("echo \"deb {$ppaUrl}\" | tee /etc/apt/sources.list.d/amnezia.list", true);
-        $this->executeCommand("echo \"deb-src {$ppaUrl}\" | tee -a /etc/apt/sources.list.d/amnezia.list", true);
+        // Pin and build AWG 2.0 kernel module (commit ae0924c) directly via DKMS
+        $cmd = 'rm -rf /tmp/amneziawg-kmod /usr/src/amneziawg-1.0.20260611 2>/dev/null || true; ' .
+               'git clone https://github.com/amnezia-vpn/amneziawg-linux-kernel-module.git /tmp/amneziawg-kmod && ' .
+               'cd /tmp/amneziawg-kmod && ' .
+               'git checkout ae0924ca700520ca34c5bdbcfd05b2f683ea9353 && ' .
+               'cp -r src /usr/src/amneziawg-1.0.20260611 && ' .
+               'dkms remove amneziawg/3.0.20260731-04 --all 2>/dev/null || true; ' .
+               'dkms remove amneziawg/1.0.20260611 --all 2>/dev/null || true; ' .
+               'dkms add -m amneziawg -v 1.0.20260611 && ' .
+               'dkms build -m amneziawg -v 1.0.20260611 && ' .
+               'dkms install -m amneziawg -v 1.0.20260611 --force';
 
-        $this->executeCommand('apt-get update', true);
+        $this->executeCommand($cmd, true);
 
-        // Install amneziawg (DKMS)
-        $this->executeCommand('DEBIAN_FRONTEND=noninteractive apt-get install -y amneziawg', true);
-
-        // Load module
+        // Reload module
+        $this->executeCommand('modprobe -r amneziawg 2>/dev/null || true', true);
         $this->executeCommand('modprobe amneziawg', true);
 
         // Final verify
         $checkFinal = $this->executeCommand('lsmod | grep -c amneziawg');
         if (trim($checkFinal) !== '1') {
-            // Log warning but don't stop deployment as userspace fallback exists
             $pdo = DB::conn();
             $pdo->prepare('UPDATE vpn_servers SET error_message = ? WHERE id = ?')
-                ->execute(['Warning: AmneziaWG kernel module failed to install/load. Using slow userspace fallback.', $this->serverId]);
+                ->execute(['Warning: AmneziaWG kernel module failed to install/load. Using userspace fallback.', $this->serverId]);
         }
     }
 
