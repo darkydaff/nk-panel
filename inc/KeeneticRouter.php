@@ -1,0 +1,1012 @@
+<?php
+/**
+ * Keenetic Router RCI API Adapter
+ * Handles connection, authentication, interface configuration, and AmneziaWG (ASC) setup
+ */
+class KeeneticRouter {
+    private string $domain;
+    private string $password;
+    private string $login;
+    private ?string $cookie = null;
+    private array $lastHeaders = [];
+    private int $timeout = 15;
+    private int $authTimeout = 10;
+
+    public function __construct(string $domain, string $password, string $login = 'admin') {
+        $this->domain = trim($domain);
+        $this->password = $password;
+        $this->login = trim($login);
+    }
+
+    /**
+     * Set connection timeouts
+     */
+    public function setTimeout(int $seconds): void {
+        $this->timeout = $seconds;
+        $this->authTimeout = max(3, $seconds);
+    }
+
+    /**
+     * Perform HTTP request to the router
+     */
+    public function request(string $path, string $method = 'GET', $body = null, bool $isRetry = false): array {
+        $url = $this->domain;
+        if (!str_starts_with($url, 'http://') && !str_starts_with($url, 'https://')) {
+            $url = 'https://' . $url;
+        }
+        $url = rtrim($url, '/') . '/' . ltrim($path, '/');
+
+        $ch = curl_init($url);
+        $headers = [
+            'Content-Type: application/json',
+            'Accept: application/json'
+        ];
+
+        if ($this->cookie) {
+            $headers[] = 'Cookie: ' . $this->cookie;
+        }
+
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $this->timeout);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_POSTREDIR, 7);
+
+        if ($body !== null) {
+            $jsonBody = is_string($body) ? $body : json_encode($body);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonBody);
+        }
+
+        // Capture headers case-insensitively
+        $this->lastHeaders = [];
+        curl_setopt($ch, CURLOPT_HEADERFUNCTION, function($curl, $headerLine) {
+            $len = strlen($headerLine);
+            $parts = explode(':', $headerLine, 2);
+            if (count($parts) === 2) {
+                $key = strtolower(trim($parts[0]));
+                $val = trim($parts[1]);
+                $this->lastHeaders[$key] = $val;
+            }
+            return $len;
+        });
+
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($response === false) {
+            throw new Exception("Connection to router failed: " . $curlError);
+        }
+
+        // Handle 401 Unauthorized by re-authenticating
+        if ($httpCode === 401 && !$isRetry) {
+            $this->authenticate();
+            return $this->request($path, $method, $body, true);
+        }
+
+        $decoded = json_decode($response, true);
+        return [
+            'code' => $httpCode,
+            'body' => $decoded !== null ? $decoded : $response
+        ];
+    }
+
+    /**
+     * Authenticate with the router using Challenge-Response protocol
+     */
+    public function authenticate(): bool {
+        $url = $this->domain;
+        if (!str_starts_with($url, 'http://') && !str_starts_with($url, 'https://')) {
+            $url = 'https://' . $url;
+        }
+        $url = rtrim($url, '/') . '/auth';
+
+        // 1. Get challenge
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $this->authTimeout);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+
+        $headers = [];
+        curl_setopt($ch, CURLOPT_HEADERFUNCTION, function($curl, $headerLine) use (&$headers) {
+            $len = strlen($headerLine);
+            $parts = explode(':', $headerLine, 2);
+            if (count($parts) === 2) {
+                $key = strtolower(trim($parts[0]));
+                $val = trim($parts[1]);
+                if ($key === 'set-cookie') {
+                    if (isset($headers['set-cookie'])) {
+                        $headers['set-cookie'] .= '; ' . $val;
+                    } else {
+                        $headers['set-cookie'] = $val;
+                    }
+                } else {
+                    $headers[$key] = $val;
+                }
+            }
+            return $len;
+        });
+
+        curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        // If HTTP 200, session is already authenticated or open
+        if ($httpCode === 200) {
+            if (isset($headers['set-cookie'])) {
+                $cookieParts = explode(';', $headers['set-cookie']);
+                $this->cookie = trim($cookieParts[0]);
+            }
+            return true;
+        }
+
+        if ($httpCode !== 401) {
+            throw new Exception("Router authentication request returned HTTP status code {$httpCode}.");
+        }
+
+        $realm = $headers['x-ndm-realm'] ?? null;
+        if ($realm !== null) {
+            $realm = trim($realm, '"\' ');
+        }
+        $challenge = $headers['x-ndm-challenge'] ?? null;
+        if ($challenge !== null) {
+            $challenge = trim($challenge, '"\' ');
+        }
+
+        if (!$realm || !$challenge) {
+            throw new Exception("Router authentication headers missing (Realm/Challenge). Is RCI/HTTP proxy enabled on the router?");
+        }
+
+        $initialCookie = null;
+        if (isset($headers['set-cookie'])) {
+            $cookieParts = explode(';', $headers['set-cookie']);
+            $initialCookie = trim($cookieParts[0]);
+        }
+
+        // 2. Compute response hashes
+        $md5 = md5($this->login . ':' . $realm . ':' . $this->password);
+        $sha = hash('sha256', $challenge . $md5);
+
+        // 3. Post auth request
+        $postHeaders = ['Content-Type: application/json'];
+        if ($initialCookie) {
+            $postHeaders[] = 'Cookie: ' . $initialCookie;
+        }
+
+        $ch2 = curl_init($url);
+        curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch2, CURLOPT_POST, true);
+        curl_setopt($ch2, CURLOPT_TIMEOUT, $this->authTimeout);
+        curl_setopt($ch2, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch2, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch2, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch2, CURLOPT_POSTREDIR, 7);
+        curl_setopt($ch2, CURLOPT_HTTPHEADER, $postHeaders);
+        curl_setopt($ch2, CURLOPT_POSTFIELDS, json_encode([
+            'login' => $this->login,
+            'password' => $sha
+        ]));
+
+        $authHeaders = [];
+        curl_setopt($ch2, CURLOPT_HEADERFUNCTION, function($curl, $headerLine) use (&$authHeaders) {
+            $len = strlen($headerLine);
+            $parts = explode(':', $headerLine, 2);
+            if (count($parts) === 2) {
+                $key = strtolower(trim($parts[0]));
+                $val = trim($parts[1]);
+                $authHeaders[$key] = $val;
+            }
+            return $len;
+        });
+
+        $res = curl_exec($ch2);
+        $code = curl_getinfo($ch2, CURLINFO_HTTP_CODE);
+        curl_close($ch2);
+
+        if ($code !== 200) {
+            throw new Exception("Authentication failed with status code " . $code . ". Response: " . $res . "\nRealm: " . $realm . "\nChallenge: " . $challenge);
+        }
+
+        // 4. Capture session cookie
+        if (isset($authHeaders['set-cookie'])) {
+            $cookiePart = explode(';', $authHeaders['set-cookie'])[0];
+            $this->cookie = $cookiePart;
+            return true;
+        } elseif ($initialCookie) {
+            $this->cookie = $initialCookie;
+            return true;
+        }
+
+        throw new Exception("Failed to retrieve session cookie from router.");
+    }
+
+    /**
+     * Test connection to the router and retrieve system info
+     */
+    public function testConnection(): array {
+        try {
+            $res = $this->request('rci/show/version');
+            if ($res['code'] !== 200 || !is_array($res['body'])) {
+                $res = $this->request('rci/show/system');
+            }
+            
+            if ($res['code'] !== 200 || !is_array($res['body'])) {
+                return ['success' => false, 'error' => 'Invalid router response'];
+            }
+            $sys = $res['body'];
+            
+            $model = $sys['model'] ?? 'Keenetic';
+            if (isset($sys['description']) && trim($sys['description']) !== '') {
+                $model = trim($sys['description']);
+            }
+            
+            $version = 'Unknown';
+            if (isset($sys['title']) && trim($sys['title']) !== '') {
+                $version = trim($sys['title']);
+            } elseif (isset($sys['release']) && trim($sys['release']) !== '') {
+                $version = trim($sys['release']);
+            } elseif (isset($sys['version']) && trim($sys['version']) !== '') {
+                $version = trim($sys['version']);
+            } elseif (isset($sys['firmware']) && trim($sys['firmware']) !== '') {
+                $version = trim($sys['firmware']);
+            } elseif (isset($sys['ndms']) && trim($sys['ndms']) !== '') {
+                $version = trim($sys['ndms']);
+            }
+
+            return [
+                'success' => true,
+                'router_model' => $model,
+                'firmware_version' => $version,
+            ];
+        } catch (Throwable $e) {
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+
+
+    /**
+     * Ping a host from the router and return average latency in milliseconds (or null if unreachable/blocked)
+     */
+    public function pingHost(string $host, int $count = 1): ?int {
+        if (empty($host)) {
+            return null;
+        }
+
+        // Clean host: extract domain or IP from any URL or Host:Port format
+        if (str_starts_with($host, 'http://') || str_starts_with($host, 'https://')) {
+            $parsedHost = parse_url($host, PHP_URL_HOST);
+            if ($parsedHost) {
+                $host = $parsedHost;
+            }
+        }
+        $host = preg_replace('/:[0-9]+$/', '', trim($host));
+        $host = trim($host, '/ ');
+
+        if (empty($host)) {
+            return null;
+        }
+
+        try {
+            $res = $this->request('rci/tools/ping', 'POST', [
+                'host' => $host,
+                'count' => $count
+            ]);
+
+            if ($res['code'] !== 200 || empty($res['body'])) {
+                $res = $this->request('rci/ping', 'POST', [
+                    'host' => $host,
+                    'count' => $count
+                ]);
+            }
+
+            if ($res['code'] === 200 && !empty($res['body'])) {
+                $body = $res['body'];
+
+                // Handle KeenOS RCI continuation output if continued: true and message lines missing ping data
+                if (is_array($body) && isset($body['continued']) && $body['continued'] === true) {
+                    $hasTimeInMessage = false;
+                    $msgStr = json_encode($body['message'] ?? [], JSON_UNESCAPED_UNICODE);
+                    if (preg_match('/time[=<]?\s*[0-9.]+/i', $msgStr)) {
+                        $hasTimeInMessage = true;
+                    }
+
+                    if (!$hasTimeInMessage) {
+                        usleep(600000); // Wait 600ms for ping to finish
+                        try {
+                            $contRes = $this->request('rci/tools/ping', 'POST', new stdClass());
+                            if ($contRes['code'] === 200 && !empty($contRes['body'])) {
+                                if (is_array($contRes['body'])) {
+                                    if (isset($contRes['body']['message'])) {
+                                        $body['message'] = array_merge((array)($body['message'] ?? []), (array)$contRes['body']['message']);
+                                    } else {
+                                        $body = array_merge($body, $contRes['body']);
+                                    }
+                                }
+                            }
+                        } catch (Throwable $e) {
+                            // Ignore continuation error
+                        }
+                    }
+                }
+
+                $contentStr = is_string($body) ? $body : json_encode($body, JSON_UNESCAPED_UNICODE);
+
+                // 1. Regex extraction from individual ping response lines:
+                // "100 bytes from 45.151.106.74: icmp_req=1, ttl=57, time=70.76 ms."
+                if (preg_match_all('/time[=<]?\s*([0-9.]+)\s*ms/i', $contentStr, $matches)) {
+                    $times = array_map('floatval', $matches[1]);
+                    if (!empty($times)) {
+                        return (int)max(1, round(array_sum($times) / count($times)));
+                    }
+                }
+
+                // 2. Regex extraction from summary lines:
+                // "Round-trip min/avg/max = 70.76/70.76/70.76 ms."
+                if (preg_match('/(?:round-trip|rtt)[^\n=]*=\s*[0-9.]+\/([0-9.]+)/i', $contentStr, $m)) {
+                    return (int)max(1, round((float)$m[1]));
+                }
+
+                // 3. Structured field extraction
+                if (is_array($body)) {
+                    if (isset($body['avg']) && is_numeric($body['avg'])) {
+                        return (int)max(1, round((float)$body['avg']));
+                    }
+                    if (isset($body['avg-ms']) && is_numeric($body['avg-ms'])) {
+                        return (int)max(1, round((float)$body['avg-ms']));
+                    }
+                    if (isset($body['min'], $body['max']) && is_numeric($body['min'])) {
+                        return (int)max(1, round(((float)$body['min'] + (float)$body['max']) / 2));
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            // Ignore ping errors
+        }
+
+        return null;
+    }
+
+    /**
+     * List all network interfaces
+     */
+    public function getInterfaces(): array {
+        $res = $this->request('rci/show/interface');
+        if ($res['code'] === 200 && is_array($res['body'])) {
+            return $res['body'];
+        }
+        return [];
+    }
+
+    public function findWgInterface(?string $description): ?array {
+        $interfaces = $this->getInterfaces();
+        
+        $wgInterfaces = [];
+        foreach ($interfaces as $name => $info) {
+            if (str_starts_with(strtolower($name), 'wireguard')) {
+                $wgInterfaces[$name] = $info;
+            }
+        }
+
+        if (!empty($description)) {
+            // Extract client code digits if possible (e.g. #0999 -> 0999)
+            $clientCode = '';
+            if (preg_match('/#?(\d+)/', $description, $m)) {
+                $clientCode = $m[1];
+            }
+
+            foreach ($wgInterfaces as $name => $info) {
+                if (isset($info['description'])) {
+                    $desc = $info['description'];
+                    if ($desc === $description) {
+                        $info['id'] = $name;
+                        return $info;
+                    }
+                    // Fallback: match by client code digits to cleanly transition existing interfaces
+                    if (!empty($clientCode) && str_contains($desc, $clientCode)) {
+                        $info['id'] = $name;
+                        return $info;
+                    }
+                }
+            }
+        }
+
+        // Final fallback: if no description match, check if there is exactly one WireGuard interface configured on the router
+        if (count($wgInterfaces) === 1) {
+            $name = array_key_first($wgInterfaces);
+            $info = $wgInterfaces[$name];
+            $info['id'] = $name;
+            return $info;
+        }
+
+        return null;
+    }
+
+    /**
+     * Retrieve status of a specific interface
+     */
+    public function getInterfaceStatus(string $interfaceId): array {
+        try {
+            $res = $this->request("rci/show/interface/{$interfaceId}");
+            if ($res['code'] === 200 && is_array($res['body'])) {
+                return $res['body'];
+            }
+        } catch (Throwable $e) {
+            // Safely return empty array if interface status query fails or interface does not exist
+        }
+        return [];
+    }
+
+    /**
+     * Save running-config to startup-config
+     */
+    public function saveConfig(): bool {
+        $res = $this->request('rci/system/configuration/save', 'POST', new stdClass());
+        return $res['code'] === 200;
+    }
+
+    /**
+     * Parse WireGuard configuration file
+     */
+    public static function parseWgConfig(string $content): array {
+        $lines = explode("\n", $content);
+        $config = [
+            'interface' => [],
+            'peer' => []
+        ];
+        $currentSection = null;
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '') {
+                continue;
+            }
+            if (str_starts_with($line, '#') || str_starts_with($line, ';')) {
+                // Parse Name = ... comments
+                $trimmedComment = trim(substr($line, 1));
+                if (preg_match('/^Name\s*=\s*(.*)$/i', $trimmedComment, $m)) {
+                    $val = trim($m[1]);
+                    if ($currentSection === 'interface') {
+                        $config['interface']['Name'] = $val;
+                    } elseif ($currentSection === 'peer') {
+                        $config['peer']['Name'] = $val;
+                    }
+                }
+                continue;
+            }
+            if (preg_match('/^\[(.*?)\]$/', $line, $m)) {
+                $currentSection = strtolower($m[1]);
+                continue;
+            }
+            if ($currentSection && preg_match('/^(.*?)=(.*)$/', $line, $m)) {
+                $key = trim($m[1]);
+                $val = trim($m[2]);
+                if ($currentSection === 'interface') {
+                    $config['interface'][$key] = $val;
+                } elseif ($currentSection === 'peer') {
+                    $config['peer'][$key] = $val;
+                }
+            }
+        }
+        return $config;
+    }
+
+    /**
+     * Create or update a WireGuard interface and configure it (excluding ASC params)
+     */
+    public function importWgConfig(string $confContent, string $description, ?string $forcedInterfaceId = null): string {
+        $parsed = self::parseWgConfig($confContent);
+        if (empty($parsed['interface']) || empty($parsed['peer'])) {
+            throw new Exception("Invalid WireGuard configuration file format.");
+        }
+
+        // 1. Find or choose interface ID
+        $interfaceId = $forcedInterfaceId;
+        if ($interfaceId) {
+            $ifCheck = $this->getInterfaceStatus($interfaceId);
+            if (empty($ifCheck)) {
+                $interfaceId = null; // Forced interface no longer exists on router, fallback to find or create
+            }
+        }
+
+        if (!$interfaceId) {
+            $existing = $this->findWgInterface($description);
+            if ($existing) {
+                $interfaceId = $existing['id'];
+            } else {
+                // Find next free Wireguard index
+                $interfaces = $this->getInterfaces();
+                $existingNames = array_map('strtolower', array_keys($interfaces));
+                $idx = 0;
+                while (in_array("wireguard{$idx}", $existingNames)) {
+                    $idx++;
+                }
+                $interfaceId = "Wireguard{$idx}";
+            }
+        }
+
+        // 2. Create interface and configure description, security-level
+        $this->request("rci/interface", 'POST', [
+            $interfaceId => [
+                'description' => $description,
+                'security-level' => [
+                    'public' => true
+                ]
+            ]
+        ]);
+
+        // Configure IP address (parsed from Address)
+        $address = $parsed['interface']['Address'] ?? '10.8.1.2/32';
+        $ipParts = explode('/', $address);
+        $ipAddr = $ipParts[0];
+        $maskInt = isset($ipParts[1]) ? (int)$ipParts[1] : 32;
+        $netmask = $this->maskIntToDotted($maskInt);
+
+        $this->request("rci/interface/{$interfaceId}/ip/address", 'POST', [
+            'address' => $ipAddr,
+            'mask' => $netmask
+        ]);
+
+        // Enable NAT (masquerade) on the interface
+        $this->request("rci/ip/nat", 'POST', [
+            'interface' => $interfaceId
+        ]);
+
+        // Configure IP settings (global priority, mtu, tcp adjust-mss)
+        $mtu = 1280;
+        if (isset($parsed['interface']['MTU'])) {
+            $mtu = (int)$parsed['interface']['MTU'];
+        } elseif (isset($parsed['peer']['MTU'])) {
+            $mtu = (int)$parsed['peer']['MTU'];
+        }
+
+        try {
+            $this->request("rci/interface/{$interfaceId}/ip", 'POST', [
+                'global' => [
+                    'priority' => 100
+                ],
+                'mtu' => $mtu
+            ]);
+        } catch (Throwable $e) {
+            // Ignore
+        }
+
+        try {
+            $this->request("rci/interface/{$interfaceId}/ip/tcp", 'POST', [
+                'adjust-mss' => [
+                    'pmtu' => true
+                ]
+            ]);
+        } catch (Throwable $e) {
+            // Ignore
+        }
+
+        // 3. Configure WireGuard settings
+        $privKey = $parsed['interface']['PrivateKey'] ?? '';
+        $port = 51820; // Default or randomly chosen
+        $endpoint = $parsed['peer']['Endpoint'] ?? '';
+        if (preg_match('/:(\d+)$/', $endpoint, $m)) {
+            $port = (int)$m[1];
+        }
+
+        $this->request("rci/interface/{$interfaceId}/wireguard", 'POST', [
+            'private-key' => $privKey
+        ]);
+
+        // 4. Configure WireGuard Peer
+        $pubKey = $parsed['peer']['PublicKey'] ?? '';
+        $psk = $parsed['peer']['PresharedKey'] ?? '';
+        $keepalive = isset($parsed['peer']['PersistentKeepalive']) ? (int)$parsed['peer']['PersistentKeepalive'] : 25;
+        
+        // Parse AllowedIPs dynamically
+        $allowedIpsList = [];
+        $allowedIpsRaw = $parsed['peer']['AllowedIPs'] ?? '0.0.0.0/0';
+        $cidrs = explode(',', $allowedIpsRaw);
+        foreach ($cidrs as $cidr) {
+            $cidr = trim($cidr);
+            if (empty($cidr)) continue;
+            
+            $parts = explode('/', $cidr);
+            $ip = $parts[0];
+            $prefix = isset($parts[1]) ? (int)$parts[1] : 32;
+            $mask = $this->maskIntToDotted($prefix);
+            
+            $allowedIpsList[] = [
+                'address' => $ip,
+                'mask' => $mask
+            ];
+        }
+
+        // Remove any existing peers on this interface to avoid duplicate / collision
+        $existingPeers = [];
+        try {
+            $currentConfig = $this->request("rci/interface/{$interfaceId}");
+            if ($currentConfig['code'] === 200 && is_array($currentConfig['body'])) {
+                $wgConf = $currentConfig['body']['wireguard'] ?? [];
+                $peerConf = $wgConf['peer'] ?? [];
+                if (is_array($peerConf)) {
+                    foreach ($peerConf as $k => $v) {
+                        if (is_array($v) && isset($v['key'])) {
+                            $existingPeers[] = $v['key'];
+                        } elseif (is_string($v)) {
+                            $existingPeers[] = $v;
+                        } elseif (is_string($k) && strlen($k) === 44) {
+                            $existingPeers[] = $k;
+                        }
+                    }
+                    if (isset($peerConf['key']) && is_string($peerConf['key'])) {
+                        $existingPeers[] = $peerConf['key'];
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            // Ignore if interface configuration doesn't exist yet
+        }
+        $existingPeers = array_unique(array_filter($existingPeers));
+
+        foreach ($existingPeers as $oldKey) {
+            try {
+                $this->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', [
+                    'key' => $oldKey,
+                    'no' => true
+                ]);
+            } catch (Throwable $e) {
+                // Ignore failure to delete a specific peer
+            }
+        }
+
+        // Configure peer settings
+        $peerConfig = [
+            'key' => $pubKey,
+            'endpoint' => [
+                'address' => $endpoint
+            ],
+            'keepalive-interval' => [
+                'interval' => $keepalive
+            ],
+            'allow-ips' => $allowedIpsList
+        ];
+
+        $peerDesc = $parsed['peer']['Name'] ?? '';
+        if (!empty($peerDesc)) {
+            $peerConfig['comment'] = $peerDesc;
+        }
+
+
+
+        if (!empty($psk)) {
+            $peerConfig['preshared-key'] = $psk;
+        }
+
+        // Add / Configure the peer (wireguard peer <key> + options)
+        $this->request("rci/interface/{$interfaceId}/wireguard/peer", 'POST', $peerConfig);
+
+        // 5. Configure DNS
+        if (!empty($parsed['interface']['DNS'])) {
+            $dnsServers = array_map('trim', explode(',', $parsed['interface']['DNS']));
+            $dnsList = [];
+            foreach ($dnsServers as $dns) {
+                if (filter_var($dns, FILTER_VALIDATE_IP)) {
+                    $dnsList[] = ['name-server' => $dns];
+                }
+            }
+            if (!empty($dnsList)) {
+                try {
+                    $this->request("rci/interface/{$interfaceId}/ip", 'POST', [
+                        'name-server' => $dnsList
+                    ]);
+                } catch (Throwable $dnsEx) {
+                    // Ignore
+                }
+            }
+        }
+
+        // 6. Configure connection/routing policy (add to Policy0/Main)
+        try {
+            $this->request("rci/ip/policy", 'POST', [
+                'name' => 'Policy0',
+                'permit' => [
+                    'global' => $interfaceId
+                ]
+            ]);
+        } catch (Throwable $policyEx) {
+            // Ignore
+        }
+
+        // 7. Apply ASC Obfuscation Parameters
+        $this->applyObfuscation($interfaceId, $parsed['interface']);
+
+        // 8. Bring interface UP
+        $this->request("rci/interface/{$interfaceId}", 'POST', [
+            'up' => true
+        ]);
+
+        // 9. Save Configuration
+        $this->saveConfig();
+
+        return $interfaceId;
+    }
+
+    /**
+     * Apply Obfuscation parameters (with adaptive fallback for different KeeneticOS versions)
+     */
+    public function applyObfuscation(string $interfaceId, array $awgParams): array {
+        // Collect all possible parameters from input
+        $paramsMap = [
+            'jc' => isset($awgParams['Jc']) ? (int)$awgParams['Jc'] : null,
+            'jmin' => isset($awgParams['Jmin']) ? (int)$awgParams['Jmin'] : null,
+            'jmax' => isset($awgParams['Jmax']) ? (int)$awgParams['Jmax'] : null,
+            's1' => isset($awgParams['S1']) ? (int)$awgParams['S1'] : null,
+            's2' => isset($awgParams['S2']) ? (int)$awgParams['S2'] : null,
+            'h1' => $awgParams['H1'] ?? null,
+            'h2' => $awgParams['H2'] ?? null,
+            'h3' => $awgParams['H3'] ?? null,
+            'h4' => $awgParams['H4'] ?? null,
+            's3' => isset($awgParams['S3']) ? (int)$awgParams['S3'] : null,
+            's4' => isset($awgParams['S4']) ? (int)$awgParams['S4'] : null,
+            'i1' => $awgParams['I1'] ?? null,
+            'i2' => $awgParams['I2'] ?? null,
+            'i3' => $awgParams['I3'] ?? null,
+            'i4' => $awgParams['I4'] ?? null,
+            'i5' => $awgParams['I5'] ?? null,
+        ];
+
+        // Clean out nulls
+        $cleanParams = array_filter($paramsMap, fn($v) => $v !== null);
+        if (empty($cleanParams)) {
+            return ['applied' => [], 'fallback' => false];
+        }
+
+        // Try applying ALL parameters first (including v2 parameters and header ranges)
+        try {
+            $res = $this->postAscParameters($interfaceId, $cleanParams);
+            if ($res['code'] === 200 && (!is_array($res['body']) || !isset($res['body']['status']) || $this->hasNoErrorStatus($res['body']))) {
+                return ['applied' => $cleanParams, 'fallback' => false];
+            }
+        } catch (Throwable $e) {
+            // Log and fall back
+        }
+
+        // FALLBACK FLOW 1: Handle dynamic header ranges by converting them to midpoint integers
+        $normalizedParams = $cleanParams;
+        foreach (['h1', 'h2', 'h3', 'h4'] as $key) {
+            if (isset($normalizedParams[$key]) && is_string($normalizedParams[$key]) && strpos($normalizedParams[$key], '-') !== false) {
+                if (preg_match('/^(\d+)-(\d+)$/', $normalizedParams[$key], $m)) {
+                    $normalizedParams[$key] = (int)round(($m[1] + $m[2]) / 2);
+                }
+            }
+        }
+
+        // Try applying with normalized headers
+        try {
+            $res = $this->postAscParameters($interfaceId, $normalizedParams);
+            if ($res['code'] === 200 && (!is_array($res['body']) || !isset($res['body']['status']) || $this->hasNoErrorStatus($res['body']))) {
+                return ['applied' => $normalizedParams, 'fallback' => true, 'fallback_reason' => 'midpoint_headers'];
+            }
+        } catch (Throwable $e) {
+            // Log and fall back
+        }
+
+        // FALLBACK FLOW 2: Downgrade strictly to AWG v1 parameters (drop S3, S4, I1-I5)
+        $v1Params = [];
+        $v1Keys = ['jc', 'jmin', 'jmax', 's1', 's2', 'h1', 'h2', 'h3', 'h4'];
+        foreach ($v1Keys as $key) {
+            if (isset($normalizedParams[$key])) {
+                $v1Params[$key] = $normalizedParams[$key];
+            }
+        }
+
+        if (!empty($v1Params)) {
+            $res = $this->postAscParameters($interfaceId, $v1Params);
+            if ($res['code'] === 200 && (!is_array($res['body']) || !isset($res['body']['status']) || $this->hasNoErrorStatus($res['body']))) {
+                return ['applied' => $v1Params, 'fallback' => true, 'fallback_reason' => 'awg_v1_downgrade'];
+            }
+            
+            // If the router rejected even the v1 parameters, throw an exception
+            $errorMsg = is_array($res['body']) ? json_encode($res['body']) : (string)$res['body'];
+            throw new Exception("Router rejected both AmneziaWG v2 and v1 configurations. Details: " . $errorMsg);
+        }
+
+        throw new Exception("No valid AmneziaWG configuration parameters found to apply.");
+    }
+
+    /**
+     * Send ASC parameters to RCI interface path
+     */
+    private function postAscParameters(string $interfaceId, array $params): array {
+        // In Keenetic RCI, we POST to `/rci/interface/{id}/wireguard/asc` with the argument values.
+        // Wait, how does the RCI daemon expect them?
+        // Since CLI is `wireguard asc {jc} {jmin} {jmax} {s1} {s2} {h1} {h2} {h3} {h4} [{s3} {s4} {i1} {i2} {i3} {i4} {i5}]`,
+        // NDMS expects them mapped to keys or as a single space-separated argument.
+        // Let's try sending as a single configuration object first:
+        return $this->request("rci/interface/{$interfaceId}/wireguard/asc", 'POST', $params);
+    }
+
+    /**
+     * Check if the status response has any errors
+     */
+    private function hasNoErrorStatus($body): bool {
+        if (!is_array($body)) return true;
+        
+        // NDMS RCI returns errors in the "status" field of the response
+        // Format is: [{"code": "error", "message": "..."}]
+        if (isset($body['status']) && is_array($body['status'])) {
+            foreach ($body['status'] as $s) {
+                if (isset($s['code']) && $s['code'] === 'error') {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Push FQDN routing groups and route them via the given interface
+     */
+    public function pushRoutingGroups(array $groups, string $interfaceId): void {
+        // 1. Fetch and clean up any existing dns-proxy routes for this interface
+        try {
+            $current = $this->request("rci/dns-proxy/route");
+            if ($current['code'] === 200 && is_array($current['body'])) {
+                $existingRoutes = [];
+                // Handle different response formats (single object, array, or associative array)
+                if (isset($current['body']['group'])) {
+                    $existingRoutes[] = $current['body'];
+                } else {
+                    foreach ($current['body'] as $key => $val) {
+                        if (is_array($val)) {
+                            $routeItem = $val;
+                            if (!isset($routeItem['group']) && is_string($key)) {
+                                $routeItem['group'] = $key;
+                            }
+                            $existingRoutes[] = $routeItem;
+                        }
+                    }
+                }
+
+                foreach ($existingRoutes as $route) {
+                    if (is_array($route) && ($route['interface'] ?? '') === $interfaceId) {
+                        $groupName = $route['group'] ?? '';
+                        if (!empty($groupName)) {
+                            $res = $this->request("rci/dns-proxy/route", 'POST', [
+                                'group' => $groupName,
+                                'interface' => $interfaceId,
+                                'no' => true
+                            ]);
+                            $this->checkResponseError($res, "Remove old dns-route {$groupName}");
+                        }
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            // Ignore error if dns-proxy has no routes configured or is not initialized
+        }
+
+        // 2. Fetch and clean up any prior existing FQDN groups on the router that are not in our pushed groups list
+        try {
+            $pushedNames = [];
+            foreach ($groups as $group) {
+                $pushedNames[] = trim($group['name']);
+            }
+
+            $currentGroups = $this->request("rci/object-group/fqdn");
+            if ($currentGroups['code'] === 200 && is_array($currentGroups['body'])) {
+                foreach ($currentGroups['body'] as $groupName => $details) {
+                    if (!in_array($groupName, $pushedNames)) {
+                        // Delete this FQDN object-group from the router
+                        $res = $this->request("rci/object-group/fqdn/{$groupName}", 'POST', [
+                            'no' => true
+                        ]);
+                        // We do not throw an error here because if the group is still in use elsewhere, the router will reject it, which is fine
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            // Ignore error
+        }
+
+        // 3. Configure new groups and routes
+        foreach ($groups as $group) {
+            $name = trim($group['name']);
+            if (empty($name)) continue;
+
+            $description = trim($group['description'] ?? '');
+            $content = $group['content'] ?? '';
+
+            // Split by newline and comma
+            $items = preg_split('/[\r\n,]+/', $content);
+            $includeList = [];
+            foreach ($items as $item) {
+                $item = trim($item);
+                if (empty($item)) continue;
+                $includeList[] = ['address' => $item];
+            }
+
+            // Clear any existing include list on the router for this group
+            try {
+                $res = $this->request("rci/object-group/fqdn/{$name}/include", 'POST', [
+                    'no' => true
+                ]);
+                $this->checkResponseError($res, "Clear FQDN group {$name}");
+            } catch (Throwable $e) {
+                // Ignore if group or include list didn't exist
+            }
+
+            // Configure the group and its include list
+            $res = $this->request("rci/object-group/fqdn", 'POST', [
+                $name => [
+                    'description' => $description,
+                    'include' => $includeList
+                ]
+            ]);
+            $this->checkResponseError($res, "Configure FQDN group {$name}");
+
+            // Create the DNS proxy route
+            $res = $this->request("rci/dns-proxy/route", 'POST', [
+                'group' => $name,
+                'interface' => $interfaceId,
+                'auto' => true
+            ]);
+            $this->checkResponseError($res, "Add DNS proxy route for {$name}");
+        }
+
+        // Save running-config
+        $this->saveConfig();
+    }
+
+    /**
+     * Check RCI response for errors and throw Exception if found
+     */
+    private function checkResponseError(array $res, string $context): void {
+        if ($res['code'] !== 200 && $res['code'] !== 201) {
+            $msg = is_array($res['body']) ? json_encode($res['body']) : $res['body'];
+            throw new Exception("[$context] HTTP error {$res['code']}: $msg");
+        }
+        
+        $body = $res['body'];
+        if (is_array($body)) {
+            $checkError = function($item) use (&$checkError) {
+                if (isset($item['status']) && $item['status'] === 'error') {
+                    return $item['message'] ?? 'Unknown RCI error';
+                }
+                if (is_array($item)) {
+                    foreach ($item as $val) {
+                        $err = $checkError($val);
+                        if ($err) return $err;
+                    }
+                }
+                return null;
+            };
+            
+            $err = $checkError($body);
+            if ($err) {
+                throw new Exception("[$context] Router rejected command: $err");
+            }
+        }
+    }
+
+    /**
+     * Delete an interface
+     */
+    public function removeInterface(string $interfaceId): bool {
+        $res = $this->request("rci/interface/{$interfaceId}", 'POST', [
+            'no' => true
+        ]);
+        $this->saveConfig();
+        return $res['code'] === 200;
+    }
+
+    /**
+     * Convert integer subnet mask to dotted decimal
+     */
+    public function maskIntToDotted(int $mask): string {
+        $dotted = long2ip(-1 << (32 - $mask));
+        return $dotted ? $dotted : '255.255.255.255';
+    }
+}

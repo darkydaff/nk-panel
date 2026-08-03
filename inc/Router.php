@@ -22,8 +22,12 @@ class Router {
   public static function dispatch(string $method, string $uri): void {
     $path = parse_url($uri, PHP_URL_PATH) ?: '/';
     $path = '/' . trim($path, '/');
+    $requestMethod = strtoupper($method);
     foreach (self::$routes as $route) {
-      if ($route['method'] !== strtoupper($method)) continue;
+      $routeMethod = $route['method'];
+      if ($routeMethod !== $requestMethod && !($requestMethod === 'HEAD' && $routeMethod === 'GET')) {
+        continue;
+      }
       if (preg_match($route['pattern'], $path, $matches)) {
         $params = [];
         foreach ($matches as $k => $v) { if (!is_int($k)) $params[$k] = $v; }

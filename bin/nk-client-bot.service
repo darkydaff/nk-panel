@@ -1,0 +1,16 @@
+[Unit]
+Description=NK-Panel Telegram Client Bot Polling Daemon
+After=network.target docker.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/nk-panel
+ExecStart=/usr/bin/docker compose exec -T web php bin/telegram_bot_daemon.php
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

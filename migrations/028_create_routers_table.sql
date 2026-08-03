@@ -1,0 +1,25 @@
+-- Create routers table to track Keenetic router connection credentials and AmneziaWG configuration status
+CREATE TABLE IF NOT EXISTS routers (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  ext_client_code VARCHAR(100) NOT NULL,
+  domain VARCHAR(255) NOT NULL,
+  password VARCHAR(255) NOT NULL,
+  login VARCHAR(100) DEFAULT 'admin',
+  router_model VARCHAR(255) NULL,
+  firmware_version VARCHAR(100) NULL,
+  wg_interface_id VARCHAR(50) NULL,
+  wg_interface_name VARCHAR(255) NULL,
+  vpn_client_id INT UNSIGNED NULL,
+  server_id INT UNSIGNED NULL,
+  pushed_awg_params JSON NULL,
+  status ENUM('pending', 'connected', 'error', 'offline', 'unknown') DEFAULT 'pending',
+  last_push_at TIMESTAMP NULL,
+  last_check_at TIMESTAMP NULL,
+  error_message TEXT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_ext_code (ext_client_code),
+  INDEX idx_status (status),
+  INDEX idx_vpn_client (vpn_client_id),
+  UNIQUE KEY unique_ext_code (ext_client_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

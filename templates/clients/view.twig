@@ -1,6 +1,16 @@
 {% extends "layout.twig" %}
 {% block title %}Client: {{ client.name }}{% endblock %}
 
+{% block breadcrumbs %}
+    <a href="/dashboard" class="hover:text-slate-300 transition-colors">Home</a>
+    <i class="fas fa-chevron-right text-[10px] text-slate-700 mx-1"></i>
+    <a href="/servers" class="hover:text-slate-300 transition-colors">Servers</a>
+    <i class="fas fa-chevron-right text-[10px] text-slate-700 mx-1"></i>
+    <a href="/servers/{{ client.server_id }}" class="hover:text-slate-300 transition-colors">{{ server.name }}</a>
+    <i class="fas fa-chevron-right text-[10px] text-slate-700 mx-1"></i>
+    <span class="text-slate-300">Client: {{ client.name }}</span>
+{% endblock %}
+
 {% block content %}
 <div class="w-full mx-auto max-w-5xl">
     <div class="mb-6 flex flex-col md:flex-row md:items-start justify-between gap-4">
@@ -16,35 +26,110 @@
                 <span class="text-xs text-slate-500">
                     <i class="fas fa-calendar-alt mr-1"></i>{{ client.created_at|date('Y-m-d H:i') }}
                 </span>
+                {% if client.ext_client_code %}
+                <a href="/clients?code={{ client.ext_client_code|url_encode }}"
+                   class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300 border border-indigo-500/30 text-xs transition-all">
+                    <i class="fas fa-link text-[10px]"></i>
+                    <span>Client: <strong class="font-mono">{{ client.ext_client_code }}</strong>{% if ext_client.name %} ({{ ext_client.name }}){% endif %}</span>
+                    <i class="fas fa-arrow-right text-[9px] opacity-60"></i>
+                </a>
+                {% endif %}
+                
+                {% if ext_client %}
+                    {% if ext_client.func == 'PAUSE' %}
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-sky-500/10 text-sky-400 border border-sky-500/20 text-xs font-medium">
+                            <i class="fas fa-pause-circle text-[10px]"></i>
+                            <span>Subscription Paused</span>
+                        </span>
+                    {% elseif ext_client.expiry_date %}
+                        {% if ext_client.days_left > 10 %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-medium">
+                                <i class="fas fa-calendar-check text-[10px]"></i>
+                                <span>Subscription expires: <strong>{{ ext_client.expiry_date }}</strong> ({{ ext_client.days_left }} days left)</span>
+                            </span>
+                        {% elseif ext_client.days_left > 0 %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-medium animate-pulse">
+                                <i class="fas fa-calendar-minus text-[10px]"></i>
+                                <span>Subscription expires soon: <strong>{{ ext_client.expiry_date }}</strong> ({{ ext_client.days_left }} days left)</span>
+                            </span>
+                        {% else %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/20 text-xs font-medium">
+                                <i class="fas fa-calendar-times text-[10px]"></i>
+                                <span>{% if ext_client.days_left == 0 %}Subscription expired today!{% else %}Subscription expired: <strong>{{ ext_client.expiry_date }}</strong> ({{ ext_client.days_left|abs }} days ago){% endif %}</span>
+                            </span>
+                        {% endif %}
+                    {% endif %}
+
+                    {% if ext_client.router %}
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800/80 text-slate-400 border border-slate-700/50 text-[10px] font-mono" title="Router model">
+                            <i class="fas fa-network-wired text-[8px] opacity-75 mr-1"></i>
+                            <span>Router: {{ ext_client.router }}</span>
+                        </span>
+                    {% endif %}
+                {% endif %}
             </div>
         </div>
-        <a href="/servers/{{ client.server_id }}" class="btn-secondary px-4 py-2 text-sm">
-            <i class="fas fa-arrow-left mr-2"></i>Back to Server
+        <a href="/servers/{{ client.server_id }}" class="btn btn-outline btn-sm gap-2">
+            <i class="fas fa-arrow-left"></i>Back to Server
         </a>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div class="panel p-5">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+        <div class="card bg-base-200 border border-base-300 shadow p-5 hover:-translate-y-0.5 transition-all duration-300">
             <div class="flex items-center justify-between mb-2">
-                <span class="text-xs font-medium text-slate-500 uppercase tracking-wide">Uploaded</span>
+                <span class="text-xs font-medium text-base-content/50 uppercase tracking-wide">Config Uploaded</span>
                 <i class="fas fa-arrow-up text-cyan-400 text-sm"></i>
             </div>
-            <div class="text-2xl font-bold text-white font-mono">{{ (client.bytes_sent / 1024 / 1024)|number_format(2) }} <span class="text-xs text-slate-500">MB</span></div>
+            <div class="text-2xl font-bold text-base-content font-mono">{{ client.bytes_sent|format_bytes(true) }}</div>
         </div>
-        <div class="panel p-5">
+        <div class="card bg-base-200 border border-base-300 shadow p-5 hover:-translate-y-0.5 transition-all duration-300">
             <div class="flex items-center justify-between mb-2">
-                <span class="text-xs font-medium text-slate-500 uppercase tracking-wide">Downloaded</span>
+                <span class="text-xs font-medium text-base-content/50 uppercase tracking-wide">Config Downloaded</span>
                 <i class="fas fa-arrow-down text-blue-400 text-sm"></i>
             </div>
-            <div class="text-2xl font-bold text-white font-mono">{{ (client.bytes_received / 1024 / 1024)|number_format(2) }} <span class="text-xs text-slate-500">MB</span></div>
+            <div class="text-2xl font-bold text-base-content font-mono">{{ client.bytes_received|format_bytes(true) }}</div>
         </div>
-        <div class="panel p-5">
+
+        {# Aggregate Client Traffic card (if linked) #}
+        {% if ext_client %}
+        <div class="card bg-base-200 border border-base-300 shadow p-5 hover:-translate-y-0.5 transition-all duration-300">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-medium text-indigo-400 uppercase tracking-wide">Total Client Traffic</span>
+                <i class="fas fa-chart-pie text-indigo-400 text-sm"></i>
+            </div>
+            <div class="text-lg font-bold text-base-content font-mono flex flex-col gap-0.5 pt-0.5">
+                <span class="text-cyan-400 text-sm">↑{{ ext_client.bytes_sent|default(0)|format_bytes }}</span>
+                <span class="text-indigo-400 text-sm">↓{{ ext_client.bytes_received|default(0)|format_bytes }}</span>
+            </div>
+        </div>
+        {% else %}
+        <div class="card bg-base-200/50 border border-base-300 shadow p-5 text-base-content/40 flex flex-col justify-center items-center text-center">
+            <i class="fas fa-link-slash text-base mb-1.5 opacity-40"></i>
+            <span class="text-[10px] uppercase font-semibold tracking-wider text-base-content/50">Not Linked to Client</span>
+        </div>
+        {% endif %}
+
+        <div class="card bg-base-200 border border-base-300 shadow p-5 hover:-translate-y-0.5 transition-all duration-300">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-medium text-base-content/50 uppercase tracking-wide">Current Speed</span>
+                <i class="fas fa-bolt text-emerald-400 text-sm"></i>
+            </div>
+            <div class="text-base font-bold text-base-content font-mono flex flex-col gap-0.5">
+                <span class="text-emerald-400">↑{{ stats.speed_up }}</span>
+                <span class="text-indigo-400">↓{{ stats.speed_down }}</span>
+            </div>
+        </div>
+        <div class="card bg-base-200 border border-base-300 shadow p-5 hover:-translate-y-0.5 transition-all duration-300">
             <div class="flex items-center justify-between mb-2">
                 <span class="text-xs font-medium text-slate-500 uppercase tracking-wide">Last Handshake</span>
                 <i class="fas fa-clock text-accent text-sm"></i>
             </div>
-            <div class="text-lg font-medium text-white">
-                {% if client.last_handshake %}
+            <div class="text-sm font-medium text-white pt-1">
+                {% set is_never = true %}
+                {% if client.last_handshake is not empty and client.last_handshake != '0000-00-00 00:00:00' and client.last_handshake != '1970-01-01 00:00:00' and client.last_handshake != '0' %}
+                    {% set is_never = false %}
+                {% endif %}
+                {% if not is_never %}
                     {{ client.last_handshake }}
                 {% else %}
                     <span class="text-slate-500 italic">Never</span>
@@ -53,58 +138,239 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div class="panel p-5">
-            <h3 class="text-base font-semibold mb-4 text-white flex items-center">
+    <!-- Client Telemetry Speed Chart -->
+    <div class="card bg-base-200 border border-base-300 shadow p-5 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div>
+                <h3 class="text-base font-semibold text-base-content flex items-center">
+                    <i class="fas fa-chart-line text-emerald-400 mr-2"></i>Traffic Speed History
+                </h3>
+                <p class="text-xs text-base-content/50 mt-1">Real-time upload and download speeds over time</p>
+            </div>
+            
+            <div class="join self-start sm:self-auto" id="chartHoursGroup">
+                <button type="button" class="join-item chart-hours-btn btn btn-xs btn-active" data-hours="24">24h</button>
+                <button type="button" class="join-item chart-hours-btn btn btn-xs text-base-content/60" data-hours="12">12h</button>
+                <button type="button" class="join-item chart-hours-btn btn btn-xs text-base-content/60" data-hours="6">6h</button>
+            </div>
+        </div>
+        
+        <div class="relative h-[220px] w-full" id="chartContainer">
+            <canvas id="speedChart"></canvas>
+            <div id="chartLoading" class="absolute inset-0 bg-base-200/80 flex items-center justify-center rounded-lg">
+                <div class="flex flex-col items-center gap-2">
+                    <i class="fas fa-spinner fa-spin text-emerald-400 text-xl"></i>
+                    <span class="text-xs text-base-content/50 font-medium">Loading telemetry...</span>
+                </div>
+            </div>
+            <div id="chartEmpty" class="absolute inset-0 bg-base-200 flex items-center justify-center rounded-lg hidden">
+                <div class="flex flex-col items-center gap-1.5 text-base-content/50">
+                    <i class="fas fa-chart-line text-xl opacity-40"></i>
+                    <span class="text-xs">No traffic data recorded in this range</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pb-8">
+        <div class="card bg-base-200 border border-base-300 shadow p-5">
+            <h3 class="text-base font-semibold mb-4 text-base-content flex items-center">
                 <i class="fas fa-edit text-accent mr-2"></i>Client Settings
             </h3>
             
-            <form method="POST" action="/clients/{{ client.id }}/update" class="mb-4">
-                <label class="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Client Name</label>
-                <div class="flex gap-2">
-                    <input name="name" value="{{ client.name }}" class="input-field flex-grow px-4 py-2.5 text-sm" required>
-                    <button type="submit" class="btn-primary px-4 py-2.5 text-sm">
-                        <i class="fas fa-save mr-2"></i>Save
+            <form method="POST" action="/clients/{{ client.id }}/update" class="mb-4 space-y-4">
+                {{ csrf_field() }}
+                <div class="form-control">
+                    <label class="label py-1">
+                        <span class="label-text font-medium text-xs">Client Name</span>
+                    </label>
+                    <input name="name" value="{{ client.name }}" class="input input-bordered input-sm w-full" required>
+                </div>
+
+                <div class="form-control">
+                    <label class="label py-1">
+                        <span class="label-text font-medium text-xs">Link to External DB Client</span>
+                    </label>
+                    <select name="ext_client_code" class="select select-bordered select-sm w-full font-mono">
+                        <option value="">None (Unlinked)</option>
+                        {% for ext in all_ext_clients %}
+                            <option value="{{ ext.code }}" {% if client.ext_client_code == ext.code %}selected{% endif %}>
+                                {{ ext.code }} - {{ ext.name|default('No Name') }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="flex justify-end">
+                    <button type="submit" class="btn btn-primary btn-sm gap-2">
+                        <i class="fas fa-save"></i>Save Settings
                     </button>
                 </div>
             </form>
 
-            <div class="border-t border-slate-700 pt-4">
-                <label class="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Configuration</label>
+            <div class="border-t border-base-300 pt-4 mt-4">
+                <label class="label py-1">
+                    <span class="label-text font-medium text-xs">Configuration</span>
+                </label>
                 <div class="flex flex-wrap gap-2">
-                    <a href="/clients/{{ client.id }}/download" class="btn-secondary px-4 py-2.5 text-sm flex-1 text-center">
-                        <i class="fas fa-download mr-2"></i>Download Config
+                    <a href="/clients/{{ client.id }}/download" class="btn btn-outline btn-sm flex-1 gap-2">
+                        <i class="fas fa-download"></i>Download Config
                     </a>
-                    <button onclick="copyConfig()" id="copyBtn" class="btn-secondary px-4 py-2.5 text-sm flex-1 text-center">
-                        <i class="fas fa-copy mr-2"></i>Copy Config
+                    <button onclick="copyConfig()" id="copyBtn" class="btn btn-outline btn-sm flex-1 gap-2">
+                        <i class="fas fa-copy"></i>Copy Config
                     </button>
                 </div>
             </div>
             <pre id="configData" class="hidden">{{ client.config }}</pre>
         </div>
 
-        <div class="panel p-5">
-            <h3 class="text-base font-semibold mb-4 text-white flex items-center">
-                <i class="fas fa-cog text-accent mr-2"></i>Actions
-            </h3>
-            <div class="space-y-3">
-                <button onclick="refreshClientStats()" id="refreshStatsBtn" class="btn-secondary w-full py-2.5 text-sm">
-                    <i class="fas fa-sync-alt mr-2"></i>Sync Stats
-                </button>
-                
-                {% if client.status != 'active' %}
-                <form method="POST" action="/clients/{{ client.id }}/restore">
-                    <button type="submit" class="w-full bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-lg py-2.5 text-sm transition-colors font-medium">
-                        <i class="fas fa-check mr-2"></i>Restore Client
+        <div class="flex flex-col gap-4">
+            <div class="card bg-base-200 border border-base-300 shadow p-5">
+                <h3 class="text-base font-semibold mb-4 text-base-content flex items-center">
+                    <i class="fas fa-cog text-accent mr-2"></i>Actions
+                </h3>
+                <div class="space-y-3">
+                    <button onclick="refreshClientStats()" id="refreshStatsBtn" class="btn btn-outline btn-sm w-full gap-2">
+                        <i class="fas fa-sync-alt"></i>Sync Stats
                     </button>
-                </form>
+                    
+                    {% if client.status != 'active' %}
+                    <form method="POST" action="/clients/{{ client.id }}/restore">
+                        {{ csrf_field() }}
+                        <button type="submit" class="btn btn-outline btn-info btn-sm w-full gap-2">
+                            <i class="fas fa-check"></i>Restore Client
+                        </button>
+                    </form>
+                    {% endif %}
+
+                    <form method="POST" action="/clients/{{ client.id }}/reset-traffic" onsubmit="return confirm('Are you sure you want to reset traffic statistics for this client to 0?')">
+                        {{ csrf_field() }}
+                        <button type="submit" class="btn btn-outline btn-warning btn-sm w-full gap-2">
+                            <i class="fas fa-undo"></i>Reset Traffic Stats
+                        </button>
+                    </form>
+
+                    <form method="POST" action="/clients/{{ client.id }}/delete" onsubmit="return confirm('Delete this client permanently?')">
+                        {{ csrf_field() }}
+                        <button type="submit" class="btn btn-outline btn-error btn-sm w-full gap-2">
+                            <i class="fas fa-trash-alt"></i>Delete Client
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            {# Router Configuration Panel #}
+            {% if router %}
+            <div class="card bg-base-200 border border-base-300 shadow p-5">
+                <h3 class="text-base font-semibold mb-4 text-base-content flex items-center justify-between">
+                    <span class="flex items-center">
+                        <i class="fas fa-network-wired text-indigo-400 mr-2"></i>Router Connection
+                    </span>
+                    {% if router.status == 'connected' %}
+                        <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold uppercase tracking-wider">Connected</span>
+                    {% elseif router.status == 'offline' %}
+                        <span class="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold uppercase tracking-wider">Offline</span>
+                    {% elseif router.status == 'error' %}
+                        <span class="text-[10px] px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 font-semibold uppercase tracking-wider">Error</span>
+                    {% else %}
+                        <span class="text-[10px] px-2 py-0.5 rounded bg-base-300 text-base-content/60 border border-base-300 font-semibold uppercase tracking-wider">Pending</span>
+                    {% endif %}
+                </h3>
+                
+                <div class="space-y-3 mb-4">
+                    <div class="flex justify-between items-center border-b border-base-300/50 pb-2">
+                        <span class="text-xs text-base-content/50 uppercase tracking-wide">Domain / IP</span>
+                        <a href="{% if '://' in router.domain %}{{ router.domain }}{% else %}https://{{ router.domain }}{% endif %}" target="_blank" class="text-sm font-mono text-indigo-400 hover:text-indigo-300 underline truncate max-w-[200px]" title="Open router panel: {{ router.domain }}">{{ router.domain }}</a>
+                    </div>
+                    <div class="flex justify-between items-center border-b border-base-300/50 pb-2">
+                        <span class="text-xs text-base-content/50 uppercase tracking-wide">Router Model</span>
+                        <span class="text-sm text-base-content font-medium">{{ router.router_model|default('Keenetic (Generic)') }}</span>
+                    </div>
+                    {% if router.firmware_version %}
+                    <div class="flex justify-between items-center border-b border-base-300/50 pb-2">
+                        <span class="text-xs text-base-content/50 uppercase tracking-wide">OS Version</span>
+                        <span class="text-sm text-base-content font-medium">{{ router.firmware_version }}</span>
+                    </div>
+                    {% endif %}
+                    {% if router.wg_interface_id %}
+                    <div class="flex justify-between items-center border-b border-base-300/50 pb-2">
+                        <span class="text-xs text-base-content/50 uppercase tracking-wide">WG Interface</span>
+                        <span class="text-sm font-mono text-cyan-400">{{ router.wg_interface_id }}</span>
+                    </div>
+                    {% endif %}
+                    {% if router.last_push_at %}
+                    <div class="flex justify-between items-center border-b border-base-300/50 pb-2">
+                        <span class="text-xs text-base-content/50 uppercase tracking-wide">Last Config Push</span>
+                        <span class="text-sm text-base-content/80 font-mono">{{ router.last_push_at }}</span>
+                    </div>
+                    {% endif %}
+                    {% if router.last_check_at %}
+                    <div class="flex justify-between items-center border-b border-base-300/50 pb-2">
+                        <span class="text-xs text-base-content/50 uppercase tracking-wide">Last Check</span>
+                        <span class="text-sm text-base-content/80 font-mono">{{ router.last_check_at }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% if router.error_message %}
+                <div class="alert alert-error text-xs mb-4 font-mono break-all whitespace-pre-wrap">
+                    <strong>Error:</strong> {{ router.error_message }}
+                </div>
                 {% endif %}
 
-                <form method="POST" action="/clients/{{ client.id }}/delete" onsubmit="return confirm('Delete this client permanently?')">
-                    <button type="submit" class="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg py-2.5 text-sm transition-colors font-medium">
-                        <i class="fas fa-trash-alt mr-2"></i>Delete Client
+                <div class="flex flex-wrap gap-2 pt-2 border-t border-base-300/50">
+                    <button onclick="triggerViewPush({{ router.id }}, {{ client.id }})" id="viewPushBtn" class="btn btn-primary btn-sm flex-1 gap-1.5">
+                        <i class="fas fa-upload"></i>Push Config
                     </button>
-                </form>
+                    <button onclick="triggerViewCheck({{ router.id }})" id="viewCheckBtn" class="btn btn-outline btn-sm flex-1 gap-1.5">
+                        <i class="fas fa-sync-alt"></i>Check Status
+                    </button>
+                    {% if router.wg_interface_id %}
+                    <button onclick="openPushDomainsModal({{ router.id }}, '{{ router.wg_interface_name|default('Router')|escape('js') }}')" class="btn btn-outline btn-secondary btn-sm w-full gap-1.5">
+                        <i class="fas fa-route"></i>Push Domains
+                    </button>
+                    <button onclick="triggerViewRemove({{ router.id }})" id="viewRemoveBtn" class="btn btn-outline btn-error btn-sm w-full gap-1.5">
+                        <i class="fas fa-trash-alt"></i>Remove Interface
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+            {% elseif client.ext_client_code %}
+            <div class="card bg-base-200/50 border border-base-300 shadow p-5 flex flex-col justify-center items-center text-center text-base-content/40">
+                <i class="fas fa-network-wired text-base mb-1.5 opacity-40"></i>
+                <span class="text-[10px] uppercase font-semibold tracking-wider text-base-content/50 mb-1">No Router Connected</span>
+                <p class="text-[10px] text-base-content/60 max-w-[200px]">Fill the Router Domain and Password fields in the external database for client code <strong>{{ client.ext_client_code }}</strong> to sync it.</p>
+            </div>
+            {% endif %}
+
+            <div class="card bg-base-200 border border-base-300 shadow p-5">
+                <h3 class="text-base font-semibold mb-4 text-base-content flex items-center">
+                    <i class="fas fa-globe text-secondary mr-2"></i>{{ t('clients.geoip_title') }}
+                </h3>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center border-b border-base-300/50 pb-2.5">
+                        <span class="text-xs text-base-content/50 uppercase tracking-wide">{{ t('clients.last_endpoint') }}</span>
+                        <span class="text-sm font-mono text-base-content">{{ client.last_endpoint_ip|default('N/A') }}</span>
+                    </div>
+                    <div class="flex justify-between items-center border-b border-base-300/50 pb-2.5">
+                        <span class="text-xs text-base-content/50 uppercase tracking-wide">{{ t('clients.country') }}</span>
+                        <span class="text-sm text-base-content flex items-center">
+                            {% if client.country %}
+                                <i class="fas fa-flag mr-1.5 text-secondary"></i>{{ client.country }}
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="flex justify-between items-center border-b border-base-300/50 pb-2.5">
+                        <span class="text-xs text-base-content/50 uppercase tracking-wide">{{ t('clients.city') }}</span>
+                        <span class="text-sm text-base-content">{{ client.city|default('N/A') }}</span>
+                    </div>
+                    <div class="flex justify-between items-start pt-0.5">
+                        <span class="text-xs text-base-content/50 uppercase tracking-wide mt-0.5">{{ t('clients.isp') }}</span>
+                        <span class="text-sm text-base-content text-right break-words max-w-[220px]">{{ client.isp|default('N/A') }}</span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -166,5 +432,347 @@ async function refreshClientStats() {
         btn.disabled = false;
     }
 }
+
+let speedChart = null;
+let currentHours = 24;
+
+function getThemeColors() {
+    const isDark = document.documentElement.classList.contains('dark') || true; // Maintain dark aesthetic
+    return {
+        grid: 'rgba(255, 255, 255, 0.04)',
+        text: 'rgba(255, 255, 255, 0.4)',
+        tooltipBg: '#0f172a',
+        tooltipText: '#e2e8f0',
+        tooltipBorder: '#334155'
+    };
+}
+
+async function loadSpeedChart(hours = 24) {
+    const chartLoading = document.getElementById('chartLoading');
+    const chartEmpty = document.getElementById('chartEmpty');
+    const canvas = document.getElementById('speedChart');
+    if (!canvas) return;
+    
+    if (chartLoading) chartLoading.classList.remove('hidden');
+    if (chartEmpty) chartEmpty.classList.add('hidden');
+    
+    const clientId = {{ client.id }};
+    
+    try {
+        const response = await fetch(`/api/clients/${clientId}/metrics?hours=${hours}`);
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const data = await response.json();
+        
+        if (!data.success || !data.metrics || data.metrics.length === 0) {
+            if (chartEmpty) chartEmpty.classList.remove('hidden');
+            if (chartLoading) chartLoading.classList.add('hidden');
+            if (speedChart) {
+                speedChart.destroy();
+                speedChart = null;
+            }
+            return;
+        }
+        
+        if (chartLoading) chartLoading.classList.add('hidden');
+        
+        const labels = [];
+        const uploadData = [];
+        const downloadData = [];
+        
+        data.metrics.forEach(m => {
+            const time = new Date(m.collected_at.includes('T') ? m.collected_at : m.collected_at.replace(' ', 'T') + 'Z');
+            const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            labels.push(timeStr);
+            // Convert Kbps to Mbps
+            uploadData.push(parseFloat(m.speed_up_kbps || 0) / 1000);
+            downloadData.push(parseFloat(m.speed_down_kbps || 0) / 1000);
+        });
+        
+        const ctx = canvas.getContext('2d');
+        const colors = getThemeColors();
+        
+        if (speedChart) {
+            speedChart.data.labels = labels;
+            speedChart.data.datasets[0].data = downloadData;
+            speedChart.data.datasets[1].data = uploadData;
+            speedChart.update();
+        } else {
+            // Setup gradients
+            const uploadGradient = ctx.createLinearGradient(0, 0, 0, 200);
+            uploadGradient.addColorStop(0, 'rgba(16, 185, 129, 0.12)');
+            uploadGradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+            
+            const downloadGradient = ctx.createLinearGradient(0, 0, 0, 200);
+            downloadGradient.addColorStop(0, 'rgba(99, 102, 241, 0.12)');
+            downloadGradient.addColorStop(1, 'rgba(99, 102, 241, 0.0)');
+            
+            speedChart = new Chart(ctx, {
+                type: 'line',
+                plugins: [{
+                    id: 'hoverLine',
+                    afterDraw: (chart) => {
+                        if (chart.tooltip?._active?.length) {
+                            const activePoint = chart.tooltip._active[0];
+                            const ctx = chart.ctx;
+                            const x = activePoint.element.x;
+                            const topY = chart.scales.y.top;
+                            const bottomY = chart.scales.y.bottom;
+                            ctx.save();
+                            ctx.beginPath();
+                            ctx.moveTo(x, topY);
+                            ctx.lineTo(x, bottomY);
+                            ctx.lineWidth = 1;
+                            ctx.strokeStyle = colors.grid || 'rgba(255, 255, 255, 0.08)';
+                            ctx.setLineDash([4, 4]);
+                            ctx.stroke();
+                            ctx.restore();
+                        }
+                    }
+                }],
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Download (Rx)',
+                            data: downloadData,
+                            borderColor: '#6366f1',
+                            borderWidth: 2,
+                            backgroundColor: downloadGradient,
+                            fill: true,
+                            tension: 0.35,
+                            pointRadius: 0,
+                            pointHoverRadius: 4,
+                            pointHitRadius: 10
+                        },
+                        {
+                            label: 'Upload (Tx)',
+                            data: uploadData,
+                            borderColor: '#10b981',
+                            borderWidth: 2,
+                            backgroundColor: uploadGradient,
+                            fill: true,
+                            tension: 0.35,
+                            pointRadius: 0,
+                            pointHoverRadius: 4,
+                            pointHitRadius: 10
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            align: 'end',
+                            labels: {
+                                color: colors.text,
+                                boxWidth: 8,
+                                boxHeight: 8,
+                                usePointStyle: true,
+                                pointStyle: 'circle',
+                                font: { family: 'Inter', size: 10, weight: '500' },
+                                padding: 15
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: colors.tooltipBg || 'rgba(15, 23, 42, 0.95)',
+                            borderColor: colors.tooltipBorder || 'rgba(255, 255, 255, 0.08)',
+                            borderWidth: 1,
+                            titleColor: '#ffffff',
+                            bodyColor: '#cbd5e1',
+                            titleFont: { family: 'Inter', size: 11, weight: '600' },
+                            bodyFont: { family: 'Inter', size: 10 },
+                            padding: 10,
+                            cornerRadius: 8,
+                            usePointStyle: true,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    const val = context.parsed.y !== null ? context.parsed.y.toFixed(2) + ' Mbps' : '0.00 Mbps';
+                                    if (label.includes('Download')) {
+                                        return ' ↓ ' + label + ': ' + val;
+                                    } else {
+                                        return ' ↑ ' + label + ': ' + val;
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                color: colors.text,
+                                font: { family: 'Inter', size: 9 },
+                                maxRotation: 0,
+                                autoSkip: true,
+                                maxTicksLimit: 8
+                            }
+                        },
+                        y: {
+                            grid: { 
+                                color: colors.grid,
+                                borderDash: [5, 5],
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: colors.text,
+                                font: { family: 'Inter', size: 9 },
+                                callback: function(value) {
+                                    return value.toFixed(1) + ' Mbps';
+                                }
+                            },
+                            min: 0
+                        }
+                    }
+                }
+            });
+        }
+    } catch (error) {
+        console.error('Failed to load speed telemetry:', error);
+        if (chartLoading) chartLoading.classList.add('hidden');
+        if (chartEmpty) {
+            chartEmpty.classList.remove('hidden');
+            const emptyText = chartEmpty.querySelector('span');
+            if (emptyText) emptyText.textContent = 'Failed to load telemetry data';
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Load speed telemetry chart
+    loadSpeedChart(24);
+    
+    // Bind hours buttons
+    const chartHoursBtns = document.querySelectorAll('.chart-hours-btn');
+    chartHoursBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            chartHoursBtns.forEach(b => {
+                b.classList.remove('bg-slate-800', 'text-white');
+                b.classList.add('text-slate-400', 'hover:text-slate-200');
+            });
+            this.classList.remove('text-slate-400', 'hover:text-slate-200');
+            this.classList.add('bg-slate-800', 'text-white');
+            
+            currentHours = parseInt(this.dataset.hours);
+            loadSpeedChart(currentHours);
+        });
+    });
+    
+    // Sync chart theme dynamically
+    window.addEventListener('themeChanged', () => {
+        const newColors = getThemeColors();
+        if (speedChart) {
+            speedChart.options.scales.y.grid.color = newColors.grid;
+            speedChart.options.scales.y.ticks.color = newColors.text;
+            speedChart.options.scales.x.ticks.color = newColors.text;
+            speedChart.options.plugins.legend.labels.color = newColors.text;
+            speedChart.options.plugins.tooltip.backgroundColor = newColors.tooltipBg;
+            speedChart.options.plugins.tooltip.borderColor = newColors.tooltipBorder;
+            speedChart.update();
+        }
+    });
+});
+
+// Router action handlers
+function triggerViewPush(routerId, vpnClientId) {
+    if (!confirm('Push configuration to the router? This will override any existing WireGuard/AmneziaWG settings on this interface.')) return;
+    
+    const btn = document.getElementById('viewPushBtn');
+    const oldText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1.5"></i>Pushing...';
+    
+    let url = '/api/routers/' + routerId + '/push';
+    if (vpnClientId) {
+        url += '?vpn_client_id=' + vpnClientId;
+    }
+    
+    fetch(url, {
+        method: 'POST'
+    })
+    .then(r => r.json().then(data => ({ status: r.status, body: data })))
+    .then(res => {
+        if (res.status === 200 && res.body.success) {
+            alert('Push successful!\nInterface: ' + res.body.interface_id + '\nModel: ' + res.body.router_model + '\nOS: ' + res.body.firmware_version);
+            window.location.reload();
+        } else {
+            alert('Push failed: ' + (res.body.error || 'Unknown error'));
+            btn.disabled = false;
+            btn.innerHTML = oldText;
+        }
+    })
+    .catch(err => {
+        alert('Network error: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = oldText;
+    });
+}
+
+function triggerViewCheck(routerId) {
+    const btn = document.getElementById('viewCheckBtn');
+    const oldText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1.5"></i>Checking...';
+    
+    fetch('/api/routers/' + routerId + '/check', {
+        method: 'POST'
+    })
+    .then(r => r.json().then(data => ({ status: r.status, body: data })))
+    .then(res => {
+        if (res.status === 200 && res.body.success) {
+            alert('Status check completed!\nStatus: ' + res.body.status + '\nModel: ' + res.body.router_model + (res.body.error ? '\nError: ' + res.body.error : ''));
+            window.location.reload();
+        } else {
+            alert('Check failed: ' + (res.body.error || 'Unknown error'));
+            btn.disabled = false;
+            btn.innerHTML = oldText;
+        }
+    })
+    .catch(err => {
+        alert('Network error: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = oldText;
+    });
+}
+
+function triggerViewRemove(routerId) {
+    if (!confirm('Are you sure you want to remove the WireGuard interface from the router? This will delete the interface and NAT settings on the router.')) return;
+    
+    const btn = document.getElementById('viewRemoveBtn');
+    const oldText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1.5"></i>Removing...';
+    
+    fetch('/api/routers/' + routerId + '/remove-wg', {
+        method: 'POST'
+    })
+    .then(r => r.json().then(data => ({ status: r.status, body: data })))
+    .then(res => {
+        if (res.status === 200 && res.body.success) {
+            alert('Interface removed successfully!');
+            window.location.reload();
+        } else {
+            alert('Removal failed: ' + (res.body.error || 'Unknown error'));
+            btn.disabled = false;
+            btn.innerHTML = oldText;
+        }
+    })
+    .catch(err => {
+        alert('Network error: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = oldText;
+    });
+}
 </script>
+
+{% include 'push_domains_modal.twig' %}
 {% endblock %}

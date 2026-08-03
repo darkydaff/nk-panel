@@ -1,0 +1,3 @@
+ALTER TABLE ext_clients 
+ADD COLUMN last_notified_status VARCHAR(50) NULL DEFAULT NULL,
+ADD COLUMN last_notified_at TIMESTAMP NULL DEFAULT NULL;

@@ -14,10 +14,61 @@ class SettingsController {
         $users = $this->getAllUsers();
         $apiKey = $this->getApiKey('openrouter');
         
+        $stmtBackup = $this->pdo->prepare("SELECT `key`, value FROM settings WHERE namespace = 'backup'");
+        $stmtBackup->execute();
+        $backupRows = $stmtBackup->fetchAll(PDO::FETCH_ASSOC);
+        $backupSettings = ['enabled' => false, 'bot_token' => '', 'chat_id' => '', 'schedule' => 'disabled', 'retention_days' => 7];
+        foreach ($backupRows as $r) {
+            if ($r['key'] === 'telegram_settings') {
+                $backupSettings = array_merge($backupSettings, json_decode($r['value'], true));
+            }
+            if ($r['key'] === 'retention_days') {
+                $backupSettings['retention_days'] = (int)json_decode($r['value'], true);
+            }
+        }
+
+        $stmtLog = $this->pdo->query("SELECT id, backup_name, backup_size, backup_type, status, error_message, created_at, backup_scope FROM server_backups ORDER BY created_at DESC LIMIT 50");
+        $backups = $stmtLog->fetchAll(PDO::FETCH_ASSOC);
+
+        $serversList = VpnServer::listAll();
+
+        // Load monitoring settings
+        $stmtMonitoring = $this->pdo->prepare("SELECT `key`, value FROM settings WHERE namespace = 'monitoring'");
+        $stmtMonitoring->execute();
+        $monitoringRows = $stmtMonitoring->fetchAll(PDO::FETCH_ASSOC);
+        $metricsInterval = 30; // default 30
+        foreach ($monitoringRows as $r) {
+            if ($r['key'] === 'interval') {
+                $metricsInterval = (int)json_decode($r['value'], true);
+            }
+        }
+
+        // Load client bot settings
+        $stmtClientBot = $this->pdo->prepare("SELECT `key`, value FROM settings WHERE namespace = 'client_bot'");
+        $stmtClientBot->execute();
+        $clientBotRows = $stmtClientBot->fetchAll(PDO::FETCH_ASSOC);
+        $clientBotSettings = ['enabled' => false, 'bot_token' => '', 'webhook_url' => ''];
+        foreach ($clientBotRows as $r) {
+            if ($r['key'] === 'enabled') {
+                $clientBotSettings['enabled'] = (bool)json_decode($r['value'], true);
+            }
+            if ($r['key'] === 'bot_token') {
+                $clientBotSettings['bot_token'] = json_decode($r['value'], true);
+            }
+            if ($r['key'] === 'webhook_url') {
+                $clientBotSettings['webhook_url'] = json_decode($r['value'], true);
+            }
+        }
+
         $data = [
             'translation_stats' => $stats,
             'users' => $users,
-            'openrouter_key' => $apiKey
+            'openrouter_key' => $apiKey,
+            'backup_settings' => $backupSettings,
+            'backups' => $backups,
+            'servers' => $serversList,
+            'metrics_interval' => $metricsInterval,
+            'client_bot_settings' => $clientBotSettings
         ];
         
         // Check for session messages
@@ -141,16 +192,38 @@ class SettingsController {
             echo 'Forbidden';
             return;
         }
-        
-        if ($userId == $user['id']) {
-            $_SESSION['settings_error'] = 'Cannot delete yourself';
+
+        $userId = (int)$userId;
+
+        if ($userId === (int)$user['id']) {
+            $_SESSION['settings_error'] = 'Cannot delete your own account';
             header('Location: /settings#users');
             exit;
         }
-        
-        $stmt = $this->pdo->prepare("DELETE FROM users WHERE id = ?");
+
+        // Block deletion if this user owns servers — deleting would cascade-delete all their servers and clients
+        $stmtServers = $this->pdo->prepare('SELECT COUNT(*) FROM vpn_servers WHERE user_id = ?');
+        $stmtServers->execute([$userId]);
+        $serverCount = (int)$stmtServers->fetchColumn();
+
+        $stmtClients = $this->pdo->prepare('SELECT COUNT(*) FROM vpn_clients WHERE user_id = ?');
+        $stmtClients->execute([$userId]);
+        $clientCount = (int)$stmtClients->fetchColumn();
+
+        if ($serverCount > 0 || $clientCount > 0) {
+            $parts = [];
+            if ($serverCount > 0) $parts[] = "{$serverCount} server(s)";
+            if ($clientCount > 0) $parts[] = "{$clientCount} client config(s)";
+            $what = implode(' and ', $parts);
+            $_SESSION['settings_error'] = "Cannot delete this user — they own {$what}. "
+                . "Delete or reassign those resources first.";
+            header('Location: /settings#users');
+            exit;
+        }
+
+        $stmt = $this->pdo->prepare('DELETE FROM users WHERE id = ?');
         $stmt->execute([$userId]);
-        
+
         $_SESSION['settings_success'] = 'User deleted successfully';
         header('Location: /settings#users');
         exit;

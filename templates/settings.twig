@@ -2,71 +2,79 @@
 
 {% block title %}{{ t('menu.settings') }} - {{ app_name }}{% endblock %}
 
+{% block breadcrumbs %}
+    <li><a href="/dashboard" class="hover:text-base-content transition-colors">Home</a></li>
+    <li><span class="text-base-content/70">Settings</span></li>
+{% endblock %}
+
 {% block content %}
-<div class="max-w-5xl mx-auto px-4 w-full">
+<div class="max-w-5xl mx-auto w-full">
     <div class="mb-6">
-        <h1 class="text-2xl font-bold text-white flex items-center">
-            <div class="w-10 h-10 rounded-lg bg-slate-700 text-accent flex items-center justify-center mr-3">
+        <h1 class="text-2xl font-bold flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-base-300 text-primary flex items-center justify-center">
                 <i class="fas fa-cog"></i>
             </div>
             {{ t('menu.settings') }}
         </h1>
-        <p class="mt-2 ml-13 text-sm text-slate-400">{{ t('settings.description') }}</p>
+        <p class="mt-2 ml-13 text-sm text-base-content/50">{{ t('settings.description') }}</p>
     </div>
 
     {% if success %}
-    <div class="mb-6 bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 px-4 py-3 rounded-lg flex items-center">
-        <i class="fas fa-check-circle mr-3 text-cyan-400"></i>
-        <p class="text-sm">{{ success }}</p>
-    </div>
+    <div class="alert alert-success mb-6"><i class="fas fa-check-circle"></i><p class="text-sm">{{ success }}</p></div>
     {% endif %}
-
     {% if error %}
-    <div class="mb-6 bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded-lg flex items-center">
-        <i class="fas fa-exclamation-circle mr-3 text-red-400"></i>
-        <p class="text-sm">{{ error }}</p>
-    </div>
+    <div class="alert alert-error mb-6"><i class="fas fa-exclamation-circle"></i><p class="text-sm">{{ error }}</p></div>
     {% endif %}
 
-    <div class="flex gap-2 mb-6 overflow-x-auto pb-2">
-        <button onclick="showTab('profile')" id="tab-profile" class="tab-btn tab-btn-active px-4 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap">
-            <i class="fas fa-user mr-2"></i>{{ t('settings.profile') }}
+    <!-- Tab Navigation -->
+    <div role="tablist" class="tabs tabs-boxed mb-6 bg-base-300/50 p-1 w-fit">
+        <button role="tab" onclick="showTab('profile')" id="tab-profile" class="tab tab-active gap-2">
+            <i class="fas fa-user"></i>{{ t('settings.profile') }}
         </button>
         {% if user.role == 'admin' %}
-        <button onclick="showTab('users')" id="tab-users" class="tab-btn px-4 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap">
-            <i class="fas fa-users mr-2"></i>{{ t('settings.users') }}
+        <button role="tab" onclick="showTab('users')" id="tab-users" class="tab gap-2">
+            <i class="fas fa-users"></i>{{ t('settings.users') }}
+        </button>
+        <button role="tab" onclick="showTab('backups')" id="tab-backups" class="tab gap-2">
+            <i class="fas fa-database"></i>Backups
+        </button>
+        <button role="tab" onclick="showTab('monitoring')" id="tab-monitoring" class="tab gap-2">
+            <i class="fas fa-chart-line"></i>Monitoring
+        </button>
+        <button role="tab" onclick="showTab('telegram-bot')" id="tab-telegram-bot" class="tab gap-2">
+            <i class="fab fa-telegram text-sky-400"></i>Telegram Bot
         </button>
         {% endif %}
     </div>
 
+    <!-- Profile Tab -->
     <div id="content-profile">
-        <div class="panel overflow-hidden">
-            <div class="px-5 py-4 border-b border-slate-700 bg-slate-800/30">
-                <h2 class="text-base font-semibold text-white flex items-center">
-                    <i class="fas fa-lock mr-2 text-accent"></i>{{ t('settings.change_password') }}
+        <div class="card bg-base-200 border border-base-300 shadow overflow-hidden">
+            <div class="px-5 py-4 border-b border-base-300 bg-base-300/30">
+                <h2 class="font-semibold flex items-center gap-2">
+                    <i class="fas fa-lock text-primary"></i>{{ t('settings.change_password') }}
                 </h2>
             </div>
-            <div class="p-5">
-                <form method="POST" action="/settings/change-password" class="max-w-md">
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('settings.current_password') }}</label>
-                            <input type="password" name="current_password" required class="input-field w-full px-4 py-2.5 font-mono">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('settings.new_password') }}</label>
-                            <input type="password" name="new_password" required minlength="6" class="input-field w-full px-4 py-2.5 font-mono">
-                            <p class="mt-1 text-xs text-slate-500">Minimum 6 characters</p>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('settings.confirm_password') }}</label>
-                            <input type="password" name="confirm_password" required minlength="6" class="input-field w-full px-4 py-2.5 font-mono">
-                        </div>
-                        <div class="pt-2">
-                            <button type="submit" class="btn-primary px-5 py-2.5 text-sm">
-                                <i class="fas fa-save mr-2"></i>{{ t('settings.change_password') }}
-                            </button>
-                        </div>
+            <div class="card-body p-5">
+                <form method="POST" action="/settings/change-password" class="max-w-md space-y-4">
+                    {{ csrf_field() }}
+                    <div class="form-control">
+                        <label class="label py-1"><span class="label-text text-xs font-medium">{{ t('settings.current_password') }}</span></label>
+                        <input type="password" name="current_password" required class="input input-bordered input-sm font-mono w-full">
+                    </div>
+                    <div class="form-control">
+                        <label class="label py-1"><span class="label-text text-xs font-medium">{{ t('settings.new_password') }}</span></label>
+                        <input type="password" name="new_password" required minlength="6" class="input input-bordered input-sm font-mono w-full">
+                        <label class="label py-0.5"><span class="label-text-alt text-base-content/40">Minimum 6 characters</span></label>
+                    </div>
+                    <div class="form-control">
+                        <label class="label py-1"><span class="label-text text-xs font-medium">{{ t('settings.confirm_password') }}</span></label>
+                        <input type="password" name="confirm_password" required minlength="6" class="input input-bordered input-sm font-mono w-full">
+                    </div>
+                    <div class="pt-2">
+                        <button type="submit" class="btn btn-primary btn-sm gap-2">
+                            <i class="fas fa-save"></i>{{ t('settings.change_password') }}
+                        </button>
                     </div>
                 </form>
             </div>
@@ -74,97 +82,88 @@
     </div>
 
     {% if user.role == 'admin' %}
-    <div id="content-users" class="hidden">
-        <div class="panel overflow-hidden mb-6">
-            <div class="px-5 py-4 border-b border-slate-700 bg-slate-800/30">
-                <h2 class="text-base font-semibold text-white flex items-center">
-                    <i class="fas fa-user-plus mr-2 text-accent"></i>{{ t('users.add_user') }}
-                </h2>
+    <!-- Users Tab -->
+    <div id="content-users" class="hidden space-y-6">
+        <!-- Add User -->
+        <div class="card bg-base-200 border border-base-300 shadow overflow-hidden">
+            <div class="px-5 py-4 border-b border-base-300 bg-base-300/30">
+                <h2 class="font-semibold flex items-center gap-2"><i class="fas fa-user-plus text-primary"></i>{{ t('users.add_user') }}</h2>
             </div>
-            <div class="p-5">
+            <div class="card-body p-5">
                 <form method="POST" action="/settings/add-user">
+                    {{ csrf_field() }}
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
-                        <div>
-                            <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('auth.name') }}</label>
-                            <input type="text" name="name" required class="input-field w-full px-4 py-2.5">
+                        <div class="form-control">
+                            <label class="label py-1"><span class="label-text text-xs font-medium">{{ t('auth.name') }}</span></label>
+                            <input type="text" name="name" required class="input input-bordered input-sm w-full">
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('auth.email') }}</label>
-                            <input type="email" name="email" required class="input-field w-full px-4 py-2.5">
+                        <div class="form-control">
+                            <label class="label py-1"><span class="label-text text-xs font-medium">{{ t('auth.email') }}</span></label>
+                            <input type="email" name="email" required class="input input-bordered input-sm w-full">
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('auth.password') }}</label>
-                            <input type="password" name="password" required minlength="6" class="input-field w-full px-4 py-2.5 font-mono">
+                        <div class="form-control">
+                            <label class="label py-1"><span class="label-text text-xs font-medium">{{ t('auth.password') }}</span></label>
+                            <input type="password" name="password" required minlength="6" class="input input-bordered input-sm font-mono w-full">
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('users.role') }}</label>
-                            <select name="role" class="input-field w-full px-4 py-2.5">
+                        <div class="form-control">
+                            <label class="label py-1"><span class="label-text text-xs font-medium">{{ t('users.role') }}</span></label>
+                            <select name="role" class="select select-bordered select-sm w-full">
                                 <option value="user">{{ t('users.role_user') }}</option>
                                 <option value="admin">{{ t('users.role_admin') }}</option>
                             </select>
                         </div>
                     </div>
                     <div class="mt-4">
-                        <button type="submit" class="btn-primary px-5 py-2.5 text-sm">
-                            <i class="fas fa-user-plus mr-2"></i>{{ t('users.add_user') }}
-                        </button>
+                        <button type="submit" class="btn btn-primary btn-sm gap-2"><i class="fas fa-user-plus"></i>{{ t('users.add_user') }}</button>
                     </div>
                 </form>
             </div>
         </div>
 
-        <div class="panel overflow-hidden">
-            <div class="px-5 py-4 border-b border-slate-700 bg-slate-800/30">
-                <h2 class="text-base font-semibold text-white flex items-center">
-                    <i class="fas fa-users mr-2 text-accent"></i>{{ t('users.all_users') }}
-                </h2>
+        <!-- All Users -->
+        <div class="card bg-base-200 border border-base-300 shadow overflow-hidden">
+            <div class="px-5 py-4 border-b border-base-300 bg-base-300/30">
+                <h2 class="font-semibold flex items-center gap-2"><i class="fas fa-users text-primary"></i>{{ t('users.all_users') }}</h2>
             </div>
-            <div class="table-wrapper">
-                <table class="min-w-full">
+            <div class="overflow-x-auto">
+                <table class="table table-sm w-full">
                     <thead>
-                        <tr class="bg-slate-800/50">
-                            <th class="px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Name</th>
-                            <th class="px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold hide-mobile">Email</th>
-                            <th class="px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Role</th>
-                            <th class="px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold hide-mobile">Created</th>
-                            <th class="px-4 py-3 text-right text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Actions</th>
+                        <tr>
+                            <th>Name</th>
+                            <th class="hidden md:table-cell">Email</th>
+                            <th>Role</th>
+                            <th class="hidden md:table-cell">Created</th>
+                            <th class="text-right">Actions</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-slate-700">
+                    <tbody>
                         {% for u in users %}
-                        <tr class="hover:bg-slate-800/30 transition-colors">
-                            <td class="px-4 py-3">
-                                <div class="flex items-center">
-                                    <div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center mr-2 text-slate-400">
-                                        <i class="fas fa-user text-xs"></i>
+                        <tr class="hover">
+                            <td>
+                                <div class="flex items-center gap-2">
+                                    <div class="avatar avatar-placeholder">
+                                        <div class="bg-neutral text-neutral-content rounded-full w-7 text-xs"><span>{{ u.name|slice(0,1)|upper }}</span></div>
                                     </div>
-                                    <span class="text-sm text-white">{{ u.name }}</span>
+                                    <span class="text-sm font-medium">{{ u.name }}</span>
                                 </div>
                             </td>
-                            <td class="px-4 py-3 hide-mobile">
-                                <code class="text-xs text-slate-400">{{ u.email }}</code>
-                            </td>
-                            <td class="px-4 py-3">
+                            <td class="hidden md:table-cell"><code class="text-xs text-base-content/50">{{ u.email }}</code></td>
+                            <td>
                                 {% if u.role == 'admin' %}
-                                <span class="badge-active text-xs px-2 py-1 rounded-md flex items-center w-fit">
-                                    <i class="fas fa-star mr-1 text-xs"></i>{{ t('users.role_admin') }}
-                                </span>
+                                <span class="badge badge-primary badge-sm gap-1"><i class="fas fa-star text-[9px]"></i>{{ t('users.role_admin') }}</span>
                                 {% else %}
-                                <span class="bg-slate-700 text-slate-300 text-xs px-2 py-1 rounded-md">{{ t('users.role_user') }}</span>
+                                <span class="badge badge-ghost badge-sm">{{ t('users.role_user') }}</span>
                                 {% endif %}
                             </td>
-                            <td class="px-4 py-3 hide-mobile">
-                                <span class="text-xs text-slate-500">{{ u.created_at|date('Y-m-d') }}</span>
-                            </td>
-                            <td class="px-4 py-3 text-right">
+                            <td class="hidden md:table-cell"><span class="text-xs text-base-content/40">{{ u.created_at|date('Y-m-d') }}</span></td>
+                            <td class="text-right">
                                 {% if u.id != user.id %}
                                 <form method="POST" action="/settings/delete-user/{{ u.id }}" class="inline" onsubmit="return confirm('Delete user {{ u.name }}?')">
-                                    <button type="submit" class="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-colors text-xs">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
+                                    {{ csrf_field() }}
+                                    <button type="submit" class="btn btn-ghost btn-xs text-error"><i class="fas fa-trash"></i></button>
                                 </form>
                                 {% else %}
-                                <span class="text-xs text-slate-600 px-3 py-1.5">You</span>
+                                <span class="text-xs text-base-content/30 px-2">You</span>
                                 {% endif %}
                             </td>
                         </tr>
@@ -174,31 +173,460 @@
             </div>
         </div>
     </div>
+
+    <!-- Backups Tab -->
+    <div id="content-backups" class="hidden space-y-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Backup Settings Card -->
+            <div class="card bg-base-200 border border-base-300 shadow overflow-hidden lg:col-span-1">
+                <div class="px-5 py-4 border-b border-base-300 bg-base-300/30">
+                    <h2 class="font-semibold flex items-center gap-2"><i class="fas fa-cog text-primary"></i>Backup Settings</h2>
+                </div>
+                <div class="card-body p-5">
+                    <form method="POST" action="/settings/backup-config" class="space-y-4">
+                        {{ csrf_field() }}
+                        <div class="form-control">
+                            <label class="label cursor-pointer justify-start gap-3">
+                                <input type="checkbox" name="enabled" value="1" {% if backup_settings.enabled %}checked{% endif %} class="toggle toggle-primary toggle-sm">
+                                <span class="label-text font-medium">Enable Telegram Offsite</span>
+                            </label>
+                        </div>
+                        <div class="form-control">
+                            <label class="label py-1"><span class="label-text text-xs font-medium">Bot Token</span></label>
+                            <input type="password" name="bot_token" id="backup-bot-token" value="{{ backup_settings.bot_token }}" class="input input-bordered input-sm">
+                        </div>
+                        <div class="form-control">
+                            <label class="label py-1"><span class="label-text text-xs font-medium">Chat ID</span></label>
+                            <input type="text" name="chat_id" id="backup-chat-id" value="{{ backup_settings.chat_id }}" class="input input-bordered input-sm">
+                        </div>
+                        <div class="form-control">
+                            <label class="label py-1"><span class="label-text text-xs font-medium">Backup Schedule</span></label>
+                            <select name="schedule" class="select select-bordered select-sm">
+                                <option value="disabled" {% if backup_settings.schedule == 'disabled' %}selected{% endif %}>Disabled</option>
+                                <option value="daily" {% if backup_settings.schedule == 'daily' %}selected{% endif %}>Daily</option>
+                                <option value="weekly" {% if backup_settings.schedule == 'weekly' %}selected{% endif %}>Weekly</option>
+                            </select>
+                        </div>
+                        <div class="form-control">
+                            <label class="label py-1"><span class="label-text text-xs font-medium">Local Retention (Days)</span></label>
+                            <input type="number" name="retention_days" value="{{ backup_settings.retention_days|default(7) }}" class="input input-bordered input-sm">
+                        </div>
+                        <div class="flex gap-2">
+                            <button type="submit" class="btn btn-primary btn-sm flex-1 gap-2"><i class="fas fa-save"></i>Save Config</button>
+                            <button type="button" onclick="testTelegramConnection()" class="btn btn-ghost btn-sm" title="Test Connection"><i class="fas fa-paper-plane"></i></button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Manual Backup & Restore -->
+            <div class="card bg-base-200 border border-base-300 shadow overflow-hidden lg:col-span-2">
+                <div class="px-5 py-4 border-b border-base-300 bg-base-300/30">
+                    <h2 class="font-semibold flex items-center gap-2"><i class="fas fa-upload text-primary"></i>Manual Backup &amp; Restore</h2>
+                </div>
+                <div class="card-body p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Create Backup -->
+                    <form method="POST" action="/settings/backup-create" class="space-y-4">
+                        {{ csrf_field() }}
+                        <h3 class="text-sm font-semibold">Create Backup</h3>
+                        <div class="form-control">
+                            <label class="label py-1"><span class="label-text text-xs font-medium">Backup Target</span></label>
+                            <select name="target" class="select select-bordered select-sm">
+                                <option value="panel">Full Panel (ZIP + Ext DB)</option>
+                                <option value="ext_db">External PostgreSQL DB (.sql)</option>
+                                {% for s in servers %}
+                                <option value="{{ s.id }}">Server: {{ s.name }} (JSON)</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm w-full gap-2">
+                            <i class="fas fa-plus-circle"></i>Create Backup Now
+                        </button>
+                    </form>
+
+                    <!-- Restore -->
+                    <div class="space-y-4">
+                        <h3 class="text-sm font-semibold">Restore Backup</h3>
+                        <div id="drop-zone" class="border-2 border-dashed border-base-content/20 hover:border-primary rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition-colors h-36 bg-base-300/20">
+                            <i class="fas fa-file-archive text-2xl text-base-content/30 mb-2"></i>
+                            <p class="text-xs text-base-content/50 text-center">Drag &amp; Drop zip/json/sql backup file here</p>
+                            <p class="text-[10px] text-base-content/30 text-center mt-1">Or click to select a file</p>
+                            <input type="file" id="restore-file-input" class="hidden" accept=".zip,.json,.sql">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Backup History -->
+        <div class="card bg-base-200 border border-base-300 shadow overflow-hidden">
+            <div class="px-5 py-4 border-b border-base-300 bg-base-300/30">
+                <h2 class="font-semibold flex items-center gap-2"><i class="fas fa-history text-primary"></i>Backup History</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="table table-sm w-full">
+                    <thead>
+                        <tr>
+                            <th>Date &amp; Time</th>
+                            <th>Scope</th>
+                            <th>Type</th>
+                            <th>Size</th>
+                            <th>Status</th>
+                            <th class="text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for b in backups %}
+                        <tr class="hover">
+                            <td><span class="text-xs font-mono">{{ b.created_at }}</span></td>
+                            <td>
+                                {% if b.backup_scope == 'panel' %}
+                                <span class="badge badge-info badge-sm">Panel</span>
+                                {% elseif b.backup_scope == 'ext_db' %}
+                                <span class="badge badge-accent badge-sm">Ext DB</span>
+                                {% else %}
+                                <span class="badge badge-ghost badge-sm">Server</span>
+                                {% endif %}
+                            </td>
+                            <td><span class="text-xs font-semibold">{{ b.backup_type|capitalize }}</span></td>
+                            <td><span class="text-xs font-mono">{{ (b.backup_size / 1024) | number_format(1) }} KB</span></td>
+                            <td>
+                                {% if b.status == 'completed' %}
+                                <div class="flex flex-col">
+                                    <span class="text-success text-xs flex items-center gap-1"><i class="fas fa-check-circle text-xs"></i>Completed</span>
+                                    {% if b.error_message %}
+                                    <span class="text-warning text-[10px] flex items-center gap-1 mt-0.5 cursor-help" title="{{ b.error_message }}"><i class="fas fa-exclamation-triangle"></i>Telegram Fail</span>
+                                    {% endif %}
+                                </div>
+                                {% else %}
+                                <span class="text-error text-xs flex items-center gap-1 cursor-help" title="{{ b.error_message }}"><i class="fas fa-exclamation-circle"></i>Failed</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-right space-x-1 whitespace-nowrap">
+                                <a href="/settings/backup-download/{{ b.id }}" class="btn btn-ghost btn-xs text-info"><i class="fas fa-download"></i></a>
+                                <a href="/settings/backup-delete/{{ b.id }}" onclick="return confirm('Delete backup?')" class="btn btn-ghost btn-xs text-error"><i class="fas fa-trash"></i></a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-base-content/40 py-6 text-sm">No backups found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Monitoring Tab -->
+    <div id="content-monitoring" class="hidden space-y-6">
+        <div class="card bg-base-200 border border-base-300 shadow overflow-hidden max-w-md">
+            <div class="px-5 py-4 border-b border-base-300 bg-base-300/30">
+                <h2 class="font-semibold flex items-center gap-2"><i class="fas fa-desktop text-primary"></i>Monitoring Settings</h2>
+            </div>
+            <div class="card-body p-5">
+                <form method="POST" action="/settings/monitoring-config" class="space-y-4">
+                    {{ csrf_field() }}
+                    <div class="form-control">
+                        <label class="label py-1"><span class="label-text text-xs font-medium">Metrics Update Interval</span></label>
+                        <select name="interval" class="select select-bordered select-sm w-full">
+                            <option value="10" {% if metrics_interval == 10 %}selected{% endif %}>10 seconds</option>
+                            <option value="30" {% if metrics_interval == 30 %}selected{% endif %}>30 seconds (Default)</option>
+                            <option value="60" {% if metrics_interval == 60 %}selected{% endif %}>1 minute</option>
+                            <option value="120" {% if metrics_interval == 120 %}selected{% endif %}>2 minutes</option>
+                            <option value="300" {% if metrics_interval == 300 %}selected{% endif %}>5 minutes</option>
+                        </select>
+                        <label class="label py-1"><span class="label-text-alt text-base-content/50">Controls how often push agents report stats and local pull fallbacks query servers.</span></label>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm gap-2 w-full"><i class="fas fa-save"></i>Save Config</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Telegram Bot Tab -->
+    <div id="content-telegram-bot" class="hidden space-y-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Bot Config Settings Card -->
+            <div class="card bg-base-200 border border-base-300 shadow overflow-hidden lg:col-span-1">
+                <div class="px-5 py-4 border-b border-base-300 bg-base-300/30">
+                    <h2 class="font-semibold flex items-center gap-2"><i class="fab fa-telegram text-primary"></i>Bot Settings</h2>
+                </div>
+                <div class="card-body p-5">
+                    <form method="POST" action="/settings/client-bot-config" class="space-y-4">
+                        {{ csrf_field() }}
+                        <div class="form-control">
+                            <label class="label cursor-pointer justify-start gap-3">
+                                <input type="checkbox" name="enabled" value="1" {% if client_bot_settings.enabled %}checked{% endif %} class="toggle toggle-primary toggle-sm">
+                                <span class="label-text font-medium">Enable Client Bot</span>
+                            </label>
+                        </div>
+                        <div class="form-control">
+                            <label class="label py-1"><span class="label-text text-xs font-medium">Bot Token (Separate Token)</span></label>
+                            <input type="password" name="bot_token" id="client-bot-token" value="{{ client_bot_settings.bot_token }}" class="input input-bordered input-sm">
+                        </div>
+                        <div class="form-control">
+                            <label class="label py-1"><span class="label-text text-xs font-medium">Webhook URL</span></label>
+                            <input type="text" name="webhook_url" id="client-bot-webhook-url" value="{{ client_bot_settings.webhook_url }}" class="input input-bordered input-sm">
+                            <label class="label py-0.5"><span class="label-text-alt text-base-content/40">Suggested: <span class="cursor-pointer underline text-primary" onclick="document.getElementById('client-bot-webhook-url').value = window.location.origin + '/api/telegram-bot/webhook'">click to auto-fill</span></span></label>
+                        </div>
+                        <div class="flex flex-col gap-2 pt-2">
+                            <button type="submit" class="btn btn-primary btn-sm w-full gap-2"><i class="fas fa-save"></i>Save Config</button>
+                            <div class="flex gap-2">
+                                <button type="button" onclick="setClientBotWebhook()" class="btn btn-xs btn-outline flex-1 gap-1">Set Webhook</button>
+                                <button type="button" onclick="deleteClientBotWebhook()" class="btn btn-xs btn-outline btn-error flex-1 gap-1">Delete Webhook</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Explanation and Guide Card -->
+            <div class="card bg-base-200 border border-base-300 shadow overflow-hidden lg:col-span-2">
+                <div class="px-5 py-4 border-b border-base-300 bg-base-300/30">
+                    <h2 class="font-semibold flex items-center gap-2"><i class="fas fa-info-circle text-primary"></i>Client Bot Instructions</h2>
+                </div>
+                <div class="card-body p-5 space-y-4 text-sm">
+                    <p class="leading-relaxed">Nk-VPN client bot enables end-users to change active VPN servers on their routers using Telegram.</p>
+                    
+                    <h3 class="font-bold text-base border-b border-base-300 pb-1 mt-4">Setup Guide:</h3>
+                    <ol class="list-decimal pl-5 space-y-2">
+                        <li>Create a new bot via <b>@BotFather</b> on Telegram.</li>
+                        <li>Paste the token here, enable the Bot, and click <b>Save Config</b>.</li>
+                        <li>If your panel is exposed on a public domain with HTTPS, fill the <b>Webhook URL</b> and click <b>Set Webhook</b>.</li>
+                        <li>If you are running the panel locally or inside a private network, run the daemon inside the container:
+                            <div class="mockup-code mt-2 text-xs">
+                                <pre data-prefix="$"><code>php bin/telegram_bot_daemon.php</code></pre>
+                            </div>
+                        </li>
+                        <li>Add a <code>tgid</code> to clients in your external database (e.g. using @userinfobot to find Telegram IDs). The changes will sync automatically.</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
     {% endif %}
 </div>
 
-    <style>
-    .tab-btn { background: #334155; color: #94a3b8; }
-    .tab-btn:hover { background: #475569; }
-    .tab-btn-active { background: #5b8def; color: white; }
-    .tab-btn-active:hover { background: #4a7dd8; }
-    </style>
-    <script>
+<!-- Restore Confirmation Modal -->
+<dialog id="restoreModal" class="modal">
+    <div class="modal-box border border-base-300 max-w-lg">
+        <div class="flex items-center justify-between mb-5">
+            <h3 class="font-semibold flex items-center gap-2"><i class="fas fa-history text-primary"></i>Confirm Restoration</h3>
+            <button type="button" onclick="closeRestoreModal()" class="btn btn-ghost btn-xs btn-circle"><i class="fas fa-times"></i></button>
+        </div>
+
+        <form id="restore-form" method="POST" action="/settings/backup-restore">
+            {{ csrf_field() }}
+            <input type="hidden" name="filepath" id="restore-filepath">
+            <input type="hidden" name="scope" id="restore-scope">
+
+            <div class="space-y-4">
+                <!-- Panel Restore Options -->
+                <div id="panel-restore-options" class="hidden space-y-4">
+                    <div class="alert alert-warning text-xs">⚠️ WARNING: A Full Panel restore will overwrite your current database configurations, clients, and user sessions.</div>
+                    <div class="space-y-2">
+                        <label class="label cursor-pointer justify-start gap-3 text-sm">
+                            <input type="checkbox" name="restore_mysql" value="1" checked class="checkbox checkbox-sm checkbox-primary">
+                            <span>Restore Panel Database Schema &amp; Data</span>
+                        </label>
+                        <label class="label cursor-pointer justify-start gap-3 text-sm">
+                            <input type="checkbox" name="restore_postgres" value="1" checked class="checkbox checkbox-sm checkbox-primary">
+                            <span>Restore External PostgreSQL DB Data</span>
+                        </label>
+                        <label class="label cursor-pointer justify-start gap-3 text-sm">
+                            <input type="checkbox" name="restore_env" value="1" checked class="checkbox checkbox-sm checkbox-primary">
+                            <span>Restore Environment Variables (.env)</span>
+                        </label>
+                    </div>
+                    <div class="border-t border-base-300 pt-3">
+                        <label class="label py-1"><span class="label-text text-xs font-semibold uppercase">Selective Server Restore</span></label>
+                        <p class="text-[11px] text-base-content/40 mb-2">Check boxes to ONLY extract specific VPN servers:</p>
+                        <div id="panel-selective-servers" class="space-y-1.5 max-h-36 overflow-y-auto pr-2"></div>
+                    </div>
+                    <div class="form-control">
+                        <label class="label py-1"><span class="label-text text-xs">Type "RESTORE" to confirm entire panel restore</span></label>
+                        <input type="text" id="confirm-input" class="input input-bordered input-sm font-mono" placeholder="RESTORE">
+                    </div>
+                </div>
+
+                <!-- Server Restore Options -->
+                <div id="server-restore-options" class="hidden space-y-4">
+                    <div class="bg-base-300/50 p-4 rounded-xl border border-base-content/10">
+                        <div class="text-xs text-base-content/50">Target Host Config:</div>
+                        <div class="text-sm font-bold mb-2" id="backup-server-host"></div>
+                        <div class="form-control">
+                            <label class="label py-1"><span class="label-text text-xs">Restoration Action</span></label>
+                            <select name="server_action" id="server-action-select" class="select select-bordered select-sm" onchange="toggleServerSelect()">
+                                <option value="overwrite">Overwrite existing server with matching Host</option>
+                                <option value="new">Import as a brand new VPN Server Copy</option>
+                            </select>
+                        </div>
+                        <div id="target-server-select-div" class="mt-3">
+                            <label class="label py-1"><span class="label-text text-xs">Target server to overwrite</span></label>
+                            <select name="target_server_id" id="target-server-select" class="select select-bordered select-sm w-full"></select>
+                        </div>
+                        <div id="new-server-ssh-fields" class="hidden mt-3 space-y-2">
+                            <p class="text-[11px] text-warning/80">Server backups don't store SSH credentials. Enter them for the new server.</p>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div class="form-control">
+                                    <label class="label py-1"><span class="label-text text-xs">SSH Username</span></label>
+                                    <input type="text" name="ssh_username" autocomplete="off" class="input input-bordered input-sm" placeholder="root">
+                                </div>
+                                <div class="form-control">
+                                    <label class="label py-1"><span class="label-text text-xs">SSH Password</span></label>
+                                    <input type="password" name="ssh_password" autocomplete="new-password" class="input input-bordered input-sm" placeholder="••••••••">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <label class="label cursor-pointer justify-start gap-3 text-sm">
+                        <input type="checkbox" name="sync_keys" value="1" checked class="checkbox checkbox-sm checkbox-primary">
+                        <span>Sync restored keys &amp; active clients directly to remote VPS</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="modal-action border-t border-base-300 pt-4 mt-4">
+                <button type="button" onclick="closeRestoreModal()" class="btn btn-ghost btn-sm">Cancel</button>
+                <button type="submit" id="restore-submit-btn" class="btn btn-primary btn-sm">Proceed Restoration</button>
+            </div>
+        </form>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button onclick="closeRestoreModal()">close</button></form>
+</dialog>
+
+<script>
 function showTab(tab) {
     document.querySelectorAll('[id^="content-"]').forEach(el => el.classList.add('hidden'));
     document.getElementById('content-' + tab).classList.remove('hidden');
-    
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('tab-btn-active'));
-    document.getElementById('tab-' + tab).classList.add('tab-btn-active');
-    
+    document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('tab-active'));
+    document.getElementById('tab-' + tab).classList.add('tab-active');
     window.location.hash = tab;
 }
 
 document.addEventListener('DOMContentLoaded', function() {
     const hash = window.location.hash.substring(1);
-    if (hash && document.getElementById('tab-' + hash)) {
-        showTab(hash);
+    if (hash && document.getElementById('tab-' + hash)) showTab(hash);
+
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('restore-file-input');
+    if (dropZone && fileInput) {
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('border-primary'); });
+        dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('border-primary'); });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault(); dropZone.classList.remove('border-primary');
+            if (e.dataTransfer.files.length) handleBackupUpload(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener('change', (e) => { if (e.target.files.length) handleBackupUpload(e.target.files[0]); });
     }
 });
+
+async function handleBackupUpload(file) {
+    const formData = new FormData();
+    formData.append('backup_file', file);
+    const dropZone = document.getElementById('drop-zone');
+    const originalContent = dropZone.innerHTML;
+    dropZone.innerHTML = '<i class="fas fa-spinner fa-spin text-2xl text-base-content/30 mb-2"></i><p class="text-xs text-base-content/50">Uploading and analyzing backup file...</p>';
+    try {
+        const res = await fetch('/settings/backup-analyze', { method: 'POST', body: formData });
+        const data = await res.json();
+        dropZone.innerHTML = originalContent;
+        if (data.error) { alert(data.error); return; }
+        document.getElementById('restore-filepath').value = data.filepath;
+        document.getElementById('restore-scope').value = data.scope;
+        if (data.scope === 'panel') {
+            document.getElementById('panel-restore-options').classList.remove('hidden');
+            document.getElementById('server-restore-options').classList.add('hidden');
+            const serverDiv = document.getElementById('panel-selective-servers');
+            serverDiv.innerHTML = '';
+            if (data.servers && data.servers.length) {
+                data.servers.forEach(srv => {
+                    serverDiv.innerHTML += `<label class="flex items-center gap-2 text-xs cursor-pointer"><input type="checkbox" name="selective_servers[]" value="${srv.id}" class="checkbox checkbox-xs checkbox-primary">${srv.name} (${srv.host})</label>`;
+                });
+            } else { serverDiv.innerHTML = '<p class="text-xs text-base-content/40 italic">No VPN servers found in backup archive.</p>'; }
+        } else {
+            document.getElementById('panel-restore-options').classList.add('hidden');
+            document.getElementById('server-restore-options').classList.remove('hidden');
+            document.getElementById('backup-server-host').innerText = `${data.server.name} (${data.server.host})`;
+            const select = document.getElementById('target-server-select');
+            select.innerHTML = '';
+            if (data.all_servers && data.all_servers.length) {
+                data.all_servers.forEach(srv => {
+                    select.innerHTML += `<option value="${srv.id}" ${srv.host === data.server.host ? 'selected' : ''}>${srv.name} (${srv.host})</option>`;
+                });
+            } else { select.innerHTML = '<option value="">No servers available to overwrite</option>'; }
+            toggleServerSelect();
+        }
+        document.getElementById('restoreModal').showModal();
+    } catch (err) { dropZone.innerHTML = originalContent; alert('Upload failed: ' + err); }
+}
+
+function toggleServerSelect() {
+    const val = document.getElementById('server-action-select').value;
+    const selectDiv = document.getElementById('target-server-select-div');
+    const sshFields = document.getElementById('new-server-ssh-fields');
+    if (val === 'overwrite') { selectDiv.classList.remove('hidden'); if (sshFields) sshFields.classList.add('hidden'); }
+    else { selectDiv.classList.add('hidden'); if (sshFields) sshFields.classList.remove('hidden'); }
+}
+
+function closeRestoreModal() {
+    document.getElementById('restoreModal').close();
+    document.getElementById('confirm-input').value = '';
+}
+
+document.getElementById('restore-form').addEventListener('submit', function(e) {
+    const scope = document.getElementById('restore-scope').value;
+    if (scope === 'panel') {
+        const selectiveChecked = document.querySelectorAll('input[name="selective_servers[]"]:checked').length > 0;
+        if (!selectiveChecked && document.getElementById('confirm-input').value !== 'RESTORE') {
+            e.preventDefault();
+            alert('Please type RESTORE to confirm entire panel wipe.');
+        }
+    }
+});
+
+async function testTelegramConnection() {
+    const token = document.getElementById('backup-bot-token').value;
+    const chat = document.getElementById('backup-chat-id').value;
+    if (!token || !chat) { alert('Please fill out both Bot Token and Chat ID.'); return; }
+    const formData = new FormData();
+    formData.append('bot_token', token); formData.append('chat_id', chat);
+    try {
+        const res = await fetch('/settings/backup-test-telegram', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.success) alert('Success! Check your Telegram chat for the test notification.');
+        else alert('Failed: ' + data.error);
+    } catch (err) { alert('Connection test failed: ' + err); }
+}
+
+async function setClientBotWebhook() {
+    try {
+        const res = await fetch('/settings/client-bot-webhook-set', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            alert('Success: ' + data.message);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (err) {
+        alert('Request failed: ' + err.message);
+    }
+}
+
+async function deleteClientBotWebhook() {
+    try {
+        const res = await fetch('/settings/client-bot-webhook-delete', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            alert('Success: ' + data.message);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (err) {
+        alert('Request failed: ' + err.message);
+    }
+}
 </script>
 {% endblock %}

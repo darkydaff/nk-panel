@@ -1,9 +1,8 @@
 services:
   db:
-    image: mysql:8.0
+    image: mysql:8.4
     container_name: nk-panel-db
     restart: unless-stopped
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-authentication-plugin=mysql_native_password
     env_file:
       - .env
     environment:
@@ -48,5 +47,21 @@ services:
     ports:
       - "8084:80"
 
+  caddy:
+    image: caddy:2-alpine
+    container_name: nk-panel-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+    command: caddy reverse-proxy --from core.nkhub.one --to web:80
+
 volumes:
   db_data:
+  caddy_data:
+  caddy_config:

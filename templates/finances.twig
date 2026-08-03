@@ -1,0 +1,861 @@
+{% extends "layout.twig" %}
+
+{% block title %}{{ title }} - {{ app_name }}{% endblock %}
+
+{% block breadcrumbs %}
+    <li><a href="/dashboard" class="hover:text-base-content transition-colors">Home</a></li>
+    <li><span class="text-base-content/70">Finances 2026</span></li>
+{% endblock %}
+
+{% block content %}
+<div class="w-full space-y-6">
+
+    <!-- Top Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                    <i class="fas fa-wallet text-lg"></i>
+                </div>
+                Finances 2026 Dashboard
+            </h1>
+            <p class="mt-1 text-sm text-base-content/50">Comprehensive analytics, cash flow trends, client revenue, and data quality insights from externaldb (`Finances_2026`).</p>
+        </div>
+        <div class="flex items-center gap-2">
+            {% if is_available %}
+                <span class="badge badge-success gap-1.5 py-3 px-3 font-medium">
+                    <span class="w-2 h-2 rounded-full bg-white animate-pulse">
+</span>
+                    ExtDB Connected
+                </span>
+            {% else %}
+                <span class="badge badge-warning gap-1.5 py-3 px-3 font-medium">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    ExtDB Offline
+                </span>
+            {% endif %}
+            <button id="btnExportCsv" class="btn btn-outline btn-sm gap-2">
+                <i class="fas fa-download"></i>
+                Export CSV
+            </button>
+            <button id="btnRefresh" class="btn btn-primary btn-sm gap-2">
+                <i class="fas fa-sync-alt"></i>
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    {% if not is_available %}
+    <div class="alert alert-warning shadow-lg">
+        <i class="fas fa-exclamation-circle text-lg"></i>
+        <div>
+            <h3 class="font-bold">External Database Unreachable</h3>
+            <div class="text-xs">Cannot establish PDO connection to PostgreSQL `externaldb` (`Finances_2026`). Please check your network or `EXT_PG_*` environment configuration.</div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Global Filter & Controls Toolbar -->
+    <div class="card bg-base-200 border border-base-300 shadow-sm">
+        <div class="card-body p-4 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-base-300/50 pb-3">
+                <span class="text-xs font-semibold uppercase tracking-wider text-base-content/60 flex items-center gap-1.5">
+                    <i class="fas fa-filter text-primary"></i> Date Presets
+                </span>
+                <div class="flex flex-wrap gap-1" id="presetButtons">
+                    <button data-preset="all" class="btn btn-xs btn-primary preset-btn">All Time</button>
+                    <button data-preset="2026-ytd" class="btn btn-xs btn-ghost preset-btn">2026 YTD</button>
+                    <button data-preset="this-month" class="btn btn-xs btn-ghost preset-btn">This Month</button>
+                    <button data-preset="last-month" class="btn btn-xs btn-ghost preset-btn">Last Month</button>
+                    <button data-preset="q1" class="btn btn-xs btn-ghost preset-btn">Q1 2026</button>
+                    <button data-preset="q2" class="btn btn-xs btn-ghost preset-btn">Q2 2026</button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+                <div>
+                    <label class="label py-0.5"><span class="label-text-alt text-base-content/60 font-medium">Start Date</span></label>
+                    <input type="text" id="filterStartDate" placeholder="01.01.2026" class="input input-sm input-bordered w-full font-mono">
+                </div>
+                <div>
+                    <label class="label py-0.5"><span class="label-text-alt text-base-content/60 font-medium">End Date</span></label>
+                    <input type="text" id="filterEndDate" placeholder="31.12.2026" class="input input-sm input-bordered w-full font-mono">
+                </div>
+                <div>
+                    <label class="label py-0.5"><span class="label-text-alt text-base-content/60 font-medium">Transaction Type</span></label>
+                    <select id="filterType" class="select select-sm select-bordered w-full">
+                        <option value="">All Types</option>
+                        <option value="income">Income Only</option>
+                        <option value="expense">Expense Only</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="label py-0.5"><span class="label-text-alt text-base-content/60 font-medium">Client Search</span></label>
+                    <input type="text" id="filterClient" placeholder="#0006..." class="input input-sm input-bordered w-full">
+                </div>
+                <div>
+                    <label class="label py-0.5"><span class="label-text-alt text-base-content/60 font-medium">Description Keyword</span></label>
+                    <input type="text" id="filterDescription" placeholder="ZomDE, роутер..." class="input input-sm input-bordered w-full">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overview KPI Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Total Income -->
+        <div class="card bg-base-200 border border-base-300 shadow-sm">
+            <div class="card-body p-5">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-emerald-400">Total Income</span>
+                    <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                        <i class="fas fa-arrow-down text-sm"></i>
+                    </div>
+                </div>
+                <div class="mt-2 text-2xl font-bold font-mono text-emerald-400" id="kpiTotalIncome">0</div>
+                <div class="mt-2 flex items-center justify-between text-xs text-base-content/50">
+                    <span id="kpiIncomeCount">0 txs</span>
+                    <span>Max: <strong id="kpiMaxIncome" class="font-mono text-base-content/80">0</strong></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Expenses -->
+        <div class="card bg-base-200 border border-base-300 shadow-sm">
+            <div class="card-body p-5">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-rose-400">Total Expenses</span>
+                    <div class="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center">
+                        <i class="fas fa-arrow-up text-sm"></i>
+                    </div>
+                </div>
+                <div class="mt-2 text-2xl font-bold font-mono text-rose-400" id="kpiTotalExpense">0</div>
+                <div class="mt-2 flex items-center justify-between text-xs text-base-content/50">
+                    <span id="kpiExpenseCount">0 txs</span>
+                    <span>Max: <strong id="kpiMaxExpense" class="font-mono text-base-content/80">0</strong></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Net Profit / Loss -->
+        <div class="card bg-base-200 border border-base-300 shadow-sm">
+            <div class="card-body p-5">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-primary">Net Profit / Loss</span>
+                    <div class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                        <i class="fas fa-chart-pie text-sm"></i>
+                    </div>
+                </div>
+                <div class="mt-2 text-2xl font-bold font-mono" id="kpiNetProfit">0</div>
+                <div class="mt-2 flex items-center justify-between text-xs text-base-content/50">
+                    <span>Margin: <strong id="kpiProfitMargin" class="font-mono text-base-content/80">0%</strong></span>
+                    <span id="kpiTotalTxCount">Total 0 txs</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Average Transaction Values -->
+        <div class="card bg-base-200 border border-base-300 shadow-sm">
+            <div class="card-body p-5">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-amber-400">Average Transaction</span>
+                    <div class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center">
+                        <i class="fas fa-calculator text-sm"></i>
+                    </div>
+                </div>
+                <div class="mt-2 space-y-1">
+                    <div class="flex justify-between items-center text-sm font-mono">
+                        <span class="text-xs text-base-content/60 font-sans">Avg Income:</span>
+                        <span class="text-emerald-400 font-bold" id="kpiAvgIncome">0</span>
+                    </div>
+                    <div class="flex justify-between items-center text-sm font-mono">
+                        <span class="text-xs text-base-content/60 font-sans">Avg Expense:</span>
+                        <span class="text-rose-400 font-bold" id="kpiAvgExpense">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Section 1: Monthly Breakdown & Cash Flow Trend -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Monthly Income vs Expense Bar Chart -->
+        <div class="card bg-base-200 border border-base-300 shadow-sm">
+            <div class="card-body p-5 space-y-3">
+                <div class="flex items-center justify-between">
+                    <h2 class="font-bold text-base flex items-center gap-2">
+                        <i class="fas fa-chart-bar text-primary"></i>
+                        Monthly Income vs Expense
+                    </h2>
+                    <span class="text-xs text-base-content/40">Grouped by month</span>
+                </div>
+                <div class="h-64 relative w-full">
+                    <canvas id="chartMonthly"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Daily / Weekly Cash Flow Line Chart -->
+        <div class="card bg-base-200 border border-base-300 shadow-sm">
+            <div class="card-body p-5 space-y-3">
+                <div class="flex items-center justify-between">
+                    <h2 class="font-bold text-base flex items-center gap-2">
+                        <i class="fas fa-chart-line text-emerald-400"></i>
+                        Cash Flow & Balance Trend
+                    </h2>
+                    <div class="join">
+                        <button id="btnGranularityDaily" class="btn btn-xs join-item btn-active">Daily</button>
+                        <button id="btnGranularityWeekly" class="btn btn-xs join-item">Weekly</button>
+                    </div>
+                </div>
+                <div class="h-64 relative w-full">
+                    <canvas id="chartCashFlow"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Section 2: Top Clients by Profit -->
+    <div class="grid grid-cols-1 gap-6">
+        <!-- Top Clients by Profit -->
+        <div class="card bg-base-200 border border-base-300 shadow-sm">
+            <div class="card-body p-5 space-y-3">
+                <div class="flex items-center justify-between">
+                    <h2 class="font-bold text-base flex items-center gap-2">
+                        <i class="fas fa-trophy text-yellow-400"></i>
+                        Top Clients by Profit
+                    </h2>
+                    <span class="text-xs text-base-content/40">Top 10 net profit sources</span>
+                </div>
+                <div class="h-64 relative w-full">
+                    <canvas id="chartTopClients"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Client Profit Rankings -->
+    <div class="card bg-base-200 border border-base-300 shadow-sm">
+        <div class="card-body p-5 space-y-4">
+            <h2 class="font-bold text-base flex items-center gap-2">
+                <i class="fas fa-users text-emerald-400"></i>
+                Client Profit & Activity Rankings
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-emerald-400 mb-2">Top Clients by Profit</h3>
+                    <div class="overflow-x-auto">
+                        <table class="table table-sm w-full">
+                            <thead>
+                                <tr class="text-base-content/50">
+                                    <th>#</th>
+                                    <th>Client ID</th>
+                                    <th>Net Profit</th>
+                                    <th>Tx Count</th>
+                                    <th>Avg Order</th>
+                                </tr>
+                            </thead>
+                            <tbody id="topClientsRevenueBody">
+                                <tr><td colspan="5" class="text-center py-4 text-base-content/40">Loading ranking...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-info mb-2">Top Clients by Transaction Count</h3>
+                    <div class="overflow-x-auto">
+                        <table class="table table-sm w-full">
+                            <thead>
+                                <tr class="text-base-content/50">
+                                    <th>#</th>
+                                    <th>Client ID</th>
+                                    <th>Txs</th>
+                                    <th>Total Income</th>
+                                    <th>Total Expense</th>
+                                </tr>
+                            </thead>
+                            <tbody id="topClientsTxBody">
+                                <tr><td colspan="5" class="text-center py-4 text-base-content/40">Loading ranking...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Transactions Table -->
+    <div class="card bg-base-200 border border-base-300 shadow-sm">
+        <div class="card-body p-5 space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <h2 class="font-bold text-base flex items-center gap-2">
+                    <i class="fas fa-list text-primary"></i>
+                    Transactions Register
+                    <span id="txCountBadge" class="badge badge-neutral text-xs font-mono">0 records</span>
+                </h2>
+
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-base-content/50">Sort:</span>
+                    <select id="sortField" class="select select-xs select-bordered">
+                        <option value="Date">Date</option>
+                        <option value="Amount">Amount</option>
+                        <option value="id">ID</option>
+                        <option value="Client_id">Client ID</option>
+                    </select>
+                    <select id="sortOrder" class="select select-xs select-bordered">
+                        <option value="DESC">Descending</option>
+                        <option value="ASC">Ascending</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto min-h-[300px]">
+                <table class="table table-sm w-full">
+                    <thead>
+                        <tr class="text-base-content/60 border-b border-base-300">
+                            <th>ID</th>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Amount</th>
+                            <th>Description</th>
+                            <th>Client ID</th>
+                            <th>VLESS ID</th>
+                            <th class="text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="txTableBody">
+                        <tr><td colspan="8" class="text-center py-8 text-base-content/40">Loading transactions...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination Controls -->
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-base-300 pt-3">
+                <div class="text-xs text-base-content/50" id="paginationInfo">
+                    Showing 0 to 0 of 0 records
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <select id="txLimit" class="select select-xs select-bordered">
+                        <option value="15">15 per page</option>
+                        <option value="25" selected>25 per page</option>
+                        <option value="50">50 per page</option>
+                        <option value="100">100 per page</option>
+                    </select>
+                    <div class="join">
+                        <button id="btnPrevPage" class="btn btn-xs join-item" disabled><i class="fas fa-chevron-left"></i></button>
+                        <button id="pageIndicator" class="btn btn-xs join-item btn-ghost font-mono pointer-events-none">1 / 1</button>
+                        <button id="btnNextPage" class="btn btn-xs join-item" disabled><i class="fas fa-chevron-right"></i></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Transaction Detail Modal -->
+<dialog id="modalTxDetail" class="modal">
+    <div class="modal-box bg-base-200 border border-base-300 max-w-lg">
+        <h3 class="font-bold text-lg flex items-center gap-2 border-b border-base-300 pb-3">
+            <i class="fas fa-receipt text-primary"></i>
+            Transaction Details <span id="modalTxId" class="font-mono text-base-content/50">#0</span>
+        </h3>
+        <div class="py-4 space-y-3 font-mono text-sm" id="modalTxContent">
+            <!-- Dynamic modal content -->
+        </div>
+        <div class="modal-action border-t border-base-300 pt-3">
+            <form method="dialog">
+                <button class="btn btn-sm">Close</button>
+            </form>
+        </div>
+    </div>
+</dialog>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    let currentPage = 1;
+    let cashFlowGranularity = 'daily';
+    let charts = {};
+
+    // Configure global Chart.js typography standard
+    if (typeof Chart !== 'undefined') {
+        Chart.defaults.font.family = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+        Chart.defaults.color = '#94a3b8';
+    }
+
+    // Currency Formatter
+    function formatCurrency(val) {
+        return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(val) + ' ₽';
+    }
+
+    // Date Formatter (dd.mm.yyyy)
+    function formatDate(dateStr) {
+        if (!dateStr) return '-';
+        const str = String(dateStr).trim();
+        if (/^\d{4}-\d{2}$/.test(str)) {
+            const [y, m] = str.split('-');
+            return `${m}.${y}`;
+        }
+        const match = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}:\d{2}(?::\d{2})?))?/);
+        if (match) {
+            const [, y, m, d, time] = match;
+            return `${d}.${m}.${y}` + (time ? ` ${time}` : '');
+        }
+        return str;
+    }
+
+    // Date Presets Handler
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.preset-btn').forEach(b => {
+                b.classList.remove('btn-primary');
+                b.classList.add('btn-ghost');
+            });
+            btn.classList.remove('btn-ghost');
+            btn.classList.add('btn-primary');
+
+            const preset = btn.dataset.preset;
+            const startInput = document.getElementById('filterStartDate');
+            const endInput = document.getElementById('filterEndDate');
+
+            const now = new Date();
+            const year = 2026; // DB current scope
+
+            if (preset === 'all') {
+                startInput.value = '';
+                endInput.value = '';
+            } else if (preset === '2026-ytd') {
+                startInput.value = '01.01.2026';
+                endInput.value = '31.12.2026';
+            } else if (preset === 'this-month') {
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                startInput.value = `01.${month}.2026`;
+                endInput.value = `31.${month}.2026`;
+            } else if (preset === 'last-month') {
+                startInput.value = '01.02.2026';
+                endInput.value = '28.02.2026';
+            } else if (preset === 'q1') {
+                startInput.value = '01.01.2026';
+                endInput.value = '31.03.2026';
+            } else if (preset === 'q2') {
+                startInput.value = '01.04.2026';
+                endInput.value = '30.06.2026';
+            }
+
+            currentPage = 1;
+            loadDashboardData();
+        });
+    });
+
+    // Granularity Toggle
+    document.getElementById('btnGranularityDaily').addEventListener('click', () => {
+        cashFlowGranularity = 'daily';
+        document.getElementById('btnGranularityDaily').classList.add('btn-active');
+        document.getElementById('btnGranularityWeekly').classList.remove('btn-active');
+        loadDashboardData();
+    });
+
+    document.getElementById('btnGranularityWeekly').addEventListener('click', () => {
+        cashFlowGranularity = 'weekly';
+        document.getElementById('btnGranularityWeekly').classList.add('btn-active');
+        document.getElementById('btnGranularityDaily').classList.remove('btn-active');
+        loadDashboardData();
+    });
+
+    // Inputs Change Listeners
+    ['filterStartDate', 'filterEndDate', 'filterType', 'sortField', 'sortOrder', 'txLimit'].forEach(id => {
+        document.getElementById(id).addEventListener('change', () => {
+            currentPage = 1;
+            loadDashboardData();
+        });
+    });
+
+    let searchTimeout;
+    ['filterClient', 'filterDescription'].forEach(id => {
+        document.getElementById(id).addEventListener('input', () => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                currentPage = 1;
+                loadDashboardData();
+            }, 350);
+        });
+    });
+
+    document.getElementById('btnRefresh').addEventListener('click', () => loadDashboardData());
+    document.getElementById('btnExportCsv').addEventListener('click', () => exportCsv());
+
+    // Pagination Listeners
+    document.getElementById('btnPrevPage').addEventListener('click', () => {
+        if (currentPage > 1) {
+            currentPage--;
+            loadTransactions();
+        }
+    });
+
+    document.getElementById('btnNextPage').addEventListener('click', () => {
+        currentPage++;
+        loadTransactions();
+    });
+
+    // Load All Data
+    function loadDashboardData() {
+        loadStats();
+        loadTransactions();
+    }
+
+    function getFilterParams() {
+        const params = new URLSearchParams();
+        const start = document.getElementById('filterStartDate').value;
+        const end = document.getElementById('filterEndDate').value;
+        const type = document.getElementById('filterType').value;
+        const client = document.getElementById('filterClient').value;
+        const desc = document.getElementById('filterDescription').value;
+
+        if (start) params.append('startDate', start);
+        if (end) params.append('endDate', end);
+        if (type) params.append('type', type);
+        if (client) params.append('client', client);
+        if (desc) params.append('description', desc);
+        params.append('granularity', cashFlowGranularity);
+
+        return params;
+    }
+
+    function exportCsv() {
+        const params = getFilterParams();
+        window.location.href = '/api/finances/export?' + params.toString();
+    }
+
+    async function loadStats() {
+        const params = getFilterParams();
+        try {
+            const res = await fetch('/api/finances/stats?' + params.toString());
+            const data = await res.json();
+
+            if (!res.ok || !data.success) {
+                console.error('Stats API error:', data.error || 'Failed to load stats');
+                return;
+            }
+
+            renderOverviewCards(data.overview);
+            renderMonthlyChart(data.monthly);
+            renderCashFlowChart(data.cash_flow);
+            renderTopClientsChart(data.top_clients.by_revenue);
+            renderTopClientsTables(data.top_clients);
+        } catch (e) {
+            console.error('Network error loading stats:', e);
+        }
+    }
+
+    function renderOverviewCards(ov) {
+        document.getElementById('kpiTotalIncome').textContent = formatCurrency(ov.total_income);
+        document.getElementById('kpiTotalExpense').textContent = formatCurrency(ov.total_expense);
+        
+        const netEl = document.getElementById('kpiNetProfit');
+        netEl.textContent = formatCurrency(ov.net_profit);
+        netEl.className = 'mt-2 text-2xl font-bold font-mono ' + (ov.net_profit >= 0 ? 'text-emerald-400' : 'text-rose-400');
+
+        document.getElementById('kpiProfitMargin').textContent = ov.profit_margin + '%';
+        document.getElementById('kpiIncomeCount').textContent = ov.income_count + ' txs';
+        document.getElementById('kpiExpenseCount').textContent = ov.expense_count + ' txs';
+        document.getElementById('kpiMaxIncome').textContent = formatCurrency(ov.max_income);
+        document.getElementById('kpiMaxExpense').textContent = formatCurrency(ov.max_expense);
+        document.getElementById('kpiAvgIncome').textContent = formatCurrency(ov.avg_income);
+        document.getElementById('kpiAvgExpense').textContent = formatCurrency(ov.avg_expense);
+        document.getElementById('kpiTotalTxCount').textContent = 'Total ' + ov.total_transactions + ' txs';
+    }
+
+    function renderMonthlyChart(monthlyData) {
+        const ctx = document.getElementById('chartMonthly').getContext('2d');
+        if (charts.monthly) charts.monthly.destroy();
+
+        const labels = monthlyData.map(m => formatDate(m.month));
+        const incomeData = monthlyData.map(m => m.income);
+        const expenseData = monthlyData.map(m => m.expense);
+        const profitData = monthlyData.map(m => m.net_profit);
+
+        charts.monthly = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Income', data: incomeData, backgroundColor: '#10b981', borderRadius: 4 },
+                    { label: 'Expense', data: expenseData, backgroundColor: '#f43f5e', borderRadius: 4 },
+                    { label: 'Net Profit', data: profitData, backgroundColor: '#3b82f6', borderRadius: 4 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: '#94a3b8' } },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `${ctx.dataset.label}: ${formatCurrency(ctx.raw)}`
+                        }
+                    }
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                }
+            }
+        });
+    }
+
+    function renderCashFlowChart(cashFlowData) {
+        const ctx = document.getElementById('chartCashFlow').getContext('2d');
+        if (charts.cashFlow) charts.cashFlow.destroy();
+
+        const labels = cashFlowData.map(c => formatDate(c.period));
+        const netFlow = cashFlowData.map(c => c.net_flow);
+        const cumulative = cashFlowData.map(c => c.cumulative_balance);
+
+        charts.cashFlow = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Net Cash Flow',
+                        data: netFlow,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 2
+                    },
+                    {
+                        label: 'Cumulative Balance',
+                        data: cumulative,
+                        borderColor: '#8b5cf6',
+                        borderDash: [4, 4],
+                        tension: 0.3,
+                        pointRadius: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: '#94a3b8' } },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `${ctx.dataset.label}: ${formatCurrency(ctx.raw)}`
+                        }
+                    }
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', maxTicksLimit: 12 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                }
+            }
+        });
+    }
+
+    function renderTopClientsChart(topProfitData) {
+        const ctx = document.getElementById('chartTopClients').getContext('2d');
+        if (charts.topClients) charts.topClients.destroy();
+
+        const dataList = topProfitData || [];
+        const labels = dataList.map(c => c.client_id);
+        const profits = dataList.map(c => c.net_profit !== undefined ? c.net_profit : c.total_revenue);
+
+        charts.topClients = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Net Profit',
+                    data: profits,
+                    backgroundColor: profits.map(p => p >= 0 ? '#10b981' : '#f43f5e'),
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `Net Profit: ${formatCurrency(ctx.raw)}`
+                        }
+                    }
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { ticks: { color: '#94a3b8' }, grid: { display: false } }
+                }
+            }
+        });
+    }
+
+    function renderTopClientsTables(top) {
+        const revBody = document.getElementById('topClientsRevenueBody');
+        const profitList = top.by_profit || top.by_revenue || [];
+        revBody.innerHTML = profitList.map((c, i) => {
+            const profit = c.net_profit !== undefined ? c.net_profit : c.total_revenue;
+            const profitClass = profit >= 0 ? 'text-emerald-400' : 'text-rose-400';
+            return `
+                <tr class="hover:bg-base-300/30 font-mono">
+                    <td>#${i + 1}</td>
+                    <td class="font-bold text-primary">${escapeHtml(c.client_id)}</td>
+                    <td class="${profitClass} font-bold">${formatCurrency(profit)}</td>
+                    <td>${c.transaction_count}</td>
+                    <td>${formatCurrency(c.avg_amount)}</td>
+                </tr>
+            `;
+        }).join('');
+
+        const txBody = document.getElementById('topClientsTxBody');
+        txBody.innerHTML = top.by_transactions.map((c, i) => `
+            <tr class="hover:bg-base-300/30 font-mono">
+                <td>#${i + 1}</td>
+                <td class="font-bold text-info">${escapeHtml(c.client_id)}</td>
+                <td class="font-bold">${c.transaction_count}</td>
+                <td class="text-emerald-400">${formatCurrency(c.total_income)}</td>
+                <td class="text-rose-400">${formatCurrency(c.total_expense)}</td>
+            </tr>
+        `).join('');
+    }
+
+    async function loadTransactions() {
+        const params = getFilterParams();
+        params.append('page', currentPage);
+        params.append('limit', document.getElementById('txLimit').value);
+        params.append('sortBy', document.getElementById('sortField').value);
+        params.append('sortDir', document.getElementById('sortOrder').value);
+
+        const tbody = document.getElementById('txTableBody');
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-base-content/40"><i class="fas fa-spinner fa-spin mr-2"></i>Loading transactions...</td></tr>';
+
+        try {
+            const res = await fetch('/api/finances/transactions?' + params.toString());
+            const data = await res.json();
+
+            if (!res.ok || !data.success) {
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-error">${escapeHtml(data.error || 'Failed to load transactions')}</td></tr>`;
+                return;
+            }
+
+            renderTransactionsTable(data.items);
+            renderPagination(data.pagination);
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-error">Network error loading transactions</td></tr>';
+        }
+    }
+
+    function renderTransactionsTable(items) {
+        const tbody = document.getElementById('txTableBody');
+        if (items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-base-content/40">No transactions match your filter criteria</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = items.map(tx => `
+            <tr class="hover:bg-base-300/40 transition-colors">
+                <td class="font-mono text-xs text-base-content/50">#${tx.id}</td>
+                <td class="font-mono text-xs">${formatDate(tx.date)}</td>
+                <td>
+                    <span class="badge badge-sm gap-1 ${tx.type === 'income' ? 'badge-success text-white' : 'badge-error text-white'}">
+                        <i class="fas ${tx.type === 'income' ? 'fa-arrow-down' : 'fa-arrow-up'} text-[10px]"></i>
+                        ${tx.type}
+                    </span>
+                </td>
+                <td class="font-mono font-bold text-sm ${tx.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}">
+                    ${tx.type === 'income' ? '+' : '-'}${formatCurrency(tx.amount)}
+                </td>
+                <td class="max-w-xs truncate text-xs text-base-content/80 font-medium" title="${escapeHtml(tx.description)}">
+                    ${escapeHtml(tx.description || '-')}
+                </td>
+                <td class="font-mono text-xs font-semibold ${tx.client_id ? 'text-primary' : 'text-amber-400'}">
+                    ${escapeHtml(tx.client_id || 'Unmatched')}
+                </td>
+                <td class="font-mono text-xs text-base-content/50">
+                    ${escapeHtml(tx.vless_id || '-')}
+                </td>
+                <td class="text-right">
+                    <button class="btn btn-ghost btn-xs text-info btn-detail" data-tx='${JSON.stringify(tx)}'>
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+
+        document.querySelectorAll('.btn-detail').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tx = JSON.parse(btn.dataset.tx);
+                openTxModal(tx);
+            });
+        });
+    }
+
+    function openTxModal(tx) {
+        document.getElementById('modalTxId').textContent = '#' + tx.id;
+        const content = document.getElementById('modalTxContent');
+        content.innerHTML = `
+            <div class="flex justify-between border-b border-base-300 pb-2">
+                <span class="text-base-content/50">Date:</span>
+                <span class="font-bold">${formatDate(tx.date)}</span>
+            </div>
+            <div class="flex justify-between border-b border-base-300 pb-2">
+                <span class="text-base-content/50">Type:</span>
+                <span class="badge ${tx.type === 'income' ? 'badge-success' : 'badge-error'} text-xs">${tx.type}</span>
+            </div>
+            <div class="flex justify-between border-b border-base-300 pb-2">
+                <span class="text-base-content/50">Amount:</span>
+                <span class="font-bold ${tx.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}">${formatCurrency(tx.amount)}</span>
+            </div>
+            <div class="flex justify-between border-b border-base-300 pb-2">
+                <span class="text-base-content/50">Description:</span>
+                <span class="font-sans font-medium text-base-content/90">${escapeHtml(tx.description || '-')}</span>
+            </div>
+            <div class="flex justify-between border-b border-base-300 pb-2">
+                <span class="text-base-content/50">Client ID:</span>
+                <span class="font-bold text-primary">${escapeHtml(tx.client_id || 'Unmatched')}</span>
+            </div>
+            <div class="flex justify-between border-b border-base-300 pb-2">
+                <span class="text-base-content/50">VLESS ID:</span>
+                <span>${escapeHtml(tx.vless_id || '-')}</span>
+            </div>
+            <div class="flex justify-between border-b border-base-300 pb-2">
+                <span class="text-base-content/50">NC Order:</span>
+                <span>${escapeHtml(tx.nc_order || '-')}</span>
+            </div>
+            <div class="flex justify-between border-b border-base-300 pb-2">
+                <span class="text-base-content/50">Updated At:</span>
+                <span>${formatDate(tx.updated_at)}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-base-content/50">Updated By:</span>
+                <span>${escapeHtml(tx.updated_by || '-')}</span>
+            </div>
+        `;
+        document.getElementById('modalTxDetail').showModal();
+    }
+
+    function renderPagination(p) {
+        document.getElementById('txCountBadge').textContent = p.total + ' records';
+        const start = (p.page - 1) * p.limit + 1;
+        const end = Math.min(p.page * p.limit, p.total);
+        document.getElementById('paginationInfo').textContent = p.total > 0 ? `Showing ${start} to ${end} of ${p.total} records` : '0 records';
+        document.getElementById('pageIndicator').textContent = `${p.page} / ${Math.max(1, p.pages)}`;
+
+        document.getElementById('btnPrevPage').disabled = (p.page <= 1);
+        document.getElementById('btnNextPage').disabled = (p.page >= p.pages);
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // Initial Load
+    loadDashboardData();
+});
+</script>
+{% endblock %}

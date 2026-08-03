@@ -1,199 +1,486 @@
 {% extends "layout.twig" %}
 {% block title %}{{ server.name }}{% endblock %}
 
+{% block breadcrumbs %}
+    <li><a href="/dashboard" class="hover:text-base-content transition-colors">Home</a></li>
+    <li><a href="/servers" class="hover:text-base-content transition-colors">Servers</a></li>
+    <li><span class="text-base-content/70">{{ server.name }}</span></li>
+{% endblock %}
+
 {% block content %}
-<div class="w-full mx-auto max-w-7xl">
+<div class="w-full">
+    <!-- Page Header -->
     <div class="mb-6 flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div>
-            <h1 class="text-2xl font-bold text-white flex items-center">
-                <div class="w-10 h-10 rounded-lg bg-slate-700 text-accent flex items-center justify-center mr-3">
+            <h1 class="text-2xl font-bold flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-base-300 text-primary flex items-center justify-center shrink-0">
                     <i class="fas fa-server"></i>
                 </div>
                 {{ server.name }}
             </h1>
-            <div class="mt-2 ml-13 flex flex-wrap items-center gap-3">
-                <code class="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded">{{ server.host }}</code>
+            <div class="mt-2 ml-13 flex flex-wrap items-center gap-2">
+                <code class="text-xs bg-base-300 px-2 py-1 rounded font-mono text-base-content/60">{{ server.host }}</code>
                 {% if server.status == 'active' %}
-                    <span class="badge-active text-xs px-2 py-1 rounded-md flex items-center">
-                        <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 mr-1.5"></span>Active
-                    </span>
+                    <span class="badge bg-success/10 text-success border-success/20 gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-success"></span><span>Active</span></span>
                 {% else %}
-                    <span class="badge-error text-xs px-2 py-1 rounded-md flex items-center">
-                        <span class="w-1.5 h-1.5 rounded-full bg-red-400 mr-1.5"></span>{{ server.status }}
-                    </span>
+                    <span class="badge bg-error/10 text-error border-error/20 gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-error"></span><span>{{ server.status }}</span></span>
                 {% endif %}
+                <span id="agentStatusBadge" class="badge {% if agent_online %}bg-success/10 text-success border-success/20{% else %}bg-warning/10 text-warning border-warning/20{% endif %} gap-1.5"><span class="w-1.5 h-1.5 rounded-full {% if agent_online %}bg-success{% else %}bg-warning{% endif %}" id="agentStatusDot"></span><span id="agentStatusText">{% if agent_online %}Agent Online{% else %}Agent Offline{% endif %}</span></span>
             </div>
         </div>
         <div class="flex gap-2">
-            <form method="POST" action="/servers/{{ server.id }}/delete" onsubmit="return confirm('Delete this server?');">
-                <button type="submit" class="px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-colors text-sm">
-                    <i class="fas fa-trash-alt mr-2"></i>Delete
-                </button>
-            </form>
+            <button onclick="installAgent({{ server.id }})" id="installAgentBtn" class="btn btn-outline btn-info btn-sm gap-2">
+                <i class="fas fa-satellite-dish"></i>
+                <span id="installAgentBtnText">{% if agent_online %}Reinstall Agent{% else %}Install Agent{% endif %}</span>
+            </button>
+            <button type="button" onclick="openDeleteServerModal({{ server.id }}, '{{ server.name|e('js') }}')" class="btn btn-outline btn-error btn-sm gap-2">
+                <i class="fas fa-trash-alt"></i>Delete
+            </button>
         </div>
     </div>
-    
+
     {% if import_message %}
-    <div class="mb-6 {% if import_message.type == 'success' %}bg-cyan-500/10 border-cyan-500/30 text-cyan-300{% else %}bg-red-500/10 border-red-500/50 text-red-300{% endif %} border px-4 py-3 rounded-lg flex items-center mb-4">
-        <i class="fas {% if import_message.type == 'success' %}fa-check-circle text-cyan-400{% else %}fa-exclamation-circle text-red-400{% endif %} mr-3"></i>
+    <div class="alert {% if import_message.type == 'success' %}alert-success{% else %}alert-error{% endif %} mb-6">
+        <i class="fas {% if import_message.type == 'success' %}fa-check-circle{% else %}fa-exclamation-circle{% endif %}"></i>
         <span>{{ import_message.text }}</span>
     </div>
     {% endif %}
 
+    <!-- Server Info & New Config -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        <div class="lg:col-span-2 panel p-5">
-            <h3 class="text-base font-semibold mb-4 text-white flex items-center">
-                <i class="fas fa-info-circle text-accent mr-2"></i>Server Info
-            </h3>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div class="bg-slate-800/50 p-3 rounded-lg">
-                    <span class="text-xs text-slate-500 block mb-1">VPN Port</span>
-                    <span class="text-slate-200 font-mono">{{ server.vpn_port }}</span>
+        <!-- Server Info Card -->
+        <div class="lg:col-span-2 card bg-base-200 border border-base-300 shadow">
+            <div class="card-body p-5">
+                {# Pre-calculate initial stats in Twig #}
+                {% set initial_online_clients = 0 %}
+                {% set initial_total_bytes = 0 %}
+                {% set initial_speed_up = 0 %}
+                {% set initial_speed_down = 0 %}
+                {% set current_ts = "now"|date('U') %}
+                {% for client in clients %}
+                    {% set is_online = false %}
+                    {% if client.last_handshake is not empty and client.last_handshake != '0000-00-00 00:00:00' and client.last_handshake != '1970-01-01 00:00:00' and client.last_handshake != '0' %}
+                        {% set handshake_ts = client.last_handshake|date('U') %}
+                        {% if (current_ts - handshake_ts) < 300 %}
+                            {% set is_online = true %}
+                        {% endif %}
+                    {% endif %}
+                    {% if is_online %}
+                        {% set initial_online_clients = initial_online_clients + 1 %}
+                    {% endif %}
+                    {% set initial_total_bytes = initial_total_bytes + (client.bytes_sent|default(0)) + (client.bytes_received|default(0)) %}
+                    {% set initial_speed_up = initial_speed_up + (client.speed_up_kbps|default(0)) %}
+                    {% set initial_speed_down = initial_speed_down + (client.speed_down_kbps|default(0)) %}
+                {% endfor %}
+
+                <h3 class="card-title text-sm mb-4">
+                    <i class="fas fa-info-circle text-primary"></i>Server Info
+                </h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div class="bg-base-300/50 p-3 rounded-lg">
+                        <span class="text-xs text-base-content/40 block mb-1">VPN Port</span>
+                        <span class="font-mono font-medium">{{ server.vpn_port }}</span>
+                    </div>
+                    <div class="bg-base-300/50 p-3 rounded-lg">
+                        <span class="text-xs text-base-content/40 block mb-1">Subnet</span>
+                        <span class="font-mono font-medium">{{ server.vpn_subnet }}</span>
+                    </div>
+                    <div class="bg-base-300/50 p-3 rounded-lg">
+                        <span class="text-xs text-base-content/40 block mb-1">Protocol</span>
+                        <span class="text-info font-mono uppercase font-medium">{{ server.awg_params.mimicry_type|default('quic') }}</span>
+                    </div>
+                    <div class="bg-base-300/50 p-3 rounded-lg">
+                        <span class="text-xs text-base-content/40 block mb-1">Deployed</span>
+                        <span class="font-mono text-sm">{{ server.deployed_at|date('Y-m-d H:i') }}</span>
+                    </div>
                 </div>
-                <div class="bg-slate-800/50 p-3 rounded-lg">
-                    <span class="text-xs text-slate-500 block mb-1">Subnet</span>
-                    <span class="text-slate-200 font-mono">{{ server.vpn_subnet }}</span>
-                </div>
-                <div class="bg-slate-800/50 p-3 rounded-lg">
-                    <span class="text-xs text-slate-500 block mb-1">Protocol</span>
-                    <span class="text-cyan-400 font-mono uppercase">{{ server.awg_params.mimicry_type|default('quic') }}</span>
-                </div>
-                <div class="bg-slate-800/50 p-3 rounded-lg">
-                    <span class="text-xs text-slate-500 block mb-1">Deployed</span>
-                    <span class="text-slate-200">{{ server.deployed_at|date('Y-m-d H:i') }}</span>
+
+                <div class="divider my-3"></div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div class="bg-base-300/50 p-3 rounded-lg">
+                        <span class="text-xs text-base-content/40 block mb-1">Online Clients</span>
+                        <span class="font-mono font-medium" id="serverOnlineClients">{{ initial_online_clients }} / {{ clients|length }}</span>
+                    </div>
+                    <div class="bg-base-300/50 p-3 rounded-lg">
+                        <span class="text-xs text-base-content/40 block mb-1">Total Traffic</span>
+                        <span class="font-mono text-sm" id="serverTotalTraffic">{{ initial_total_bytes|format_bytes }}</span>
+                    </div>
+                    <div class="bg-base-300/50 p-3 rounded-lg">
+                        <span class="text-xs text-base-content/40 block mb-1">Upload Speed</span>
+                        <span class="font-mono text-sm font-semibold text-success flex items-center gap-1.5" id="serverUploadSpeed">
+                            {% if initial_speed_up > 0 %}
+                                ↑{% if initial_speed_up >= 1000 %}{{ (initial_speed_up / 1000)|number_format(1) }} Mbps{% else %}{{ initial_speed_up|number_format(0) }} Kbps{% endif %}
+                            {% else %}
+                                <span class="text-base-content/20">↑0 Kbps</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="bg-base-300/50 p-3 rounded-lg">
+                        <span class="text-xs text-base-content/40 block mb-1">Download Speed</span>
+                        <span class="font-mono text-sm font-semibold text-indigo-400 flex items-center gap-1.5" id="serverDownloadSpeed">
+                            {% if initial_speed_down > 0 %}
+                                ↓{% if initial_speed_down >= 1000 %}{{ (initial_speed_down / 1000)|number_format(1) }} Mbps{% else %}{{ initial_speed_down|number_format(0) }} Kbps{% endif %}
+                            {% else %}
+                                <span class="text-base-content/20">↓0 Kbps</span>
+                            {% endif %}
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>
-        
-        <div class="panel p-5">
-            <h3 class="text-base font-semibold mb-4 text-white flex items-center">
-                <i class="fas fa-user-plus text-accent mr-2"></i>New Client
-            </h3>
-            <form method="POST" action="/servers/{{ server.id }}/clients/create" id="createClientForm">
-                <div class="mb-3">
-                    <input name="name" required class="input-field w-full px-4 py-2.5 text-sm" placeholder="Client name" id="clientName">
+
+        <!-- New Config Card -->
+        <div class="card bg-base-200 border border-base-300 shadow">
+            <div class="card-body p-5">
+                <h3 class="card-title text-sm mb-4">
+                    <i class="fas fa-user-plus text-primary"></i>New Config
+                </h3>
+
+                <!-- Mode Toggle -->
+                <div class="join w-full mb-4 text-xs">
+                    <button type="button" onclick="setClientMode('linked')" id="modeLinkedBtn" class="btn btn-xs join-item btn-primary flex-1">
+                        <i class="fas fa-link opacity-70"></i>DB Client
+                    </button>
+                    <button type="button" onclick="setClientMode('anon')" id="modeAnonBtn" class="btn btn-xs join-item btn-ghost flex-1">
+                        <i class="fas fa-user-secret opacity-70"></i>Anonymous
+                    </button>
                 </div>
-                <button type="submit" class="btn-primary w-full py-2.5 text-sm" id="createClientBtn">
-                    <i class="fas fa-plus mr-2"></i><span id="createClientText">Create Client</span>
-                    <i class="fas fa-spinner fa-spin hidden ml-2" id="createClientSpinner"></i>
-                </button>
-            </form>
-            <p class="text-xs text-slate-500 mt-2">Spaces become underscores. Cyrillic OK.</p>
+
+                <form method="POST" action="/servers/{{ server.id }}/clients/create" id="createClientForm" class="space-y-3">
+                    {{ csrf_field() }}
+                    <input type="hidden" name="ext_client_code" id="extClientCodeInput" value="">
+
+                    <!-- Linked mode: code autocomplete -->
+                    <div id="linkedModeFields">
+                        <label class="label py-1"><span class="label-text text-xs text-base-content/50 uppercase tracking-wide">Client Code</span></label>
+                        <div class="relative">
+                            <label class="input input-bordered input-sm flex items-center gap-2">
+                                <i class="fas fa-search text-base-content/30 text-xs" id="codeSearchIcon"></i>
+                                <input type="text" id="clientCodeSearch" placeholder="Type to search..." autocomplete="off" class="grow text-sm" oninput="onCodeSearchInput(this.value)">
+                            </label>
+                            <div id="codeDropdown" class="hidden absolute z-50 mt-1 w-full bg-base-300 border border-base-content/10 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto text-sm"></div>
+                        </div>
+                        <p id="codeSelectedInfo" class="text-xs text-primary mt-1.5 hidden">
+                            <i class="fas fa-check-circle mr-1"></i><span id="codeSelectedText"></span>
+                        </p>
+                    </div>
+
+                    <!-- Config name -->
+                    <div class="form-control">
+                        <label class="label py-1"><span class="label-text text-xs text-base-content/50 uppercase tracking-wide">Config Name</span></label>
+                        <label class="input input-bordered input-sm flex items-center gap-2">
+                            <i class="fas fa-tag text-base-content/30 text-xs"></i>
+                            <input name="name" required class="grow text-sm" placeholder="Client name" id="clientName">
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-sm w-full" id="createClientBtn">
+                        <i class="fas fa-plus"></i>
+                        <span id="createClientText">Create Config</span>
+                        <i class="fas fa-spinner fa-spin hidden" id="createClientSpinner"></i>
+                    </button>
+                </form>
+                <p class="text-xs text-base-content/30 mt-2">Spaces become underscores. Cyrillic OK.</p>
+            </div>
         </div>
     </div>
 
-    <div class="panel overflow-hidden">
-        <div class="px-5 py-4 border-b border-slate-700 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-            <h3 class="text-base font-semibold text-white flex items-center">
-                <i class="fas fa-users text-cyan-400 mr-2"></i>Clients
-                <span class="ml-2 bg-slate-700 text-slate-300 px-2 py-0.5 rounded text-xs" id="clientCount">{{ clients|length }}</span>
+    <!-- Bot Access Control Settings (Admins only) -->
+    {% if user.role == 'admin' %}
+    <div class="card bg-base-200 border border-base-300 shadow mb-6">
+        <div class="card-body p-5 md:p-6 space-y-4">
+            <h3 class="font-semibold text-sm text-base-content flex items-center gap-2">
+                <i class="fas fa-robot text-indigo-400"></i>
+                Telegram Bot Access Control
             </h3>
-            <div class="flex gap-2 items-center">
-                <div class="relative">
-                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
-                    <input type="text" id="clientSearch" placeholder="Search..." class="input-field pl-9 pr-8 py-2 text-xs w-40 focus:w-52 transition-all">
-                    <button type="button" id="clearSearch" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white hidden">
-                        <i class="fas fa-times text-xs"></i>
+            
+            <form method="POST" action="/servers/{{ server.id }}/access-control" class="space-y-5">
+                {{ csrf_field() }}
+                <!-- Toggle -->
+                <div class="flex items-center justify-between bg-base-300/30 p-3.5 rounded-xl border border-base-300">
+                    <div class="space-y-0.5 pr-4">
+                        <span class="text-sm font-medium block">Show Server in Bot</span>
+                        <span class="text-xs text-base-content/40">Allows clients to see and select this server in their Telegram bot menu.</span>
+                    </div>
+                    <input type="checkbox" name="show_in_bot" class="toggle toggle-primary" {% if server.show_in_bot %}checked{% endif %}>
+                </div>
+
+                <!-- Display Name / Description -->
+                <div class="form-control bg-base-300/30 p-4 rounded-xl border border-base-300 space-y-2">
+                    <label class="label p-0">
+                        <span class="label-text font-medium text-xs uppercase tracking-wider text-base-content/60">Server Display Name in Bot</span>
+                    </label>
+                    <input type="text" name="description" placeholder="e.g. 🇳🇱 Амстердам" class="input input-bordered input-sm bg-base-200 text-sm w-full" value="{{ server.description }}">
+                    <span class="text-[10px] text-base-content/40 leading-relaxed block">If set, this custom name will be shown in the Telegram bot (e.g. <code>🇳🇱 Амстердам [{{ server.name }}]</code>). If empty, only the internal name <code>{{ server.name }}</code> will be shown.</span>
+                </div>
+                
+                <!-- Client Access Lists -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <!-- Whitelist (Allowed) -->
+                    <div class="form-control bg-base-300/30 p-4 rounded-xl border border-base-300 space-y-2">
+                        <label class="label p-0"><span class="label-text font-medium text-xs uppercase tracking-wider text-base-content/60">Allowed Client Codes (Whitelist)</span></label>
+                        <div class="relative">
+                            <label class="input input-bordered input-sm flex items-center gap-2 bg-base-200">
+                                <i class="fas fa-search text-base-content/30 text-xs"></i>
+                                <input type="text" id="allowedSearch" placeholder="Type to search and add..." autocomplete="off" class="grow text-sm">
+                            </label>
+                            <div id="allowedDropdown" class="hidden absolute z-50 mt-1 w-full bg-base-300 border border-base-300 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto text-sm"></div>
+                        </div>
+                        <input type="hidden" name="allowed_clients" id="allowedClientsInput" value="{{ server.allowed_clients }}">
+                        
+                        <div id="allowedTags" class="flex flex-wrap gap-1.5 min-h-[2rem] p-1 border border-dashed border-base-300/50 rounded-lg">
+                            <!-- JS will render tags here -->
+                        </div>
+                        <span class="text-[10px] text-base-content/40 leading-relaxed block">If empty, this server is accessible to all clients. If filled, only whitelisted codes will see it.</span>
+                    </div>
+                    
+                    <!-- Blacklist (Blocked) -->
+                    <div class="form-control bg-base-300/30 p-4 rounded-xl border border-base-300 space-y-2">
+                        <label class="label p-0"><span class="label-text font-medium text-xs uppercase tracking-wider text-error/70">Blocked Client Codes (Blacklist)</span></label>
+                        <div class="relative">
+                            <label class="input input-bordered input-sm flex items-center gap-2 bg-base-200">
+                                <i class="fas fa-search text-base-content/30 text-xs"></i>
+                                <input type="text" id="blockedSearch" placeholder="Type to search and add..." autocomplete="off" class="grow text-sm">
+                            </label>
+                            <div id="blockedDropdown" class="hidden absolute z-50 mt-1 w-full bg-base-300 border border-base-300 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto text-sm"></div>
+                        </div>
+                        <input type="hidden" name="blocked_clients" id="blockedClientsInput" value="{{ server.blocked_clients }}">
+                        
+                        <div id="blockedTags" class="flex flex-wrap gap-1.5 min-h-[2rem] p-1 border border-dashed border-base-300/50 rounded-lg">
+                            <!-- JS will render tags here -->
+                        </div>
+                        <span class="text-[10px] text-base-content/40 leading-relaxed block">These client codes will never be able to see or select this server in their bot.</span>
+                    </div>
+                </div>
+                
+                <!-- Save Button -->
+                <div class="flex justify-end pt-3 border-t border-base-300/70">
+                    <button type="submit" class="btn btn-primary btn-sm px-4 gap-1.5">
+                        <i class="fas fa-save text-xs"></i>Save Bot Settings
                     </button>
                 </div>
-                <button onclick="syncAllStats({{ server.id }})" id="syncBtn" class="btn-secondary px-4 py-2 text-xs">
-                    <i class="fas fa-sync-alt mr-2"></i>Sync
-                </button>
-            </div>
+            </form>
         </div>
-        {% if clients|length > 0 %}
-        <div class="hidden md:block">
-            <div class="table-wrapper">
-                <table class="min-w-full">
-                    <thead>
-                        <tr class="bg-slate-800/50">
-                            <th class="px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Name</th>
-                            <th class="px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold hide-mobile">IP</th>
-                            <th class="px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Traffic</th>
-                            <th class="px-4 py-3 text-left text-[10px] uppercase tracking-wider text-slate-500 font-semibold hide-mobile">Handshake</th>
-                            <th class="px-4 py-3 text-right text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-700" id="clientTableBody">
-                        {% for client in clients %}
-                        <tr class="hover:bg-slate-800/30 transition-colors client-row" data-name="{{ client.name }}" data-ip="{{ client.client_ip }}">
-                            <td class="px-4 py-3">
-                                <div class="flex items-center">
-                                    <div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center mr-2 text-slate-400">
-                                        <i class="fas fa-user text-xs"></i>
-                                    </div>
-                                    <span class="text-sm text-white">{{ client.name }}</span>
-                                </div>
-                            </td>
-                            <td class="px-4 py-3 hide-mobile">
-                                <code class="text-xs text-slate-400">{{ client.client_ip }}</code>
-                            </td>
-                            <td class="px-4 py-3">
-                                <div class="flex gap-1 text-xs">
-                                    <span class="text-cyan-400 font-mono">↑{{ (client.bytes_sent|default(0) / 1024 / 1024)|number_format(1) }}MB</span>
-                                    <span class="text-blue-400 font-mono">↓{{ (client.bytes_received|default(0) / 1024 / 1024)|number_format(1) }}MB</span>
-                                </div>
-                            </td>
-                            <td class="px-4 py-3 hide-mobile">
-                                {% if client.last_handshake %}
-                                    <span class="text-xs text-slate-400">{{ client.last_handshake }}</span>
-                                {% else %}
-                                    <span class="text-xs text-slate-600">Never</span>
-                                {% endif %}
-                            </td>
-                            <td class="px-4 py-3 text-right">
-                                <div class="flex items-center justify-end gap-1">
-                                    <a href="/clients/{{ client.id }}" class="btn-secondary px-3 py-1.5 text-xs" title="View">
-                                        <i class="fas fa-eye"></i>
-                                    </a>
-                                    <form method="POST" action="/clients/{{ client.id }}/delete" style="display:inline;">
-                                        <button type="submit" class="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-colors text-xs" onclick="return confirm('Delete client {{ client.name }}?')" title="Delete">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+    </div>
+    {% endif %}
+
+    <!-- Clients Table Card -->
+    <div class="card bg-base-200 border border-base-300 shadow overflow-hidden">
+        <!-- Table Header Controls -->
+        <div class="px-5 py-4 border-b border-base-300 flex flex-col xl:flex-row gap-4 xl:items-center xl:justify-between bg-base-200">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between xl:justify-start gap-4">
+                <h3 class="font-semibold flex items-center gap-2">
+                    <i class="fas fa-users text-info"></i>
+                    Clients
+                    <span class="badge badge-sm badge-ghost font-mono" id="clientCount">{{ clients|length }}</span>
+                </h3>
+
+                <!-- Status Filter Pills -->
+                <div class="join text-[11px]" id="statusFilterGroup">
+                    <button type="button" class="join-item status-filter-btn btn btn-xs btn-active" data-status="all">All</button>
+                    <button type="button" class="join-item status-filter-btn btn btn-xs btn-ghost" data-status="online">Online</button>
+                    <button type="button" class="join-item status-filter-btn btn btn-xs btn-ghost" data-status="offline">Offline</button>
+                    <button type="button" class="join-item status-filter-btn btn btn-xs btn-ghost" data-status="never">Never</button>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap sm:flex-nowrap gap-2 items-center">
+                <div class="relative w-full sm:w-auto">
+                    <label class="input input-bordered input-sm flex items-center gap-2">
+                        <i class="fas fa-search text-base-content/30 text-xs"></i>
+                        <input type="text" id="clientSearch" placeholder="Search..." class="grow w-36 sm:w-44">
+                        <button type="button" id="clearSearch" class="text-base-content/30 hover:text-base-content hidden">
+                            <i class="fas fa-times text-xs"></i>
+                        </button>
+                    </label>
+                </div>
+
+                <button onclick="syncAllStats({{ server.id }})" id="syncBtn" class="btn btn-ghost btn-sm gap-2 whitespace-nowrap">
+                    <i class="fas fa-sync-alt"></i>Sync
+                </button>
+                <form method="POST" action="/servers/{{ server.id }}/reset-all-traffic" class="inline" onsubmit="return confirm('Reset cumulative traffic for ALL clients?')">
+                    {{ csrf_field() }}
+                    <button type="submit" class="btn btn-warning btn-outline btn-sm gap-2 whitespace-nowrap">
+                        <i class="fas fa-undo"></i>Reset Traffic
+                    </button>
+                </form>
             </div>
         </div>
 
-        <div class="md:hidden divide-y divide-slate-700" id="clientCards">
+        {% if clients|length > 0 %}
+        <!-- Desktop Table -->
+        <div class="hidden md:block overflow-x-auto">
+            <table class="table table-sm w-full">
+                <thead>
+                    <tr>
+                        <th class="sortable cursor-pointer select-none" data-sort="name">Name <i class="fas fa-sort ml-1 opacity-40 text-[9px]" id="sortIcon-name"></i></th>
+                        <th class="sortable cursor-pointer select-none" data-sort="ip">IP <i class="fas fa-sort ml-1 opacity-40 text-[9px]" id="sortIcon-ip"></i></th>
+                        <th class="sortable cursor-pointer select-none" data-sort="city">City <i class="fas fa-sort ml-1 opacity-40 text-[9px]" id="sortIcon-city"></i></th>
+                        <th class="sortable cursor-pointer select-none" data-sort="traffic">Traffic <i class="fas fa-sort ml-1 opacity-40 text-[9px]" id="sortIcon-traffic"></i></th>
+                        <th class="sortable cursor-pointer select-none" data-sort="handshake">Handshake <i class="fas fa-sort ml-1 opacity-40 text-[9px]" id="sortIcon-handshake"></i></th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="clientTableBody">
+                    {% for client in clients %}
+                    {% set is_never = true %}
+                    {% if client.last_handshake is not empty and client.last_handshake != '0000-00-00 00:00:00' and client.last_handshake != '1970-01-01 00:00:00' and client.last_handshake != '0' %}
+                        {% set is_never = false %}
+                    {% endif %}
+                    <tr class="hover client-row {% if client.status == 'disabled' %}opacity-55{% endif %}"
+                        data-name="{{ client.name }}"
+                        data-ip="{{ client.client_ip }}"
+                        data-city="{{ client.city|default('') }}"
+                        data-client-id="{{ client.id }}"
+                        data-bytes="{{ client.bytes_sent + client.bytes_received }}"
+                        data-last-handshake="{% if not is_never %}{{ client.last_handshake|date('U') }}{% else %}never{% endif %}">
+                        <td>
+                            <div class="flex items-center gap-2">
+                                <div class="avatar avatar-placeholder">
+                                    <div class="bg-neutral text-neutral-content rounded-full w-7 text-xs">
+                                        <span>{{ client.name|slice(0,1)|upper }}</span>
+                                    </div>
+                                </div>
+                                <span class="text-sm font-medium">{{ client.name }}</span>
+                                {% if client.status == 'disabled' %}
+                                    <span class="badge badge-warning badge-xs">Disabled</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td><code class="text-xs text-base-content/50 font-mono">{{ client.client_ip }}</code></td>
+                        <td class="city-container text-xs text-base-content/50">{{ client.city|default('—') }}</td>
+                        <td>
+                            <div class="flex gap-1 text-xs font-mono">
+                                <span class="text-info upload-bytes">↑{{ client.bytes_sent|default(0)|format_bytes }}</span>
+                                <span class="text-indigo-400 download-bytes">↓{{ client.bytes_received|default(0)|format_bytes }}</span>
+                            </div>
+                            <div class="text-[10px] mt-0.5 flex gap-1 font-mono speed-container">
+                                {% if client.status == 'active' %}
+                                    <span class="{% if client.speed_up_kbps > 0 %}text-success font-semibold{% else %}text-base-content/20{% endif %}">
+                                        ↑{% if client.speed_up_kbps >= 1000 %}{{ (client.speed_up_kbps / 1000)|number_format(1) }} Mbps{% else %}{{ client.speed_up_kbps|number_format(0) }} Kbps{% endif %}
+                                    </span>
+                                    <span class="{% if client.speed_down_kbps > 0 %}text-indigo-400 font-semibold{% else %}text-base-content/20{% endif %}">
+                                        ↓{% if client.speed_down_kbps >= 1000 %}{{ (client.speed_down_kbps / 1000)|number_format(1) }} Mbps{% else %}{{ client.speed_down_kbps|number_format(0) }} Kbps{% endif %}
+                                    </span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="handshake-container">
+                            {% if not is_never %}
+                                <span class="text-xs text-base-content/50">{{ client.last_handshake }}</span>
+                            {% else %}
+                                <span class="text-xs text-base-content/20">Never</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right">
+                            <div class="flex items-center justify-end gap-1">
+                                <a href="/clients/{{ client.id }}" class="btn btn-ghost btn-xs" title="View"><i class="fas fa-eye"></i></a>
+                                {% if client.status == 'disabled' %}
+                                    <form method="POST" action="/clients/{{ client.id }}/restore" style="display:inline;">
+                                        {{ csrf_field() }}
+                                        <button type="submit" class="btn btn-ghost btn-xs text-success" title="Restore Config">
+                                            <i class="fas fa-play"></i>
+                                        </button>
+                                    </form>
+                                {% else %}
+                                    <form method="POST" action="/clients/{{ client.id }}/revoke" style="display:inline;">
+                                        {{ csrf_field() }}
+                                        <button type="submit" class="btn btn-ghost btn-xs text-warning" onclick="return confirm('Revoke config access for {{ client.name }}?')" title="Revoke Config">
+                                            <i class="fas fa-pause"></i>
+                                        </button>
+                                    </form>
+                                {% endif %}
+                                <form method="POST" action="/clients/{{ client.id }}/delete" style="display:inline;">
+                                    {{ csrf_field() }}
+                                    <button type="submit" class="btn btn-ghost btn-xs text-error" onclick="return confirm('Delete client {{ client.name }}?')" title="Delete">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Mobile Cards -->
+        <div class="md:hidden divide-y divide-base-300" id="clientCards">
             {% for client in clients %}
-            <div class="p-4 client-card" data-name="{{ client.name }}" data-ip="{{ client.client_ip }}">
+            {% set is_never = true %}
+            {% if client.last_handshake is not empty and client.last_handshake != '0000-00-00 00:00:00' and client.last_handshake != '1970-01-01 00:00:00' and client.last_handshake != '0' %}
+                {% set is_never = false %}
+            {% endif %}
+            <div class="p-4 client-card {% if client.status == 'disabled' %}opacity-55{% endif %}"
+                 data-name="{{ client.name }}"
+                 data-ip="{{ client.client_ip }}"
+                 data-city="{{ client.city|default('') }}"
+                 data-client-id="{{ client.id }}"
+                 data-bytes="{{ client.bytes_sent + client.bytes_received }}"
+                 data-last-handshake="{% if not is_never %}{{ client.last_handshake|date('U') }}{% else %}never{% endif %}">
                 <div class="flex items-start justify-between mb-3">
-                    <div class="flex items-center">
-                        <div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center mr-2 text-slate-400">
-                            <i class="fas fa-user text-xs"></i>
+                    <div class="flex items-center gap-2">
+                        <div class="avatar avatar-placeholder">
+                            <div class="bg-neutral text-neutral-content rounded-full w-8 text-xs">
+                                <span>{{ client.name|slice(0,1)|upper }}</span>
+                            </div>
                         </div>
                         <div>
-                            <span class="text-sm font-medium text-white">{{ client.name }}</span>
-                            <code class="block text-xs text-slate-500 mt-0.5">{{ client.client_ip }}</code>
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-sm font-medium">{{ client.name }}</span>
+                                {% if client.status == 'disabled' %}
+                                    <span class="badge badge-warning badge-xs">Disabled</span>
+                                {% endif %}
+                            </div>
+                            <code class="block text-xs text-base-content/40 mt-0.5 font-mono card-ip-value">{{ client.client_ip }}{% if client.city %} ({{ client.city }}){% endif %}</code>
                         </div>
                     </div>
                 </div>
                 <div class="grid grid-cols-2 gap-2 mb-3 text-xs">
-                    <div class="bg-slate-800/50 p-2 rounded">
-                        <span class="text-slate-500 block">Traffic</span>
-                        <span class="text-cyan-400 font-mono">↑{{ (client.bytes_sent|default(0) / 1024 / 1024)|number_format(1) }}MB</span>
-                        <span class="text-blue-400 font-mono">↓{{ (client.bytes_received|default(0) / 1024 / 1024)|number_format(1) }}MB</span>
+                    <div class="bg-base-300/50 p-2 rounded-lg">
+                        <span class="text-base-content/40 block mb-1">Traffic</span>
+                        <div class="font-mono">
+                            <span class="text-info upload-bytes">↑{{ client.bytes_sent|default(0)|format_bytes }}</span>
+                            <span class="text-indigo-400 download-bytes ml-1">↓{{ client.bytes_received|default(0)|format_bytes }}</span>
+                        </div>
+                        <div class="text-[10px] mt-0.5 flex flex-col font-mono speed-container">
+                            {% if client.status == 'active' %}
+                                <span class="{% if client.speed_up_kbps > 0 %}text-success font-semibold{% else %}text-base-content/20{% endif %}">
+                                    ↑{% if client.speed_up_kbps >= 1000 %}{{ (client.speed_up_kbps / 1000)|number_format(1) }} Mbps{% else %}{{ client.speed_up_kbps|number_format(0) }} Kbps{% endif %}
+                                </span>
+                                <span class="{% if client.speed_down_kbps > 0 %}text-indigo-400 font-semibold{% else %}text-base-content/20{% endif %}">
+                                    ↓{% if client.speed_down_kbps >= 1000 %}{{ (client.speed_down_kbps / 1000)|number_format(1) }} Mbps{% else %}{{ client.speed_down_kbps|number_format(0) }} Kbps{% endif %}
+                                </span>
+                            {% endif %}
+                        </div>
                     </div>
-                    <div class="bg-slate-800/50 p-2 rounded">
-                        <span class="text-slate-500 block">Handshake</span>
-                        <span class="text-slate-300">
-                            {% if client.last_handshake %}{{ client.last_handshake }}{% else %}Never{% endif %}
-                        </span>
+                    <div class="bg-base-300/50 p-2 rounded-lg">
+                        <span class="text-base-content/40 block mb-1">Handshake</span>
+                        <span class="handshake-value text-sm">{% if not is_never %}{{ client.last_handshake }}{% else %}Never{% endif %}</span>
                     </div>
                 </div>
                 <div class="flex gap-2">
-                    <a href="/clients/{{ client.id }}" class="btn-secondary flex-1 text-center py-2 text-xs">
-                        <i class="fas fa-eye mr-1"></i>View
-                    </a>
+                    <a href="/clients/{{ client.id }}" class="btn btn-ghost btn-sm flex-1 gap-2"><i class="fas fa-eye"></i>View</a>
+                    {% if client.status == 'disabled' %}
+                        <form method="POST" action="/clients/{{ client.id }}/restore" class="flex-1">
+                            {{ csrf_field() }}
+                            <button type="submit" class="btn btn-outline btn-success btn-sm w-full gap-2">
+                                <i class="fas fa-play"></i>Restore
+                            </button>
+                        </form>
+                    {% else %}
+                        <form method="POST" action="/clients/{{ client.id }}/revoke" class="flex-1">
+                            {{ csrf_field() }}
+                            <button type="submit" class="btn btn-outline btn-warning btn-sm w-full gap-2" onclick="return confirm('Revoke config access for {{ client.name }}?')">
+                                <i class="fas fa-pause"></i>Revoke
+                            </button>
+                        </form>
+                    {% endif %}
                     <form method="POST" action="/clients/{{ client.id }}/delete" class="flex-1">
-                        <button type="submit" class="w-full px-3 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-colors text-xs" onclick="return confirm('Delete client {{ client.name }}?')">
-                            <i class="fas fa-trash mr-1"></i>Delete
+                        {{ csrf_field() }}
+                        <button type="submit" class="btn btn-error btn-outline btn-sm w-full gap-2" onclick="return confirm('Delete client {{ client.name }}?')">
+                            <i class="fas fa-trash"></i>Delete
                         </button>
                     </form>
                 </div>
@@ -201,27 +488,131 @@
             {% endfor %}
         </div>
         {% else %}
-        <div class="p-10 text-center">
-            <i class="fas fa-users text-slate-600 text-2xl mb-3"></i>
-            <p class="text-slate-400">No clients yet</p>
+        <div class="p-12 text-center">
+            <div class="w-14 h-14 rounded-full bg-base-300 flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-users text-base-content/20 text-xl"></i>
+            </div>
+            <p class="text-base-content/40 font-medium">No clients yet</p>
         </div>
         {% endif %}
     </div>
 </div>
 
 <script>
+// ── Client mode toggle ────────────────────────────────────────────────────────
+let currentClientMode = 'linked';
+
+function setClientMode(mode) {
+    currentClientMode = mode;
+    const linkedFields = document.getElementById('linkedModeFields');
+    const linkedBtn    = document.getElementById('modeLinkedBtn');
+    const anonBtn      = document.getElementById('modeAnonBtn');
+    const extInput     = document.getElementById('extClientCodeInput');
+
+    if (mode === 'linked') {
+        linkedFields.classList.remove('hidden');
+        linkedBtn.className = 'btn btn-xs join-item btn-primary flex-1';
+        anonBtn.className   = 'btn btn-xs join-item btn-ghost flex-1';
+    } else {
+        linkedFields.classList.add('hidden');
+        extInput.value = '';
+        anonBtn.className   = 'btn btn-xs join-item btn-primary flex-1';
+        linkedBtn.className = 'btn btn-xs join-item btn-ghost flex-1';
+    }
+}
+
+// ── Client code autocomplete ──────────────────────────────────────────────────
+let codeSearchTimer = null;
+
+function onCodeSearchInput(value) {
+    clearTimeout(codeSearchTimer);
+    document.getElementById('extClientCodeInput').value = '';
+    document.getElementById('codeSelectedInfo').classList.add('hidden');
+    if (value.length < 1) { hideCodeDropdown(); return; }
+    codeSearchTimer = setTimeout(() => fetchCodes(value), 220);
+}
+
+function fetchCodes(q) {
+    const icon = document.getElementById('codeSearchIcon');
+    icon.className = 'fas fa-spinner fa-spin text-base-content/30 text-xs';
+
+    fetch('/api/ext-clients/search?q=' + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(data => {
+            icon.className = 'fas fa-search text-base-content/30 text-xs';
+            renderCodeDropdown(data.codes || []);
+        })
+        .catch(() => {
+            icon.className = 'fas fa-search text-base-content/30 text-xs';
+            hideCodeDropdown();
+        });
+}
+
+function renderCodeDropdown(codes) {
+    const dd = document.getElementById('codeDropdown');
+    dd.innerHTML = '';
+    if (!codes.length) {
+        dd.innerHTML = '<div class="px-4 py-3 text-base-content/40 text-xs">No matches</div>';
+        dd.classList.remove('hidden');
+        return;
+    }
+    codes.forEach(code => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'w-full text-left px-4 py-2.5 hover:bg-base-200 transition-colors font-mono text-xs flex items-center gap-2';
+        item.innerHTML = '<i class="fas fa-user text-base-content/30"></i>' + escapeHtml(code);
+        item.addEventListener('mousedown', () => selectCode(code));
+        dd.appendChild(item);
+    });
+    dd.classList.remove('hidden');
+}
+
+function selectCode(code) {
+    document.getElementById('clientCodeSearch').value = code;
+    document.getElementById('extClientCodeInput').value = code;
+    const nameField = document.getElementById('clientName');
+    if (!nameField.dataset.userEdited) nameField.value = code;
+    document.getElementById('codeSelectedText').textContent = code + ' selected';
+    document.getElementById('codeSelectedInfo').classList.remove('hidden');
+    hideCodeDropdown();
+}
+
+function hideCodeDropdown() {
+    const dd = document.getElementById('codeDropdown');
+    if (dd) dd.classList.add('hidden');
+}
+
+function escapeHtml(str) {
+    return str.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-    const form = document.getElementById('createClientForm');
-    const clientNameInput = document.getElementById('clientName');
-    
-    if (clientNameInput) {
-        clientNameInput.addEventListener('input', function(e) {
+    // Track manual edits to config name
+    const nameField = document.getElementById('clientName');
+    if (nameField) {
+        nameField.addEventListener('input', function(e) {
             e.target.value = e.target.value.replace(/ /g, '_');
+            e.target.dataset.userEdited = 'true';
         });
     }
-    
+
+    // Close autocomplete when clicking outside
+    document.addEventListener('click', function(e) {
+        const searchInput = document.getElementById('clientCodeSearch');
+        const dropdown = document.getElementById('codeDropdown');
+        if (searchInput && dropdown && !searchInput.closest('label').contains(e.target) && !dropdown.contains(e.target)) {
+            hideCodeDropdown();
+        }
+    });
+
+    const form = document.getElementById('createClientForm');
     if (form) {
         form.addEventListener('submit', function() {
+            if (currentClientMode === 'linked') {
+                const searchInput = document.getElementById('clientCodeSearch');
+                const extInput = document.getElementById('extClientCodeInput');
+                if (searchInput && extInput && !extInput.value) extInput.value = searchInput.value.trim();
+            }
             document.getElementById('createClientBtn').disabled = true;
             document.getElementById('createClientText').textContent = 'Creating...';
             document.getElementById('createClientSpinner').classList.remove('hidden');
@@ -233,89 +624,539 @@ document.addEventListener('DOMContentLoaded', function() {
     const tbody = document.getElementById('clientTableBody');
     const clientCards = document.getElementById('clientCards');
     const clientCount = document.getElementById('clientCount');
-    
-    if (searchInput) {
-        searchInput.addEventListener('input', function() {
-            const query = this.value.toLowerCase();
-            let visibleCount = 0;
-            
-            clearBtn.classList.toggle('hidden', !query);
-            
-            const isMobile = clientCards && window.getComputedStyle(clientCards).display !== 'none';
-            
-            if (isMobile && clientCards) {
-                const cards = clientCards.querySelectorAll('div.client-card');
-                cards.forEach(card => {
-                    const name = card.dataset.name?.toLowerCase() || '';
-                    const ip = card.dataset.ip?.toLowerCase() || '';
-                    const match = name.includes(query) || ip.includes(query);
-                    card.style.display = match ? '' : 'none';
-                    if (match) visibleCount++;
-                });
-            } else if (tbody) {
-                const rows = tbody.querySelectorAll('tr.client-row');
-                rows.forEach(row => {
-                    const name = row.dataset.name?.toLowerCase() || '';
-                    const ip = row.dataset.ip?.toLowerCase() || '';
-                    const match = name.includes(query) || ip.includes(query);
-                    row.style.display = match ? '' : 'none';
-                    if (match) visibleCount++;
-                });
-            }
-            
-            if (clientCount) clientCount.textContent = visibleCount;
-            
-            const noResults = document.getElementById('noSearchResults');
-            if (visibleCount === 0 && query) {
-                if (!noResults) {
-                    const container = clientCards && window.getComputedStyle(clientCards).display !== 'none' 
-                        ? clientCards 
-                        : (tbody ? tbody.parentElement : null);
-                    if (container) {
-                        const el = document.createElement('div');
-                        el.id = 'noSearchResults';
-                        el.className = 'p-8 text-center text-slate-500';
-                        el.textContent = 'No clients found';
-                        container.appendChild(el);
-                    }
-                }
-            } else if (noResults) {
-                noResults.remove();
+
+    let currentStatusFilter = 'all';
+    let currentSortColumn = 'name';
+    let currentSortDirection = 'asc';
+
+    function sortClients() {
+        const isMobile = clientCards && window.getComputedStyle(clientCards).display !== 'none';
+        if (isMobile && clientCards) {
+            const cards = Array.from(clientCards.querySelectorAll('div.client-card'));
+            cards.sort(compareElements);
+            cards.forEach(card => clientCards.appendChild(card));
+        } else if (tbody) {
+            const rows = Array.from(tbody.querySelectorAll('tr.client-row'));
+            rows.sort(compareElements);
+            rows.forEach(row => tbody.appendChild(row));
+        }
+        updateSortIcons();
+    }
+
+    function compareElements(a, b) {
+        if (currentSortColumn === 'name') {
+            const valA = a.dataset.name.toLowerCase(), valB = b.dataset.name.toLowerCase();
+            return currentSortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        } else if (currentSortColumn === 'ip') {
+            const ipToNum = ip => ip.split('.').reduce((acc, o) => (acc << 8) + parseInt(o, 10), 0) >>> 0;
+            const numA = ipToNum(a.dataset.ip), numB = ipToNum(b.dataset.ip);
+            return currentSortDirection === 'asc' ? numA - numB : numB - numA;
+        } else if (currentSortColumn === 'city') {
+            const valA = (a.dataset.city || '').toLowerCase(), valB = (b.dataset.city || '').toLowerCase();
+            return currentSortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        } else if (currentSortColumn === 'traffic') {
+            const valA = parseInt(a.dataset.bytes) || 0, valB = parseInt(b.dataset.bytes) || 0;
+            return currentSortDirection === 'asc' ? valA - valB : valB - valA;
+        } else if (currentSortColumn === 'handshake') {
+            const hsA = a.dataset.lastHandshake, hsB = b.dataset.lastHandshake;
+            const valA = hsA === 'never' ? 0 : parseInt(hsA) || 0;
+            const valB = hsB === 'never' ? 0 : parseInt(hsB) || 0;
+            return currentSortDirection === 'asc' ? valA - valB : valB - valA;
+        }
+        return 0;
+    }
+
+    function updateSortIcons() {
+        document.querySelectorAll('th.sortable').forEach(th => {
+            const col = th.dataset.sort;
+            const icon = th.querySelector('i');
+            if (icon) {
+                icon.className = col === currentSortColumn
+                    ? `fas fa-sort-${currentSortDirection === 'asc' ? 'up' : 'down'} ml-1 text-primary opacity-100 text-[10px]`
+                    : 'fas fa-sort ml-1 opacity-40 text-[9px]';
             }
         });
-        
-        if (clearBtn) {
-            clearBtn.addEventListener('click', function() {
-                searchInput.value = '';
-                searchInput.dispatchEvent(new Event('input'));
-                searchInput.focus();
-            });
-        }
     }
+
+    function applyFilters() {
+        const query = searchInput ? searchInput.value.toLowerCase() : '';
+        let visibleCount = 0;
+        if (clearBtn) clearBtn.classList.toggle('hidden', !query);
+
+        const isMobile = clientCards && window.getComputedStyle(clientCards).display !== 'none';
+        const currentTime = Math.floor(Date.now() / 1000);
+
+        const filterItem = (el) => {
+            const name = el.dataset.name?.toLowerCase() || '';
+            const ip = el.dataset.ip?.toLowerCase() || '';
+            const handshakeVal = el.dataset.lastHandshake;
+            const textMatch = name.includes(query) || ip.includes(query);
+
+            let statusMatch = true;
+            if (currentStatusFilter !== 'all') {
+                const handshakeTime = parseInt(handshakeVal);
+                const isNever = !handshakeVal || handshakeVal === 'never' || isNaN(handshakeTime) || handshakeTime <= 0;
+                if (currentStatusFilter === 'never') statusMatch = isNever;
+                else if (currentStatusFilter === 'online') statusMatch = !isNever && (currentTime - handshakeTime) < 300;
+                else if (currentStatusFilter === 'offline') statusMatch = !isNever && (currentTime - handshakeTime) >= 300;
+            }
+
+            const match = textMatch && statusMatch;
+            el.style.display = match ? '' : 'none';
+            if (match) visibleCount++;
+        };
+
+        if (isMobile && clientCards) clientCards.querySelectorAll('div.client-card').forEach(filterItem);
+        else if (tbody) tbody.querySelectorAll('tr.client-row').forEach(filterItem);
+
+        if (clientCount) clientCount.textContent = visibleCount;
+
+        const noResults = document.getElementById('noSearchResults');
+        if (visibleCount === 0 && (query || currentStatusFilter !== 'all')) {
+            if (!noResults) {
+                const container = isMobile ? clientCards : (tbody ? tbody.parentElement : null);
+                if (container) {
+                    const el = document.createElement('div');
+                    el.id = 'noSearchResults';
+                    el.className = 'p-8 text-center text-base-content/40 font-medium';
+                    el.textContent = 'No matching clients found';
+                    container.appendChild(el);
+                }
+            }
+        } else if (noResults) noResults.remove();
+    }
+
+    if (searchInput) {
+        searchInput.addEventListener('input', applyFilters);
+        if (clearBtn) clearBtn.addEventListener('click', function() { searchInput.value = ''; applyFilters(); searchInput.focus(); });
+    }
+
+    // Status filter buttons
+    const statusFilterBtns = document.querySelectorAll('.status-filter-btn');
+    statusFilterBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            statusFilterBtns.forEach(b => { b.className = 'join-item status-filter-btn btn btn-xs btn-ghost'; });
+            this.className = 'join-item status-filter-btn btn btn-xs btn-active';
+            currentStatusFilter = this.dataset.status;
+            applyFilters();
+        });
+    });
+
+    // Column sort headers
+    document.querySelectorAll('th.sortable').forEach(th => {
+        th.addEventListener('click', function() {
+            const col = this.dataset.sort;
+            if (currentSortColumn === col) currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+            else { currentSortColumn = col; currentSortDirection = 'asc'; }
+            sortClients();
+        });
+    });
+
+    // AJAX polling
+    const serverId = {{ server.id }};
+
+    function formatBytes(bytes) {
+        if (bytes <= 0) return '0 MB';
+        const k = 1024, sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+        const i = Math.max(0, Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1));
+        const decimals = i === 0 ? 0 : (i === 1 ? 1 : 2);
+        return (bytes / Math.pow(k, i)).toFixed(decimals) + ' ' + sizes[i];
+    }
+
+    function formatSpeed(kbps, arrow, colorClass, labelClass) {
+        if (kbps <= 0) return `<span class="text-base-content/20">${arrow}0 Kbps</span>`;
+        if (kbps >= 1000) return `<span class="${colorClass} ${labelClass || ''}">${arrow}${(kbps / 1000).toFixed(1)} Mbps</span>`;
+        return `<span class="${colorClass}">${arrow}${Math.round(kbps)} Kbps</span>`;
+    }
+
+    async function pollClients() {
+        try {
+            const response = await fetch(`/api/servers/${serverId}/clients`);
+            if (!response.ok) return;
+            const data = await response.json();
+            if (!data.success) return;
+
+            // Update Agent Badge
+            const agentStatusBadge = document.getElementById('agentStatusBadge');
+            const agentStatusDot = document.getElementById('agentStatusDot');
+            const agentStatusText = document.getElementById('agentStatusText');
+            const installAgentBtnText = document.getElementById('installAgentBtnText');
+            if (agentStatusBadge && agentStatusDot && agentStatusText) {
+                if (data.agent_online) {
+                    agentStatusBadge.className = 'badge bg-success/10 text-success border-success/20 gap-1.5';
+                    agentStatusDot.className = 'w-1.5 h-1.5 rounded-full bg-success';
+                    agentStatusText.textContent = 'Agent Online';
+                    if (installAgentBtnText) installAgentBtnText.textContent = 'Reinstall Agent';
+                } else {
+                    agentStatusBadge.className = 'badge bg-warning/10 text-warning border-warning/20 gap-1.5';
+                    agentStatusDot.className = 'w-1.5 h-1.5 rounded-full bg-warning';
+                    agentStatusText.textContent = 'Agent Offline';
+                    if (installAgentBtnText) installAgentBtnText.textContent = 'Install Agent';
+                }
+            }
+
+            let sumOnlineClients = 0;
+            let sumTotalBytes = 0;
+            let sumSpeedUp = 0;
+            let sumSpeedDown = 0;
+            const currentTime = Math.floor(Date.now() / 1000);
+
+            data.clients.forEach(client => {
+                const rawHandshake = client.last_handshake_raw !== null ? client.last_handshake_raw : 'never';
+                const totalBytes = (client.bytes_sent || 0) + (client.bytes_received || 0);
+                sumTotalBytes += totalBytes;
+
+                // Check online status (handshake in last 5 minutes)
+                const isNever = rawHandshake === null || rawHandshake === 'never' || rawHandshake <= 0;
+                const isOnline = !isNever && (currentTime - rawHandshake) < 300;
+                if (isOnline) {
+                    sumOnlineClients++;
+                }
+
+                if (client.status === 'active') {
+                    sumSpeedUp += parseFloat(client.stats?.speed_up_raw || 0);
+                    sumSpeedDown += parseFloat(client.stats?.speed_down_raw || 0);
+                }
+
+                const row = document.querySelector(`tr.client-row[data-client-id="${client.id}"]`);
+                if (row) {
+                    row.dataset.lastHandshake = rawHandshake;
+                    row.dataset.bytes = totalBytes;
+                    row.dataset.city = client.city || '';
+                    const uploadEl = row.querySelector('.upload-bytes');
+                    const downloadEl = row.querySelector('.download-bytes');
+                    if (uploadEl) uploadEl.textContent = '↑' + formatBytes(client.bytes_sent || 0);
+                    if (downloadEl) downloadEl.textContent = '↓' + formatBytes(client.bytes_received || 0);
+                    const cityContainer = row.querySelector('.city-container');
+                    if (cityContainer) cityContainer.textContent = client.city || '—';
+                    const speedContainer = row.querySelector('.speed-container');
+                    if (speedContainer) {
+                        let speedHtml = '';
+                        if (client.status === 'active') {
+                            const upHtml = formatSpeed(client.stats?.speed_up_raw || 0, '↑', 'text-success', 'font-semibold');
+                            const downHtml = formatSpeed(client.stats?.speed_down_raw || 0, '↓', 'text-indigo-400', 'font-semibold');
+                            speedHtml = upHtml + ' ' + downHtml;
+                        }
+                        speedContainer.innerHTML = speedHtml;
+                    }
+                    const handshakeContainer = row.querySelector('.handshake-container');
+                    if (handshakeContainer) {
+                        handshakeContainer.innerHTML = client.last_handshake
+                            ? `<span class="text-xs text-base-content/50">${client.last_handshake}</span>`
+                            : '<span class="text-xs text-base-content/20">Never</span>';
+                    }
+                }
+
+                const card = document.querySelector(`.client-card[data-client-id="${client.id}"]`);
+                if (card) {
+                    card.dataset.lastHandshake = rawHandshake;
+                    card.dataset.bytes = totalBytes;
+                    card.dataset.city = client.city || '';
+                    const uploadEl = card.querySelector('.upload-bytes');
+                    const downloadEl = card.querySelector('.download-bytes');
+                    if (uploadEl) uploadEl.textContent = '↑' + formatBytes(client.bytes_sent || 0);
+                    if (downloadEl) downloadEl.textContent = '↓' + formatBytes(client.bytes_received || 0);
+                    const cardIpVal = card.querySelector('.card-ip-value');
+                    if (cardIpVal) cardIpVal.textContent = client.client_ip + (client.city ? ` (${client.city})` : '');
+                    const speedContainer = card.querySelector('.speed-container');
+                    if (speedContainer) {
+                        let speedHtml = '';
+                        if (client.status === 'active') {
+                            const upHtml = formatSpeed(client.stats?.speed_up_raw || 0, '↑', 'text-success', 'font-semibold');
+                            const downHtml = formatSpeed(client.stats?.speed_down_raw || 0, '↓', 'text-indigo-400', 'font-semibold');
+                            speedHtml = upHtml + ' ' + downHtml;
+                        }
+                        speedContainer.innerHTML = speedHtml;
+                    }
+                    const handshakeValue = card.querySelector('.handshake-value');
+                    if (handshakeValue) handshakeValue.textContent = client.last_handshake || 'Never';
+                }
+            });
+
+            // Update server-wide info
+            const serverOnlineClients = document.getElementById('serverOnlineClients');
+            const serverTotalTraffic = document.getElementById('serverTotalTraffic');
+            const serverUploadSpeed = document.getElementById('serverUploadSpeed');
+            const serverDownloadSpeed = document.getElementById('serverDownloadSpeed');
+
+            if (serverOnlineClients) {
+                serverOnlineClients.textContent = `${sumOnlineClients} / ${data.clients.length}`;
+            }
+            if (serverTotalTraffic) {
+                serverTotalTraffic.textContent = formatBytes(sumTotalBytes);
+            }
+            if (serverUploadSpeed) {
+                serverUploadSpeed.innerHTML = formatSpeed(sumSpeedUp, '↑', 'text-success', 'font-semibold');
+            }
+            if (serverDownloadSpeed) {
+                serverDownloadSpeed.innerHTML = formatSpeed(sumSpeedDown, '↓', 'text-indigo-400', 'font-semibold');
+            }
+
+            sortClients();
+            applyFilters();
+        } catch (error) { console.error('Failed to poll clients:', error); }
+    }
+
+    pollClients();
+    sortClients();
+    setInterval(pollClients, 5000);
 });
 
 async function syncAllStats(serverId) {
     const btn = document.getElementById('syncBtn');
     const originalContent = btn.innerHTML;
-    
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-sync-alt fa-spin mr-2"></i>Syncing...';
-    
     try {
         const response = await fetch(`/servers/${serverId}/sync-stats`, { method: 'POST' });
         const data = await response.json();
-        if (data.success) {
-            location.reload();
-        } else {
-            showToast('Failed to sync: ' + (data.error || 'Unknown error'), 'error');
-            btn.innerHTML = originalContent;
-            btn.disabled = false;
-        }
-    } catch (error) {
-        showToast('Error: ' + error.message, 'error');
-        btn.innerHTML = originalContent;
-        btn.disabled = false;
-    }
+        if (data.success) { location.reload(); }
+        else { showToast('Failed to sync: ' + (data.error || 'Unknown error'), 'error'); btn.innerHTML = originalContent; btn.disabled = false; }
+    } catch (error) { showToast('Error: ' + error.message, 'error'); btn.innerHTML = originalContent; btn.disabled = false; }
 }
+
+async function installAgent(serverId) {
+    const btn = document.getElementById('installAgentBtn');
+    const originalContent = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Installing...';
+    try {
+        const response = await fetch(`/servers/${serverId}/deploy-monitoring`, { method: 'POST' });
+        const data = await response.json();
+        if (data.success) { showToast('Monitoring agent installed successfully!', 'success'); setTimeout(() => location.reload(), 1500); }
+        else { showToast('Failed to install agent: ' + (data.error || 'Unknown error'), 'error'); btn.innerHTML = originalContent; btn.disabled = false; }
+    } catch (error) { showToast('Error: ' + error.message, 'error'); btn.innerHTML = originalContent; btn.disabled = false; }
+}
+</script>
+
+<!-- Delete Server Modal -->
+<dialog id="deleteServerModal" class="modal">
+    <div class="modal-box border border-base-300">
+        <div class="flex items-center gap-3 mb-5">
+            <div class="w-10 h-10 rounded-xl bg-error/15 border border-error/30 flex items-center justify-center shrink-0">
+                <i class="fas fa-trash-alt text-error"></i>
+            </div>
+            <div>
+                <h2 class="text-lg font-semibold">Delete Server</h2>
+                <p id="deleteServerModalSubtitle" class="text-sm text-base-content/50 mt-0.5"></p>
+            </div>
+        </div>
+
+        <div class="alert alert-error mb-5">
+            <i class="fas fa-exclamation-triangle shrink-0"></i>
+            <span class="text-sm">This action is <strong>irreversible</strong>. All clients and configurations associated with this server will be permanently removed.</span>
+        </div>
+
+        <form id="deleteServerForm" method="POST" action="" onsubmit="return handleDeleteServerSubmit(event)" class="space-y-4">
+            {{ csrf_field() }}
+            <input type="hidden" name="admin_password" id="deleteServerPasswordInput">
+            <div class="form-control">
+                <label class="label"><span class="label-text font-medium">Confirm with your password</span></label>
+                <label class="input input-bordered flex items-center gap-2">
+                    <i class="fas fa-lock text-base-content/30"></i>
+                    <input type="password" id="deleteServerPasswordVisible" autocomplete="current-password" placeholder="Enter your admin password" class="grow">
+                    <button type="button" onclick="toggleDeletePasswordVisibility()" class="text-base-content/30 hover:text-base-content" tabindex="-1">
+                        <i id="deletePasswordEyeIcon" class="fas fa-eye text-sm"></i>
+                    </button>
+                </label>
+            </div>
+            <div id="deleteServerError" class="hidden text-error text-sm flex items-center gap-1.5">
+                <i class="fas fa-times-circle"></i>
+                <span id="deleteServerErrorMsg">Incorrect password.</span>
+            </div>
+            <div class="flex gap-3 pt-2">
+                <button type="button" onclick="closeDeleteServerModal()" class="btn btn-ghost flex-1">Cancel</button>
+                <button type="submit" id="deleteServerSubmitBtn" class="btn btn-error flex-1 gap-2">
+                    <i class="fas fa-trash-alt"></i>Delete Server
+                </button>
+            </div>
+        </form>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button onclick="closeDeleteServerModal()">close</button></form>
+</dialog>
+
+<script>
+let _deleteServerId = null;
+
+function openDeleteServerModal(serverId, serverName) {
+    _deleteServerId = serverId;
+    document.getElementById('deleteServerModalSubtitle').textContent = 'Server: ' + serverName;
+    document.getElementById('deleteServerForm').action = '/servers/' + serverId + '/delete';
+    document.getElementById('deleteServerPasswordVisible').value = '';
+    document.getElementById('deleteServerPasswordInput').value = '';
+    document.getElementById('deleteServerError').classList.add('hidden');
+    document.getElementById('deleteServerModal').showModal();
+    setTimeout(() => document.getElementById('deleteServerPasswordVisible').focus(), 100);
+}
+
+function closeDeleteServerModal() {
+    document.getElementById('deleteServerModal').close();
+    _deleteServerId = null;
+}
+
+function toggleDeletePasswordVisibility() {
+    const input = document.getElementById('deleteServerPasswordVisible');
+    const icon  = document.getElementById('deletePasswordEyeIcon');
+    if (input.type === 'password') { input.type = 'text'; icon.className = 'fas fa-eye-slash text-sm'; }
+    else { input.type = 'password'; icon.className = 'fas fa-eye text-sm'; }
+}
+
+function handleDeleteServerSubmit(e) {
+    e.preventDefault();
+    const visibleInput = document.getElementById('deleteServerPasswordVisible');
+    const password = visibleInput.value.trim();
+    if (!password) { showDeleteServerError('Please enter your password.'); return false; }
+    document.getElementById('deleteServerPasswordInput').value = password;
+
+    const btn = document.getElementById('deleteServerSubmitBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1.5"></i>Deleting…';
+    document.getElementById('deleteServerError').classList.add('hidden');
+
+    const form = document.getElementById('deleteServerForm');
+    fetch(form.action, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+        body: new FormData(form)
+    }).then(async res => {
+        if (res.ok) { window.location.href = '/servers'; }
+        else {
+            const data = await res.json().catch(() => ({}));
+            showDeleteServerError(data.error || 'Incorrect password. Server not deleted.');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-trash-alt mr-1.5"></i>Delete Server';
+        }
+    }).catch(() => {
+        showDeleteServerError('Network error. Please try again.');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-trash-alt mr-1.5"></i>Delete Server';
+    });
+    return false;
+}
+
+function showDeleteServerError(msg) {
+    document.getElementById('deleteServerErrorMsg').textContent = msg;
+    document.getElementById('deleteServerError').classList.remove('hidden');
+}
+
+function setupTagInput(inputId, dropdownId, hiddenInputId, tagsContainerId) {
+    const input = document.getElementById(inputId);
+    const dropdown = document.getElementById(dropdownId);
+    const hiddenInput = document.getElementById(hiddenInputId);
+    const tagsContainer = document.getElementById(tagsContainerId);
+    if (!input || !dropdown || !hiddenInput || !tagsContainer) return;
+
+    let tags = [];
+    const rawVal = hiddenInput.value.trim();
+    if (rawVal) {
+        tags = rawVal.split(',').map(t => t.trim()).filter(Boolean);
+    }
+
+    function renderTags() {
+        tagsContainer.innerHTML = '';
+        if (tags.length === 0) {
+            tagsContainer.innerHTML = '<span class="text-xs text-base-content/20 italic p-1">No restrictions</span>';
+        } else {
+            tags.forEach(tag => {
+                const badge = document.createElement('span');
+                badge.className = 'badge badge-sm badge-secondary gap-1.5 font-mono pl-2 pr-1.5 py-2.5';
+                
+                const textSpan = document.createElement('span');
+                textSpan.textContent = tag;
+                badge.appendChild(textSpan);
+                
+                const closeBtn = document.createElement('button');
+                closeBtn.type = 'button';
+                closeBtn.className = 'btn btn-ghost btn-xs p-0 min-h-0 h-4 w-4 hover:bg-neutral/20 transition-colors flex items-center justify-center rounded-full';
+                closeBtn.innerHTML = '<i class="fas fa-times text-[9px]"></i>';
+                closeBtn.addEventListener('click', () => {
+                    tags = tags.filter(t => t !== tag);
+                    renderTags();
+                });
+                
+                badge.appendChild(closeBtn);
+                tagsContainer.appendChild(badge);
+            });
+        }
+        hiddenInput.value = tags.join(', ');
+    }
+
+    let searchTimer = null;
+    input.addEventListener('input', function(e) {
+        const val = e.target.value.trim();
+        clearTimeout(searchTimer);
+        if (val.length < 1) { dropdown.classList.add('hidden'); return; }
+        
+        searchTimer = setTimeout(() => {
+            fetch('/api/ext-clients/search?q=' + encodeURIComponent(val))
+                .then(r => r.json())
+                .then(data => {
+                    dropdown.innerHTML = '';
+                    const codes = data.codes || [];
+                    
+                    // Filter out already selected tags
+                    const availableCodes = codes.filter(code => !tags.includes(code));
+                    
+                    if (!availableCodes.length) {
+                        dropdown.innerHTML = '<div class="px-4 py-3 text-base-content/40 text-xs">No matches</div>';
+                        dropdown.classList.remove('hidden');
+                        return;
+                    }
+                    
+                    availableCodes.forEach(code => {
+                        const item = document.createElement('button');
+                        item.type = 'button';
+                        item.className = 'w-full text-left px-4 py-2.5 hover:bg-base-200 transition-colors font-mono text-xs flex items-center gap-2';
+                        item.innerHTML = '<i class="fas fa-user text-base-content/30"></i>' + escapeHtml(code);
+                        item.addEventListener('mousedown', () => {
+                            if (!tags.includes(code)) {
+                                tags.push(code);
+                                renderTags();
+                            }
+                            input.value = '';
+                            dropdown.classList.add('hidden');
+                        });
+                        dropdown.appendChild(item);
+                    });
+                    dropdown.classList.remove('hidden');
+                })
+                .catch(() => {
+                    dropdown.classList.add('hidden');
+                });
+        }, 200);
+    });
+
+    // Support typing arbitrary code and pressing Enter
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const val = e.target.value.trim();
+            if (val && !tags.includes(val)) {
+                tags.push(val);
+                renderTags();
+            }
+            e.target.value = '';
+            dropdown.classList.add('hidden');
+        }
+    });
+
+    // Close dropdown on focus loss or clicking outside
+    document.addEventListener('click', function(e) {
+        if (!input.closest('.relative').contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.classList.add('hidden');
+        }
+    });
+
+    // Initialize tags rendering
+    renderTags();
+}
+
+// Initialize tag inputs
+if (document.getElementById('allowedSearch')) {
+    setupTagInput('allowedSearch', 'allowedDropdown', 'allowedClientsInput', 'allowedTags');
+    setupTagInput('blockedSearch', 'blockedDropdown', 'blockedClientsInput', 'blockedTags');
+}
+
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeDeleteServerModal(); });
 </script>
 {% endblock %}

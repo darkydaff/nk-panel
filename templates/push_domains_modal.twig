@@ -1,0 +1,136 @@
+<dialog id="pushDomainsModal" class="modal">
+    <div class="modal-box max-w-md bg-base-300 border border-base-content/5 shadow-2xl">
+        <h3 class="font-bold text-lg flex items-center gap-2 mb-4">
+            <i class="fas fa-route text-secondary"></i>
+            Push Routing Groups
+        </h3>
+        
+        <p class="text-sm text-base-content/70 mb-6">Select which FQDN/domain routing groups you want to push and configure on the router.</p>
+
+        <!-- Loading indicator -->
+        <div id="pushDomainsLoading" class="flex flex-col items-center justify-center py-6 gap-3">
+            <span class="loading loading-spinner loading-md text-primary"></span>
+            <span class="text-xs text-base-content/50">Fetching routing groups...</span>
+        </div>
+
+        <!-- Groups Checkbox List -->
+        <div id="pushDomainsList" class="hidden max-h-60 overflow-y-auto space-y-2 mb-6 pr-2">
+            <!-- Dynamically populated -->
+        </div>
+
+        <!-- Modal Actions -->
+        <div class="modal-action mt-6 border-t border-base-content/5 pt-4">
+            <button onclick="executePushDomains()" id="pushDomainsSubmitBtn" class="btn btn-primary btn-sm gap-2" disabled>
+                <i class="fas fa-paper-plane"></i> Push Selected
+            </button>
+            <button onclick="closePushDomainsModal()" class="btn btn-ghost btn-sm">Close</button>
+        </div>
+    </div>
+</dialog>
+
+<script>
+let currentPushRouterId = null;
+
+function openPushDomainsModal(routerId, routerName) {
+    currentPushRouterId = routerId;
+    const modal = document.getElementById('pushDomainsModal');
+    const loading = document.getElementById('pushDomainsLoading');
+    const list = document.getElementById('pushDomainsList');
+    const submitBtn = document.getElementById('pushDomainsSubmitBtn');
+    
+    // Show modal and loading
+    loading.classList.remove('hidden');
+    list.classList.add('hidden');
+    list.innerHTML = '';
+    submitBtn.disabled = true;
+    modal.showModal();
+    
+    // Fetch groups
+    fetch('/api/routing-groups')
+        .then(r => r.json())
+        .then(data => {
+            loading.classList.add('hidden');
+            list.classList.remove('hidden');
+            
+            if (!data.groups || data.groups.length === 0) {
+                list.innerHTML = '<div class="text-center py-4 text-xs text-base-content/40 italic">No routing groups found. Create one in the "Routing Groups" section.</div>';
+                return;
+            }
+            
+            data.groups.forEach(g => {
+                const item = document.createElement('label');
+                item.className = 'label cursor-pointer justify-start gap-3 bg-base-200 border border-base-content/5 rounded-xl px-4 py-3 hover:bg-base-100 transition-colors';
+                item.innerHTML = `
+                    <input type="checkbox" name="push_group_ids" value="${g.id}" onchange="updatePushDomainsSubmitState()" class="checkbox checkbox-primary checkbox-sm">
+                    <div class="flex-grow">
+                        <span class="label-text font-bold text-sm text-base-content block">${escapeHtml(g.name)}</span>
+                        ${g.description ? `<span class="text-xs text-base-content/50 block mt-0.5">${escapeHtml(g.description)}</span>` : ''}
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+        })
+        .catch(err => {
+            loading.classList.add('hidden');
+            list.classList.remove('hidden');
+            list.innerHTML = `<div class="text-center py-4 text-xs text-error font-medium">Failed to load groups: ${escapeHtml(err.message)}</div>`;
+        });
+}
+
+function closePushDomainsModal() {
+    document.getElementById('pushDomainsModal').close();
+    currentPushRouterId = null;
+}
+
+function updatePushDomainsSubmitState() {
+    const checked = document.querySelectorAll('input[name="push_group_ids"]:checked');
+    document.getElementById('pushDomainsSubmitBtn').disabled = checked.length === 0;
+}
+
+function executePushDomains() {
+    if (!currentPushRouterId) return;
+    
+    const submitBtn = document.getElementById('pushDomainsSubmitBtn');
+    const oldText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Pushing...';
+    
+    const checked = document.querySelectorAll('input[name="push_group_ids"]:checked');
+    const groupIds = Array.from(checked).map(cb => parseInt(cb.value));
+    
+    fetch(`/api/routers/${currentPushRouterId}/push-routing-groups`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ group_ids: groupIds })
+    })
+    .then(r => r.json().then(data => ({ status: r.status, body: data })))
+    .then(res => {
+        if (res.status === 200 && res.body.success) {
+            alert(`Successfully pushed ${res.body.groups_count} routing group(s) to the router!`);
+            closePushDomainsModal();
+            window.location.reload();
+        } else {
+            alert('Push failed: ' + (res.body.error || 'Unknown error'));
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = oldText;
+        }
+    })
+    .catch(err => {
+        alert('Network error: ' + err.message);
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = oldText;
+    });
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+</script>

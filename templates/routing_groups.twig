@@ -1,0 +1,603 @@
+{% extends 'layout.twig' %}
+
+{% block title %}Routing Groups - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Breadcrumbs -->
+    <div class="text-sm breadcrumbs mb-6 text-base-content/60">
+        <ul>
+            <li><a href="/dashboard" class="hover:text-base-content transition-colors">Home</a></li>
+            <li><span class="text-base-content/80 font-medium">Routing Groups</span></li>
+        </ul>
+    </div>
+
+    <!-- Header Section -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+        <div>
+            <h1 class="text-3xl font-extrabold tracking-tight text-base-content flex items-center gap-3">
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-primary to-secondary flex items-center justify-center text-white shadow-xl shadow-primary/20">
+                    <i class="fas fa-route text-xl"></i>
+                </div>
+                <div>
+                    <span>Routing Groups</span>
+                    <span class="text-xs block font-normal text-base-content/50 mt-0.5">Manage domain and subnet lists for selective VPN routing</span>
+                </div>
+            </h1>
+        </div>
+        <div class="flex items-center gap-3">
+            <button onclick="openGroupModal()" class="btn btn-primary btn-sm rounded-xl gap-2 shadow-lg shadow-primary/25">
+                <i class="fas fa-plus-circle"></i> Create Group
+            </button>
+        </div>
+    </div>
+
+    <!-- Compute stats for display -->
+    {% set global_domains = 0 %}
+    {% set global_subnets = 0 %}
+    {% for g in groups %}
+        {% for line in g.content|split('\n') %}
+            {% set trimmed = line|trim %}
+            {% if trimmed is not empty %}
+                {% if '/' in trimmed %}
+                    {% set global_subnets = global_subnets + 1 %}
+                {% else %}
+                    {% set global_domains = global_domains + 1 %}
+                {% endif %}
+            {% endif %}
+        {% endfor %}
+    {% endfor %}
+
+    <!-- Stats Dashboard Row -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
+        <!-- Stat 1 -->
+        <div class="stats bg-base-300 border border-base-content/5 shadow-xl rounded-2xl overflow-hidden">
+            <div class="stat p-5">
+                <div class="stat-figure text-primary">
+                    <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                        <i class="fas fa-folder text-lg"></i>
+                    </div>
+                </div>
+                <div class="stat-title text-[10px] font-bold uppercase tracking-wider text-base-content/50">Total Groups</div>
+                <div class="stat-value text-3xl font-extrabold text-primary mt-1">{{ groups|length }}</div>
+                <div class="stat-desc text-xs text-base-content/40 mt-1">Configured domain lists</div>
+            </div>
+        </div>
+        <!-- Stat 2 -->
+        <div class="stats bg-base-300 border border-base-content/5 shadow-xl rounded-2xl overflow-hidden">
+            <div class="stat p-5">
+                <div class="stat-figure text-info">
+                    <div class="w-10 h-10 rounded-xl bg-info/10 flex items-center justify-center">
+                        <i class="fas fa-globe text-lg"></i>
+                    </div>
+                </div>
+                <div class="stat-title text-[10px] font-bold uppercase tracking-wider text-base-content/50">Domains</div>
+                <div class="stat-value text-3xl font-extrabold text-info mt-1">{{ global_domains }}</div>
+                <div class="stat-desc text-xs text-base-content/40 mt-1">Active domain routing rules</div>
+            </div>
+        </div>
+        <!-- Stat 3 -->
+        <div class="stats bg-base-300 border border-base-content/5 shadow-xl rounded-2xl overflow-hidden">
+            <div class="stat p-5">
+                <div class="stat-figure text-warning">
+                    <div class="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center">
+                        <i class="fas fa-network-wired text-lg"></i>
+                    </div>
+                </div>
+                <div class="stat-title text-[10px] font-bold uppercase tracking-wider text-base-content/50">Subnets (CIDR)</div>
+                <div class="stat-value text-3xl font-extrabold text-warning mt-1">{{ global_subnets }}</div>
+                <div class="stat-desc text-xs text-base-content/40 mt-1">Direct IP routing subnets</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search & Filter Header -->
+    <div class="flex flex-col sm:flex-row gap-4 items-center justify-between bg-base-300 border border-base-content/5 p-4 rounded-2xl shadow-lg mb-8">
+        <div class="relative w-full sm:max-w-md">
+            <label class="input input-bordered input-sm flex items-center gap-2 rounded-xl bg-base-200">
+                <i class="fas fa-search text-base-content/30 text-xs"></i>
+                <input type="text" id="groupSearchInput" oninput="filterGroups(this.value)" placeholder="Search groups by name or description..." class="grow text-xs">
+            </label>
+        </div>
+        <div class="flex items-center gap-2 text-xs text-base-content/50 font-mono">
+            Filtered: <span class="badge badge-primary badge-sm font-bold" id="totalGroupsCount">{{ groups|length }}</span>
+        </div>
+    </div>
+
+    <!-- Active Groups Grid -->
+    {% if groups is empty %}
+        <div class="text-center py-20 border-2 border-dashed border-base-content/10 rounded-3xl bg-base-300/40" id="emptyState">
+            <div class="w-16 h-16 rounded-full bg-base-300 flex items-center justify-center mx-auto mb-4 text-base-content/30">
+                <i class="fas fa-folder-open text-2xl"></i>
+            </div>
+            <h3 class="text-lg font-bold text-base-content/80">No routing groups found</h3>
+            <p class="text-sm text-base-content/40 mt-1">Click the "Create Group" button above to add your first domain list.</p>
+        </div>
+    {% else %}
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6" id="groupsGrid">
+            {% for g in groups %}
+                {% set domains_count = 0 %}
+                {% set subnets_count = 0 %}
+                {% set total_items = 0 %}
+                {% for line in g.content|split('\n') %}
+                    {% set trimmed = line|trim %}
+                    {% if trimmed is not empty %}
+                        {% set total_items = total_items + 1 %}
+                        {% if '/' in trimmed %}
+                            {% set subnets_count = subnets_count + 1 %}
+                        {% else %}
+                            {% set domains_count = domains_count + 1 %}
+                        {% endif %}
+                    {% endif %}
+                {% endfor %}
+
+                {# Match icon class based on group name #}
+                {% set icon_class = 'fa-solid fa-route text-neutral-content/60' %}
+                {% set name_lower = g.name|lower %}
+                {% if 'telegram' in name_lower or 'tg' in name_lower %}
+                    {% set icon_class = 'fa-brands fa-telegram text-sky-400' %}
+                {% elseif 'discord' in name_lower or 'dis' in name_lower %}
+                    {% set icon_class = 'fa-brands fa-discord text-indigo-400' %}
+                {% elseif 'youtube' in name_lower or 'yt' in name_lower %}
+                    {% set icon_class = 'fa-brands fa-youtube text-red-500' %}
+                {% elseif 'instagram' in name_lower or 'insta' in name_lower or 'facebook' in name_lower or 'fb' in name_lower %}
+                    {% set icon_class = 'fa-brands fa-instagram text-pink-500' %}
+                {% elseif 'spotify' in name_lower %}
+                    {% set icon_class = 'fa-brands fa-spotify text-emerald-400' %}
+                {% elseif 'tiktok' in name_lower %}
+                    {% set icon_class = 'fa-brands fa-tiktok text-rose-500' %}
+                {% elseif 'twitch' in name_lower %}
+                    {% set icon_class = 'fa-brands fa-twitch text-purple-400' %}
+                {% elseif 'xbox' in name_lower or 'ubi' in name_lower or 'microsoft' in name_lower %}
+                    {% set icon_class = 'fa-brands fa-xbox text-success' %}
+                {% elseif 'ai' in name_lower or 'chatgpt' in name_lower or 'openai' in name_lower or 'claude' in name_lower or 'gemini' in name_lower %}
+                    {% set icon_class = 'fa-solid fa-robot text-purple-400' %}
+                {% endif %}
+
+                <div class="card bg-base-300 border border-base-content/5 hover:border-primary/20 hover:bg-base-200/60 hover:-translate-y-1 transition-all duration-300 group shadow-lg rounded-2xl search-group-card" 
+                     data-name="{{ g.name|lower }}" data-desc="{{ g.description|lower }}">
+                    <div class="card-body p-6 flex flex-col justify-between h-full min-h-[220px]">
+                        <div>
+                            <!-- Header: Icon & Title -->
+                            <div class="flex items-center gap-3 mb-3">
+                                <div class="w-10 h-10 rounded-xl bg-base-200 flex items-center justify-center shrink-0 border border-base-content/5 group-hover:scale-110 transition-transform duration-300">
+                                    <i class="{{ icon_class }} text-lg"></i>
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <h3 class="font-bold text-base-content text-base truncate group-hover:text-primary transition-colors duration-200" title="{{ g.name }}">
+                                        {{ g.name }}
+                                    </h3>
+                                    <p class="text-[9px] text-base-content/40 font-mono tracking-wider uppercase">FQDN Group</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Description -->
+                            <p class="text-xs text-base-content/50 line-clamp-3 min-h-[48px] mb-4">
+                                {{ g.description ?: 'No description provided.' }}
+                            </p>
+                        </div>
+
+                        <div>
+                            <!-- Stats Badges & View Content Action -->
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="flex flex-wrap gap-1.5">
+                                    {% if domains_count > 0 %}
+                                        <span class="badge badge-info badge-outline font-semibold font-mono text-[10px] gap-1 px-2.5 py-2.5">
+                                            <i class="fas fa-globe text-[8px]"></i> {{ domains_count }}
+                                        </span>
+                                    {% endif %}
+                                    {% if subnets_count > 0 %}
+                                        <span class="badge badge-warning badge-outline font-semibold font-mono text-[10px] gap-1 px-2.5 py-2.5">
+                                            <i class="fas fa-network-wired text-[8px]"></i> {{ subnets_count }}
+                                        </span>
+                                    {% endif %}
+                                    {% if total_items == 0 %}
+                                        <span class="badge badge-ghost font-mono text-[10px] px-2.5 py-2.5">Empty</span>
+                                    {% endif %}
+                                </div>
+                                {% if total_items > 0 %}
+                                    <button onclick="viewGroupDetails({{ g|json_encode }})" class="btn btn-ghost btn-circle btn-xs text-base-content/40 hover:text-primary tooltip tooltip-left" data-tip="Quick View Entries">
+                                        <i class="fas fa-eye text-xs"></i>
+                                    </button>
+                                {% endif %}
+                            </div>
+
+                            <!-- Actions footer -->
+                            <div class="flex items-center justify-end gap-2 border-t border-base-content/5 pt-3">
+                                <button onclick="openGroupModal({{ g|json_encode }})" class="btn btn-ghost btn-xs text-info gap-1 normal-case hover:bg-info/10">
+                                    <i class="fas fa-edit"></i> Edit
+                                </button>
+                                <div class="divider divider-horizontal mx-0"></div>
+                                <button onclick="deleteGroup({{ g.id }}, '{{ g.name|escape('js') }}')" class="btn btn-ghost btn-xs text-error gap-1 normal-case hover:bg-error/10">
+                                    <i class="fas fa-trash-alt"></i> Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+<!-- Create / Edit Modal -->
+<dialog id="group_modal" class="modal modal-bottom sm:modal-middle">
+    <div class="modal-box bg-base-300 border border-base-content/10 rounded-2xl p-6 shadow-2xl max-w-lg w-full">
+        <h3 id="modalTitle" class="font-bold text-lg flex items-center gap-2 mb-4">
+            <i class="fas fa-plus-circle text-success"></i> Create New Group
+        </h3>
+
+        <form id="groupForm" onsubmit="saveGroup(event)" class="space-y-4">
+            <input type="hidden" id="groupId" name="id" value="">
+
+            <!-- Group Name -->
+            <div class="form-control">
+                <label class="label py-1">
+                    <span class="label-text font-bold text-xs uppercase tracking-wider text-base-content/60">Group Name</span>
+                </label>
+                <div class="relative flex items-center">
+                    <span class="absolute left-3 text-base-content/40"><i class="fas fa-tag"></i></span>
+                    <input type="text" id="groupName" name="name" required placeholder="e.g. Discord" 
+                           class="input input-bordered focus:input-primary w-full text-sm font-mono pl-9" 
+                           pattern="^[a-zA-Z0-9_\-]+$" title="Letters, numbers, dashes and underscores only.">
+                </div>
+            </div>
+
+            <!-- Description -->
+            <div class="form-control">
+                <label class="label py-1">
+                    <span class="label-text font-bold text-xs uppercase tracking-wider text-base-content/60">Description</span>
+                </label>
+                <div class="relative flex items-center">
+                    <span class="absolute left-3 text-base-content/40"><i class="fas fa-align-left"></i></span>
+                    <input type="text" id="groupDescription" name="description" placeholder="e.g. Chat application servers" 
+                           class="input input-bordered focus:input-primary w-full text-sm pl-9">
+                </div>
+            </div>
+
+            <!-- Content List -->
+            <div class="form-control">
+                <div class="flex items-center justify-between label py-1">
+                    <span class="label-text font-bold text-xs uppercase tracking-wider text-base-content/60">Domains & Subnets</span>
+                    <span id="contentCount" class="label-text-alt text-xs text-base-content/40 transition-colors duration-200">One per line</span>
+                </div>
+                <textarea id="groupContent" name="content" required rows="8" 
+                          placeholder="discord.gg&#10;discordapp.com&#10;149.154.164.0/22" 
+                          class="textarea textarea-bordered focus:textarea-primary w-full font-mono text-xs leading-relaxed resize-y"></textarea>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="modal-action flex items-center gap-2 pt-2 mt-6">
+                <button type="button" onclick="closeGroupModal()" class="btn btn-ghost btn-sm rounded-xl">Cancel</button>
+                <button type="submit" id="submitBtn" class="btn btn-primary btn-sm rounded-xl gap-2 px-6">
+                    <i class="fas fa-save"></i> Save Group
+                </button>
+            </div>
+        </form>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button onclick="closeGroupModal()">close</button>
+    </form>
+</dialog>
+
+<!-- Details / Content Viewer Modal -->
+<dialog id="details_modal" class="modal modal-bottom sm:modal-middle">
+    <div class="modal-box bg-base-300 border border-base-content/10 rounded-2xl p-6 shadow-2xl max-w-xl w-full">
+        <h3 id="detailsTitle" class="font-bold text-lg flex items-center gap-2 mb-2">
+            <i class="fas fa-folder-open text-info"></i> Group Details
+        </h3>
+        
+        <p id="detailsDesc" class="text-xs text-base-content/50 mb-6"></p>
+
+        <!-- Tabs -->
+        <div class="tabs tabs-boxed bg-base-200 mb-4 p-1 rounded-xl">
+            <button id="tabDomains" onclick="switchDetailsTab('domains')" class="tab tab-active flex-1 font-bold text-xs py-2">Domains</button>
+            <button id="tabSubnets" onclick="switchDetailsTab('subnets')" class="tab flex-1 font-bold text-xs py-2">Subnets (CIDR)</button>
+        </div>
+
+        <!-- Domains content -->
+        <div id="detailsDomainsContent" class="space-y-3">
+            <div class="relative">
+                <input type="text" id="detailsSearch" oninput="filterDetailsList(this.value)" placeholder="Search domains..." class="input input-bordered input-sm w-full rounded-xl bg-base-200 text-xs pl-8">
+                <span class="absolute left-3 top-2.5 text-base-content/30"><i class="fas fa-search text-xs"></i></span>
+            </div>
+            <div id="domainsList" class="max-h-60 overflow-y-auto flex flex-wrap gap-1.5 p-3 bg-base-200/50 rounded-xl border border-base-content/5">
+                <!-- populated dynamically -->
+            </div>
+        </div>
+
+        <!-- Subnets content -->
+        <div id="detailsSubnetsContent" class="space-y-3 hidden">
+            <div id="subnetsList" class="max-h-60 overflow-y-auto space-y-1 p-3 bg-base-200/50 rounded-xl border border-base-content/5 font-mono text-xs">
+                <!-- populated dynamically -->
+            </div>
+        </div>
+
+        <div class="modal-action mt-6">
+            <button onclick="closeDetailsModal()" class="btn btn-ghost btn-sm rounded-xl px-6">Close</button>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button onclick="closeDetailsModal()">close</button>
+    </form>
+</dialog>
+
+<script>
+function filterGroups(query) {
+    const cards = document.querySelectorAll('.search-group-card');
+    const emptyState = document.getElementById('emptyState');
+    const normalizedQuery = query.toLowerCase().trim();
+    let visibleCount = 0;
+    
+    cards.forEach(card => {
+        const name = card.getAttribute('data-name');
+        const desc = card.getAttribute('data-desc');
+        if (name.includes(normalizedQuery) || desc.includes(normalizedQuery)) {
+            card.classList.remove('hidden');
+            visibleCount++;
+        } else {
+            card.classList.add('hidden');
+        }
+    });
+    
+    document.getElementById('totalGroupsCount').textContent = visibleCount;
+    
+    if (emptyState) {
+        if (visibleCount === 0) {
+            emptyState.classList.remove('hidden');
+        } else {
+            emptyState.classList.add('hidden');
+        }
+    }
+}
+
+function openGroupModal(group = null) {
+    if (group) {
+        document.getElementById('groupId').value = group.id;
+        document.getElementById('groupName').value = group.name;
+        document.getElementById('groupDescription').value = group.description || '';
+        document.getElementById('groupContent').value = group.content || '';
+        
+        document.getElementById('modalTitle').innerHTML = '<i class="fas fa-edit text-info mr-2"></i>Edit Group';
+        document.getElementById('submitBtn').innerHTML = '<i class="fas fa-save mr-2"></i>Update Group';
+    } else {
+        document.getElementById('groupId').value = '';
+        document.getElementById('groupForm').reset();
+        
+        document.getElementById('modalTitle').innerHTML = '<i class="fas fa-plus-circle text-success mr-2"></i>Create New Group';
+        document.getElementById('submitBtn').innerHTML = '<i class="fas fa-save mr-2"></i>Save Group';
+    }
+    
+    // Trigger count refresh
+    document.getElementById('groupContent').dispatchEvent(new Event('input'));
+    document.getElementById('group_modal').showModal();
+}
+
+function closeGroupModal() {
+    document.getElementById('group_modal').close();
+}
+
+/* Details Modal Functions */
+let currentDetailsGroup = null;
+
+function viewGroupDetails(group) {
+    currentDetailsGroup = group;
+    
+    document.getElementById('detailsTitle').innerHTML = `<i class="fas fa-folder-open text-info mr-2"></i>${group.name}`;
+    document.getElementById('detailsDesc').textContent = group.description || 'No description provided.';
+    document.getElementById('detailsSearch').value = '';
+    
+    const lines = (group.content || '').split(/[\r\n,]+/);
+    const domains = [];
+    const subnets = [];
+    
+    lines.forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        if (trimmed.includes('/')) {
+            subnets.push(trimmed);
+        } else {
+            domains.push(trimmed);
+        }
+    });
+    
+    // Populate domains
+    const domainsList = document.getElementById('domainsList');
+    domainsList.innerHTML = '';
+    if (domains.length === 0) {
+        domainsList.innerHTML = '<div class="text-xs text-base-content/40 p-4 mx-auto">No domains in this group</div>';
+    } else {
+        domains.forEach(d => {
+            const span = document.createElement('span');
+            span.className = 'badge badge-sm badge-info badge-outline font-mono py-2.5 px-3 search-detail-item';
+            span.textContent = d;
+            span.setAttribute('data-search', d.toLowerCase());
+            domainsList.appendChild(span);
+        });
+    }
+    
+    // Populate subnets
+    const subnetsList = document.getElementById('subnetsList');
+    subnetsList.innerHTML = '';
+    if (subnets.length === 0) {
+        subnetsList.innerHTML = '<div class="text-xs text-base-content/40 p-4 text-center">No subnets in this group</div>';
+    } else {
+        subnets.forEach(s => {
+            const div = document.createElement('div');
+            div.className = 'flex items-center gap-2 px-3 py-1.5 hover:bg-base-100 rounded-lg text-warning search-detail-item';
+            div.setAttribute('data-search', s.toLowerCase());
+            div.innerHTML = `<i class="fas fa-network-wired text-[10px]"></i> <span>${s}</span>`;
+            subnetsList.appendChild(div);
+        });
+    }
+    
+    switchDetailsTab('domains');
+    document.getElementById('details_modal').showModal();
+}
+
+function closeDetailsModal() {
+    document.getElementById('details_modal').close();
+}
+
+function switchDetailsTab(tab) {
+    const tabDomains = document.getElementById('tabDomains');
+    const tabSubnets = document.getElementById('tabSubnets');
+    const contentDomains = document.getElementById('detailsDomainsContent');
+    const contentSubnets = document.getElementById('detailsSubnetsContent');
+    
+    if (tab === 'domains') {
+        tabDomains.classList.add('tab-active');
+        tabSubnets.classList.remove('tab-active');
+        contentDomains.classList.remove('hidden');
+        contentSubnets.classList.add('hidden');
+    } else {
+        tabDomains.classList.remove('tab-active');
+        tabSubnets.classList.add('tab-active');
+        contentDomains.classList.add('hidden');
+        contentSubnets.classList.remove('hidden');
+    }
+}
+
+function filterDetailsList(query) {
+    const normalizedQuery = query.toLowerCase().trim();
+    const items = document.querySelectorAll('.search-detail-item');
+    items.forEach(item => {
+        const val = item.getAttribute('data-search');
+        if (val.includes(normalizedQuery)) {
+            item.classList.remove('hidden');
+        } else {
+            item.classList.add('hidden');
+        }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const textarea = document.getElementById('groupContent');
+    const countLabel = document.getElementById('contentCount');
+    
+    function parseAndFormat(autoFormat = false) {
+        const text = textarea.value;
+        if (!text.trim()) {
+            countLabel.textContent = 'One per line';
+            countLabel.classList.add('text-base-content/40');
+            countLabel.classList.remove('text-success', 'font-semibold');
+            return;
+        }
+        
+        const lines = text.split(/[\r\n,]+/);
+        const seen = new Set();
+        const cleaned = [];
+        let duplicateCount = 0;
+        
+        lines.forEach(line => {
+            let item = line.trim().toLowerCase();
+            if (!item) return;
+            
+            // Clean up protocols and trailing slashes
+            item = item.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+            
+            if (item) {
+                if (seen.has(item)) {
+                    duplicateCount++;
+                } else {
+                    seen.add(item);
+                    cleaned.push(item);
+                }
+            }
+        });
+        
+        if (autoFormat && cleaned.length > 0) {
+            cleaned.sort();
+            textarea.value = cleaned.join('\n');
+            duplicateCount = 0;
+        }
+        
+        if (cleaned.length > 0) {
+            let msg = `${cleaned.length}/300 entries`;
+            if (duplicateCount > 0) {
+                msg += ` (${duplicateCount} duplicate(s) removed)`;
+            }
+            
+            countLabel.textContent = msg;
+            countLabel.classList.remove('text-base-content/40');
+            
+            const submitBtn = document.getElementById('submitBtn');
+            if (cleaned.length > 300) {
+                countLabel.textContent = `${msg} - Limit exceeded!`;
+                countLabel.classList.remove('text-success', 'font-semibold');
+                countLabel.classList.add('text-error', 'font-bold');
+                submitBtn.disabled = true;
+                submitBtn.classList.add('btn-disabled');
+            } else {
+                countLabel.classList.remove('text-error', 'font-bold');
+                countLabel.classList.add('text-success', 'font-semibold');
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('btn-disabled');
+            }
+        } else {
+            countLabel.textContent = 'One per line (max 300)';
+            countLabel.classList.add('text-base-content/40');
+            countLabel.classList.remove('text-success', 'font-semibold', 'text-error', 'font-bold');
+            
+            const submitBtn = document.getElementById('submitBtn');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('btn-disabled');
+            }
+        }
+    }
+    
+    textarea.addEventListener('input', () => parseAndFormat(false));
+    textarea.addEventListener('blur', () => parseAndFormat(true));
+    
+    parseAndFormat(false);
+});
+
+async function saveGroup(event) {
+    event.preventDefault();
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.classList.add('loading');
+    
+    const formData = new FormData(event.target);
+    
+    try {
+        const res = await fetch('/api/routing-groups', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert(data.error || 'Failed to save group');
+        }
+    } catch (e) {
+        alert('Network error: ' + e.message);
+    } finally {
+        submitBtn.classList.remove('loading');
+    }
+}
+
+async function deleteGroup(id, name) {
+    if (!confirm(`Are you sure you want to delete the routing group "${name}"?`)) {
+        return;
+    }
+    
+    try {
+        const res = await fetch(`/api/routing-groups/${id}/delete`, {
+            method: 'POST'
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert(data.error || 'Failed to delete group');
+        }
+    } catch (e) {
+        alert('Network error: ' + e.message);
+    }
+}
+</script>
+{% endblock %}

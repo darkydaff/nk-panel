@@ -1,0 +1,92 @@
+<?php
+/**
+ * CLI Backup Runner for Cron
+ */
+require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../inc/Config.php';
+require_once __DIR__ . '/../inc/DB.php';
+require_once __DIR__ . '/../inc/BackupManager.php';
+require_once __DIR__ . '/../inc/VpnServer.php';
+require_once __DIR__ . '/../inc/VpnClient.php';
+
+Config::load(__DIR__ . '/../.env');
+
+try {
+    $pdo = DB::conn();
+    
+    // Get settings schedule
+    $stmt = $pdo->prepare("SELECT value FROM settings WHERE namespace = 'backup' AND `key` = 'telegram_settings'");
+    $stmt->execute();
+    $res = $stmt->fetch();
+    
+    $schedule = 'disabled';
+    if ($res) {
+        $settings = json_decode($res['value'], true);
+        $schedule = $settings['schedule'] ?? 'disabled';
+    }
+
+    if ($schedule === 'disabled') {
+        echo "Backups are currently scheduled as disabled.\n";
+        exit(0);
+    }
+
+    // Read time conditions (e.g. run daily if 24h passed since last auto backup)
+    $stmtLast = $pdo->prepare("SELECT created_at FROM server_backups WHERE backup_type = 'automatic' AND status = 'completed' ORDER BY created_at DESC LIMIT 1");
+    $stmtLast->execute();
+    $last = $stmtLast->fetch();
+
+    $shouldRun = false;
+    if (!$last) {
+        $shouldRun = true;
+    } else {
+        $lastTime = strtotime($last['created_at']);
+        $diff = time() - $lastTime;
+        if ($schedule === 'daily' && $diff >= 86000) { // ~24h
+            $shouldRun = true;
+        } elseif ($schedule === 'weekly' && $diff >= 604000) { // ~7 days
+            $shouldRun = true;
+        }
+    }
+
+    if ($shouldRun) {
+        echo "Triggering automated backup...\n";
+        $bm = new BackupManager();
+        
+        // 1. Full Panel Backup
+        $pathPanel = $bm->createPanelBackup(0, 'automatic');
+        echo "Panel backup zip created: {$pathPanel}\n";
+        
+        $errorReasonPanel = '';
+        if ($bm->sendToTelegram($pathPanel, $errorReasonPanel)) {
+            echo "Panel backup successfully uploaded to Telegram.\n";
+        } else {
+            echo "Panel backup Telegram upload failed: " . (!empty($errorReasonPanel) ? $errorReasonPanel : "Disabled or not configured") . "\n";
+        }
+
+        // 2. Standalone External DB Backup
+        require_once __DIR__ . '/../inc/ExtDB.php';
+        if (class_exists('ExtDB') && ExtDB::isAvailable()) {
+            try {
+                $pathExt = ExtDB::createBackup(0, 'automatic');
+                echo "External DB backup created: {$pathExt}\n";
+                
+                $errorReasonExt = '';
+                if ($bm->sendToTelegram($pathExt, $errorReasonExt)) {
+                    echo "External DB backup successfully uploaded to Telegram.\n";
+                } else {
+                    echo "External DB backup Telegram upload failed: " . (!empty($errorReasonExt) ? $errorReasonExt : "Disabled or not configured") . "\n";
+                }
+            } catch (Throwable $extEx) {
+                echo "External DB backup creation failed: " . $extEx->getMessage() . "\n";
+            }
+        }
+
+        $pruned = $bm->pruneLocalBackups();
+        echo "Pruned {$pruned} expired local backups.\n";
+    } else {
+        echo "No backup is scheduled to run at this moment.\n";
+    }
+} catch (Exception $e) {
+    echo "Backup execution failed: " . $e->getMessage() . "\n";
+    exit(1);
+}

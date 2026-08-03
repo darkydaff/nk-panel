@@ -1,58 +1,72 @@
 {% extends "layout.twig" %}
 {% block title %}Deploy {{ server.name }}{% endblock %}
+
+{% block breadcrumbs %}
+    <li><a href="/dashboard" class="hover:text-base-content transition-colors">Home</a></li>
+    <li><a href="/servers" class="hover:text-base-content transition-colors">Servers</a></li>
+    <li><a href="/servers/{{ server.id }}" class="hover:text-base-content transition-colors">{{ server.name }}</a></li>
+    <li><span class="text-base-content/70">Deployment</span></li>
+{% endblock %}
+
 {% block content %}
-<div class="max-w-4xl mx-auto px-4 py-8 w-full">
+<div class="max-w-4xl mx-auto w-full">
     <div class="mb-8 text-center">
-        <div class="w-16 h-16 rounded-xl bg-slate-700 text-accent flex items-center justify-center mx-auto mb-4">
+        <div class="w-16 h-16 rounded-2xl bg-base-300 border border-base-content/10 text-primary flex items-center justify-center mx-auto mb-4">
             <i class="fas fa-rocket text-3xl"></i>
         </div>
-        <h1 class="text-2xl font-bold text-white mb-2">Deploying: {{ server.name }}</h1>
-        <p class="text-slate-400">Initializing server deployment on <code class="text-cyan-400">{{ server.host }}</code></p>
+        <h1 class="text-2xl font-bold mb-2">Deploying: {{ server.name }}</h1>
+        <p class="text-base-content/50 text-sm">
+            Initializing server deployment on
+            <code class="text-info font-mono bg-base-300 border border-base-content/10 px-2 py-0.5 rounded">{{ server.host }}</code>
+        </p>
     </div>
 
-    <div class="panel p-2 mb-6">
-        <div class="flex items-center gap-2 px-4 py-2 bg-slate-800 rounded-t-lg border-b border-slate-700">
-            <div class="w-3 h-3 rounded-full bg-red-500"></div>
-            <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
-            <div class="w-3 h-3 rounded-full bg-green-500"></div>
-            <span class="ml-3 text-xs font-mono text-slate-500">root@{{ server.host }}:~</span>
-        </div>
-        
-        <div id="deployLog" class="bg-slate-900 text-cyan-400 p-4 rounded-b-lg font-mono text-sm leading-relaxed h-[300px] overflow-y-auto">
-            <div class="text-slate-500 mb-2">amnezia@panel:~$ ./deploy.sh</div>
-            <div class="text-slate-400">Ready to deploy...</div>
+    <!-- Terminal Mockup -->
+    <div class="mockup-code mb-6 text-sm" id="deployLogWrapper">
+        <pre data-prefix="$"><code>amnezia@panel:~$ ./deploy.sh</code></pre>
+        <div id="deployLog" class="px-4 pb-4 max-h-[280px] overflow-y-auto space-y-1">
+            <div class="text-base-content/40 text-xs">Ready to deploy...</div>
         </div>
     </div>
 
     <div class="text-center">
-        <button id="deployBtn" onclick="deploy()" class="btn-primary px-8 py-3 text-base font-semibold">
+        <button id="deployBtn" onclick="deploy()" class="btn btn-primary btn-lg gap-3">
             <span id="btnText">Start Deployment</span>
-            <i id="btnSpinner" class="fas fa-spinner fa-spin ml-2 hidden"></i>
-            <i class="fas fa-rocket ml-2" id="btnIcon"></i>
+            <i id="btnSpinner" class="fas fa-spinner fa-spin hidden"></i>
+            <i class="fas fa-rocket" id="btnIcon"></i>
         </button>
     </div>
 </div>
 
 <script>
+function addLog(text, colorClass) {
+    const log = document.getElementById('deployLog');
+    const div = document.createElement('div');
+    div.className = `text-xs ${colorClass || 'text-base-content/60'}`;
+    div.textContent = text;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+}
+
 function deploy() {
     const btn = document.getElementById('deployBtn');
     const btnText = document.getElementById('btnText');
     const btnSpinner = document.getElementById('btnSpinner');
     const btnIcon = document.getElementById('btnIcon');
     const log = document.getElementById('deployLog');
-    
+
     btn.disabled = true;
     btnText.textContent = 'Deploying...';
     btnSpinner.classList.remove('hidden');
-    if(btnIcon) btnIcon.classList.add('hidden');
-    
-    log.innerHTML = '<div class="text-slate-500 mb-2">amnezia@panel:~$ ./deploy.sh</div>';
-    log.innerHTML += '<div class="text-cyan-400 mb-2">Connecting to server...</div>';
-    
-    setTimeout(() => log.innerHTML += '<div class="text-blue-400 mb-2">Installing Docker engine...</div>', 800);
-    setTimeout(() => log.innerHTML += '<div class="text-slate-400 mb-2">Building AmneziaWG from source...</div>', 1600);
-    setTimeout(() => log.innerHTML += '<div class="text-yellow-400 mb-2">Generating cryptographic keys...</div>', 2400);
-    
+    if (btnIcon) btnIcon.classList.add('hidden');
+
+    log.innerHTML = '';
+    addLog('Connecting to server...', 'text-info');
+
+    setTimeout(() => addLog('Installing Docker engine...', 'text-primary'), 800);
+    setTimeout(() => addLog('Building AmneziaWG from source...', 'text-base-content/50'), 1600);
+    setTimeout(() => addLog('Generating cryptographic keys...', 'text-warning'), 2400);
+
     fetch('/servers/{{ server.id }}/deploy', {
         method: 'POST',
         headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
@@ -67,26 +81,25 @@ function deploy() {
     })
     .then(d => {
         if (d.success) {
-            log.innerHTML += '<div class="text-cyan-400 font-bold mt-4 p-2 bg-cyan-500/10 border border-cyan-500/30 rounded">Deployment successful!</div>';
-            log.innerHTML += '<div class="text-slate-400 mt-2">VPN Port: ' + d.vpn_port + '</div>';
+            addLog('Deployment successful!', 'text-success font-bold');
+            addLog('VPN Port: ' + d.vpn_port, 'text-base-content/50');
             btnText.textContent = 'Redirecting...';
             btnSpinner.classList.add('hidden');
-            log.scrollTop = log.scrollHeight;
             setTimeout(() => window.location.href = '/servers/{{ server.id }}', 2500);
         } else {
-            log.innerHTML += '<div class="text-red-400 font-bold mt-4 p-2 bg-red-500/10 border border-red-500/30 rounded">Error: ' + (d.error || 'Unknown error') + '</div>';
+            addLog('Error: ' + (d.error || 'Unknown error'), 'text-error font-bold');
             btn.disabled = false;
             btnText.textContent = 'Retry Deployment';
             btnSpinner.classList.add('hidden');
-            if(btnIcon) btnIcon.classList.remove('hidden');
+            if (btnIcon) btnIcon.classList.remove('hidden');
         }
     })
     .catch(e => {
-        log.innerHTML += '<div class="text-red-400 font-bold mt-4 p-2 bg-red-500/10 border border-red-500/30 rounded">Network error: ' + e.message + '</div>';
+        addLog('Network error: ' + e.message, 'text-error font-bold');
         btn.disabled = false;
         btnText.textContent = 'Retry Deployment';
         btnSpinner.classList.add('hidden');
-        if(btnIcon) btnIcon.classList.remove('hidden');
+        if (btnIcon) btnIcon.classList.remove('hidden');
     });
 }
 </script>
