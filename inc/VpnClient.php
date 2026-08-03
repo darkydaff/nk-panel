@@ -213,7 +213,7 @@ class VpnClient {
         // Add AWG parameters (V1 + V2.0)
         $keys = ['Jc', 'Jmin', 'Jmax', 'S1', 'S2', 'S3', 'S4', 'H1', 'H2', 'H3', 'H4', 'I1', 'I2', 'I3', 'I4', 'I5'];
         foreach ($keys as $key) {
-            if (isset($awgParams[$key]) && !empty($awgParams[$key])) {
+            if (isset($awgParams[$key]) && $awgParams[$key] !== null && $awgParams[$key] !== '') {
                 $config .= "{$key} = {$awgParams[$key]}\n";
             }
         }

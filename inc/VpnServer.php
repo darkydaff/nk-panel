@@ -653,7 +653,7 @@ public static function getMimicryPresets(): array
 
         $kernelKeys = ['Jc', 'Jmin', 'Jmax', 'S1', 'S2', 'H1', 'H2', 'H3', 'H4'];
         foreach ($awgParams as $key => $value) {
-            if (empty($value) || $key === 'mimicry_type' || !in_array($key, $kernelKeys, true))
+            if ($value === null || $value === '' || $key === 'mimicry_type' || !in_array($key, $kernelKeys, true))
                 continue;
             if (in_array($key, ['H1', 'H2', 'H3', 'H4'], true) && is_string($value) && strpos($value, '-') !== false) {
                 $value = (int)explode('-', $value)[0];
@@ -1374,7 +1374,7 @@ BASH;
         $wgConfig .= "MTU = 1280\n";
         $kernelKeys = ['Jc', 'Jmin', 'Jmax', 'S1', 'S2', 'H1', 'H2', 'H3', 'H4'];
         foreach ($awgParams as $key => $value) {
-            if (empty($value) || $key === 'mimicry_type' || !in_array($key, $kernelKeys, true)) continue;
+            if ($value === null || $value === '' || $key === 'mimicry_type' || !in_array($key, $kernelKeys, true)) continue;
             if (in_array($key, ['H1', 'H2', 'H3', 'H4'], true) && is_string($value) && strpos($value, '-') !== false) {
                 $value = (int)explode('-', $value)[0];
             }
