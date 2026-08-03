@@ -367,6 +367,7 @@ RUN git clone --depth 1 --branch \${AMNEZIAWG_GO_REF} https://github.com/amnezia
 # Build amneziawg-tools
 RUN git clone --depth 1 --branch \${AMNEZIAWG_TOOLS_REF} https://github.com/amnezia-vpn/amneziawg-tools.git /build/amneziawg-tools && \
     cd /build/amneziawg-tools/src && \
+    sed -i '/type amneziawg/i \\tif [[ -n \$WG_QUICK_USERSPACE_IMPLEMENTATION ]]; then \$WG_QUICK_USERSPACE_IMPLEMENTATION "\$INTERFACE"; return; fi' wg-quick/linux.bash && \
     make && \
     make install PREFIX=/usr
 
@@ -408,6 +409,7 @@ echo "Container startup"
 # Wait for config if not exists yet
 for i in {1..30}; do
     if [ -f /opt/amnezia/awg/wg0.conf ]; then
+        chmod 600 /opt/amnezia/awg/wg0.conf 2>/dev/null || true
         break
     fi
     sleep 1
@@ -418,6 +420,7 @@ done
 
 # Start WireGuard
 if [ -f /opt/amnezia/awg/wg0.conf ]; then
+    chmod 600 /opt/amnezia/awg/wg0.conf 2>/dev/null || true
     export WG_QUICK_USERSPACE_IMPLEMENTATION=/usr/local/bin/amneziawg-go
     export WG_SUDO=1
     /usr/local/bin/awg-quick up /opt/amnezia/awg/wg0.conf
