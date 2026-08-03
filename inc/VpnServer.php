@@ -110,7 +110,7 @@ class VpnServer
             $this->executeCommand('mkdir -p /opt/amnezia/nk-awg-v2', true);
 
             // Reuse existing VPN port if configured, otherwise find a free UDP port
-            $vpnPort = !empty($this->data['vpn_port']) ? (int)$this->data['vpn_port'] : $this->findFreeUdpPort();
+            $vpnPort = !empty($this->data['vpn_port']) ? (int) $this->data['vpn_port'] : $this->findFreeUdpPort();
 
             // Create Dockerfile
             $this->createDockerfile();
@@ -165,7 +165,7 @@ class VpnServer
             $clientIds = $stmtC->fetchAll(PDO::FETCH_COLUMN);
             foreach ($clientIds as $cId) {
                 try {
-                    $client = new VpnClient((int)$cId);
+                    $client = new VpnClient((int) $cId);
                     $client->regenerateConfig();
                 } catch (Exception $e) {
                     error_log("Failed to regenerate config for client ID {$cId} during deploy: " . $e->getMessage());
@@ -356,7 +356,7 @@ FROM golang:alpine AS builder
 RUN apk add --no-cache git make build-base bash libmnl-dev pkgconfig
 
 ARG AMNEZIAWG_GO_REF=master
-ARG AMNEZIAWG_TOOLS_REF=v1.0.20260223
+ARG AMNEZIAWG_TOOLS_REF=61e741780e8465a67a7d7fb6cffe14a8a15d624a
 
 # Build amneziawg-go
 RUN git clone --depth 1 --branch \${AMNEZIAWG_GO_REF} https://github.com/amnezia-vpn/amneziawg-go.git /build/amneziawg-go && \
@@ -365,8 +365,10 @@ RUN git clone --depth 1 --branch \${AMNEZIAWG_GO_REF} https://github.com/amnezia
     cp amneziawg-go /usr/local/bin/
 
 # Build amneziawg-tools
-RUN git clone --depth 1 --branch \${AMNEZIAWG_TOOLS_REF} https://github.com/amnezia-vpn/amneziawg-tools.git /build/amneziawg-tools && \
-    cd /build/amneziawg-tools/src && \
+RUN git clone https://github.com/amnezia-vpn/amneziawg-tools.git /build/amneziawg-tools && \
+    cd /build/amneziawg-tools && \
+    git checkout \${AMNEZIAWG_TOOLS_REF} && \
+    cd src && \
     make && \
     make install PREFIX=/usr
 
@@ -510,7 +512,7 @@ BASH;
     /**
      * Get default mimicry presets for AWG 2.0
      */
-public static function getMimicryPresets(): array
+    public static function getMimicryPresets(): array
     {
         return [
             'none' => [],
@@ -551,9 +553,9 @@ public static function getMimicryPresets(): array
             $this->executeCommand("echo \"{$psk}\" | docker exec -i {$containerName} sh -c 'cat > /opt/amnezia/awg/wireguard_psk.key'", true);
             $this->executeCommand("docker exec -i {$containerName} sh -c 'cat /opt/amnezia/awg/server_private.key | /usr/local/bin/awg pubkey > /opt/amnezia/awg/wireguard_server_public_key.key'", true);
             $this->executeCommand("docker exec -i {$containerName} chmod 600 /opt/amnezia/awg/server_private.key /opt/amnezia/awg/wireguard_psk.key /opt/amnezia/awg/wireguard_server_public_key.key", true);
-            
+
             $pubKey = trim($this->executeCommand("docker exec -i {$containerName} cat /opt/amnezia/awg/wireguard_server_public_key.key", true));
-            
+
             // Securely clear private key from DB since it is successfully deployed
             $pdo->prepare("UPDATE vpn_servers SET server_private_key = NULL WHERE id = ?")->execute([$this->serverId]);
         } else {
@@ -561,7 +563,7 @@ public static function getMimicryPresets(): array
             $this->executeCommand("docker exec -i {$containerName} sh -c 'cd /opt/amnezia/awg && umask 077 && /usr/local/bin/awg genkey | tee server_private.key | /usr/local/bin/awg pubkey > wireguard_server_public_key.key'", true, true);
             $this->executeCommand("docker exec -i {$containerName} sh -c 'cd /opt/amnezia/awg && /usr/local/bin/awg genpsk > wireguard_psk.key'", true, true);
             $this->executeCommand("docker exec -i {$containerName} chmod 600 /opt/amnezia/awg/server_private.key /opt/amnezia/awg/wireguard_psk.key /opt/amnezia/awg/wireguard_server_public_key.key", true, true);
-            
+
             $privKey = trim($this->executeCommand("docker exec -i {$containerName} cat /opt/amnezia/awg/server_private.key", true));
             $pubKey = trim($this->executeCommand("docker exec -i {$containerName} cat /opt/amnezia/awg/wireguard_server_public_key.key", true));
             $psk = trim($this->executeCommand("docker exec -i {$containerName} cat /opt/amnezia/awg/wireguard_psk.key", true));
@@ -656,7 +658,7 @@ public static function getMimicryPresets(): array
             if ($value === null || $value === '' || $key === 'mimicry_type' || !in_array($key, $kernelKeys, true))
                 continue;
             if (in_array($key, ['H1', 'H2', 'H3', 'H4'], true) && is_string($value) && strpos($value, '-') !== false) {
-                $value = (int)explode('-', $value)[0];
+                $value = (int) explode('-', $value)[0];
             }
             $wgConfig .= "{$key} = {$value}\n";
         }
@@ -899,11 +901,11 @@ public static function getMimicryPresets(): array
             $stmtUser = $pdo->query("SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1");
             $adminId = $stmtUser->fetchColumn();
             if ($adminId) {
-                $userId = (int)$adminId;
+                $userId = (int) $adminId;
             } else {
                 $stmtUser = $pdo->query("SELECT id FROM users ORDER BY id ASC LIMIT 1");
                 $firstId = $stmtUser->fetchColumn();
-                $userId = $firstId ? (int)$firstId : 1;
+                $userId = $firstId ? (int) $firstId : 1;
             }
         }
 
@@ -1184,7 +1186,7 @@ public static function getMimicryPresets(): array
 
         $containerName = $this->data['container_name'] ?: 'nk-awg-v2';
         $token = $this->data['secret_token'] ?? null;
-        
+
         if (empty($token)) {
             // Generate token if not exists
             $token = bin2hex(random_bytes(32));
@@ -1203,7 +1205,7 @@ public static function getMimicryPresets(): array
             DELETE FROM client_metrics 
             WHERE client_id IN (SELECT id FROM vpn_clients WHERE server_id = ?)
         ")->execute([$this->serverId]);
-        
+
         $pdo->prepare("
             UPDATE vpn_clients 
             SET speed_up_kbps = 0.00, speed_down_kbps = 0.00 
@@ -1244,7 +1246,7 @@ INI;
 
         $base64Service = base64_encode($serviceContent);
         $this->executeCommand("echo '{$base64Service}' | base64 -d > /etc/systemd/system/nk-monitor.service", true);
-        
+
         // Reload systemd and start service
         $this->executeCommand("systemctl daemon-reload", true);
         $this->executeCommand("systemctl enable nk-monitor.service", true);
@@ -1260,7 +1262,7 @@ INI;
         $stmtInterval = $pdo->prepare("SELECT value FROM settings WHERE namespace = 'monitoring' AND `key` = 'interval'");
         $stmtInterval->execute();
         $intervalVal = $stmtInterval->fetchColumn();
-        $initialInterval = $intervalVal ? (int)json_decode($intervalVal, true) : 30;
+        $initialInterval = $intervalVal ? (int) json_decode($intervalVal, true) : 30;
 
         return <<<BASH
 #!/bin/bash
@@ -1346,8 +1348,10 @@ BASH;
     /**
      * Batch synchronization of all server clients from database to remote container.
      */
-    public function syncAllClientsToContainer(): bool {
-        if (!$this->data) return false;
+    public function syncAllClientsToContainer(): bool
+    {
+        if (!$this->data)
+            return false;
         $containerName = $this->data['container_name'];
         $pdo = DB::conn();
 
@@ -1374,9 +1378,10 @@ BASH;
         $wgConfig .= "MTU = 1280\n";
         $kernelKeys = ['Jc', 'Jmin', 'Jmax', 'S1', 'S2', 'H1', 'H2', 'H3', 'H4'];
         foreach ($awgParams as $key => $value) {
-            if ($value === null || $value === '' || $key === 'mimicry_type' || !in_array($key, $kernelKeys, true)) continue;
+            if ($value === null || $value === '' || $key === 'mimicry_type' || !in_array($key, $kernelKeys, true))
+                continue;
             if (in_array($key, ['H1', 'H2', 'H3', 'H4'], true) && is_string($value) && strpos($value, '-') !== false) {
-                $value = (int)explode('-', $value)[0];
+                $value = (int) explode('-', $value)[0];
             }
             $wgConfig .= "{$key} = {$value}\n";
         }
@@ -1385,8 +1390,9 @@ BASH;
         // Build Peer sections & clientsTable structure
         $clientsTable = [];
         foreach ($clients as $c) {
-            if ($c['status'] !== 'active') continue;
-            
+            if ($c['status'] !== 'active')
+                continue;
+
             $wgConfig .= "[Peer]\n";
             $wgConfig .= "PublicKey = {$c['public_key']}\n";
             if (!empty($c['preshared_key'])) {
