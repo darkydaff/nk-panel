@@ -30,7 +30,7 @@ class ExtDB
             if (isset($parsed['host'])) {
                 // Route DSN host to the proxy IP/host gateway
                 $host = $parsed['host'];
-                $sslMode = ';sslmode=disable';
+                $sslMode = ';sslmode=require';
             }
         }
 
