@@ -28,7 +28,8 @@ services:
       dockerfile: Dockerfile
     container_name: nk-panel-web
     restart: unless-stopped
-    network_mode: "host"
+    sysctls:
+      - net.ipv4.ip_nonlocal_bind=1
     depends_on:
       db:
         condition: service_healthy
@@ -37,28 +38,30 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-local}
       DEFAULT_LOCALE: ${DEFAULT_LOCALE:-en}
-      DB_HOST: 127.0.0.1
-      DB_PORT: 3308
+      DB_HOST: db
+      DB_PORT: 3306
       DB_DATABASE: ${DB_DATABASE:-amnezia_panel}
       DB_USERNAME: ${DB_USERNAME:-amnezia}
       DB_PASSWORD: ${DB_PASSWORD:-amnezia}
-      PORT: 8084
-      APACHE_PORT: 8084
     volumes:
       - ./:/var/www/html
       - /var/www/html/vendor
+    ports:
+      - "8084:80"
 
   caddy:
     image: caddy:2-alpine
     container_name: nk-panel-proxy
     restart: unless-stopped
-    network_mode: "host"
+    ports:
+      - "80:80"
+      - "443:443"
     volumes:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
       - web
-    command: caddy reverse-proxy --from core.nkhub.one --to 127.0.0.1:8084
+    command: caddy reverse-proxy --from core.nkhub.one --to web:80
 
 volumes:
   db_data:
