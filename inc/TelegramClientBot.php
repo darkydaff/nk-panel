@@ -66,7 +66,7 @@ class TelegramClientBot {
         // Handle Callback Query (Buttons)
         if ($callbackData) {
             $messageId = $update['callback_query']['message']['message_id'] ?? null;
-            self::handleCallback($chatId, $messageId, $tgId, $tgName, $callbackQueryId, $callbackData, $clients, $token);
+            self::handleCallback($chatId, $messageId, $tgId, $tgName, $callbackQueryId, $callbackData, $clients, $token, $update);
             return;
         }
 
@@ -298,7 +298,7 @@ class TelegramClientBot {
         }
     }
 
-    private static function handleCallback(int $chatId, ?int $messageId, string $tgId, string $tgName, string $callbackQueryId, string $callbackData, array $clients, string $token): void {
+    private static function handleCallback(int $chatId, ?int $messageId, string $tgId, string $tgName, string $callbackQueryId, string $callbackData, array $clients, string $token, array $update = []): void {
         $parts = explode(':', $callbackData);
         $action = $parts[0];
         $routerId = isset($parts[1]) ? (int)$parts[1] : null;
