@@ -3281,6 +3281,7 @@ Router::post('/settings/monitoring-config', function () {
 // Save Network Config
 Router::post('/settings/network-config', function () {
     requireAdmin();
+    require_once __DIR__ . '/../controllers/SettingsController.php';
     $controller = new SettingsController();
     $controller->saveNetworkConfig();
 });
