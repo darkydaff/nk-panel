@@ -22,42 +22,13 @@ class ExtDB
         $pass = Config::get('EXT_PG_PASSWORD', 'nocodb');
         $schema = Config::get('EXT_PG_SCHEMA', 'public');
 
-        // Check if outgoing proxy is set
+        // If an outgoing proxy is active, route database traffic through proxy host
         $proxy = Config::getOutgoingProxy();
         if ($proxy) {
             $parsed = parse_url($proxy);
-            $pHost = $parsed['host'] ?? null;
-            $pPort = $parsed['port'] ?? 1080;
-            $pScheme = strtolower($parsed['scheme'] ?? 'http');
-
-            if ($pHost) {
-                // Open raw stream through HTTP CONNECT or SOCKS5 proxy
-                $fp = @fsockopen($pHost, $pPort, $errno, $errstr, 5);
-                if ($fp) {
-                    if (str_starts_with($pScheme, 'socks')) {
-                        // SOCKS5 handshake
-                        fwrite($fp, "\x05\x01\x00");
-                        $authRes = fread($fp, 2);
-                        // Connect to target PG host:port
-                        $hostLen = strlen($host);
-                        $req = "\x05\x01\x00\x03" . chr($hostLen) . $host . pack('n', (int)$port);
-                        fwrite($fp, $req);
-                        $connRes = fread($fp, 10);
-                        if (isset($connRes[1]) && $connRes[1] === "\x00") {
-                            // SOCKS5 tunnel established
-                            fclose($fp);
-                        }
-                    } else {
-                        // HTTP CONNECT tunnel
-                        $connectReq = "CONNECT {$host}:{$port} HTTP/1.1\r\nHost: {$host}:{$port}\r\n\r\n";
-                        fwrite($fp, $connectReq);
-                        $res = fgets($fp);
-                        if (str_contains($res, '200')) {
-                            // HTTP CONNECT tunnel established
-                            fclose($fp);
-                        }
-                    }
-                }
+            if (isset($parsed['host'])) {
+                // Route DSN host to the proxy IP/host gateway
+                $host = $parsed['host'];
             }
         }
 
