@@ -26,10 +26,10 @@ class Config {
     return self::$env[$key] ?? $default;
   }
 
-  public static function getOutgoingIp(): ?string {
+  public static function getOutgoingProxy(): ?string {
     try {
       $pdo = DB::conn();
-      $stmt = $pdo->prepare("SELECT `value` FROM settings WHERE namespace = 'network' AND `key` = 'outgoing_bind_ip' LIMIT 1");
+      $stmt = $pdo->prepare("SELECT `value` FROM settings WHERE namespace = 'network' AND `key` = 'outgoing_proxy' LIMIT 1");
       $stmt->execute();
       $res = $stmt->fetchColumn();
       if ($res) {
@@ -39,8 +39,15 @@ class Config {
         }
       }
     } catch (\Throwable $e) {
-      // Return default if DB table/connection fails
+      // Ignore DB errors
     }
     return null;
+  }
+
+  public static function applyCurlProxy(&$ch): void {
+    $proxy = self::getOutgoingProxy();
+    if ($proxy) {
+      curl_setopt($ch, CURLOPT_PROXY, $proxy);
+    }
   }
 }

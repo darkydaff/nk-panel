@@ -3211,9 +3211,7 @@ Router::post('/settings/client-bot-webhook-set', function () {
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-    if ($outgoingIp = Config::getOutgoingIp()) {
-        curl_setopt($ch, CURLOPT_INTERFACE, $outgoingIp);
-    }
+    Config::applyCurlProxy($ch);
     $res = curl_exec($ch);
     curl_close($ch);
 
@@ -3247,9 +3245,7 @@ Router::post('/settings/client-bot-webhook-delete', function () {
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-    if ($outgoingIp = Config::getOutgoingIp()) {
-        curl_setopt($ch, CURLOPT_INTERFACE, $outgoingIp);
-    }
+    Config::applyCurlProxy($ch);
     $res = curl_exec($ch);
     curl_close($ch);
 
@@ -3311,9 +3307,7 @@ Router::post('/settings/backup-test-telegram', function () {
         'text' => $message,
         'parse_mode' => 'Markdown'
     ]);
-    if ($outgoingIp = Config::getOutgoingIp()) {
-        curl_setopt($ch, CURLOPT_INTERFACE, $outgoingIp);
-    }
+    Config::applyCurlProxy($ch);
 
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);

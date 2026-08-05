@@ -414,7 +414,7 @@
         <div class="card bg-base-200 border border-base-300 shadow overflow-hidden">
             <div class="px-5 py-4 border-b border-base-300 bg-base-300/30 flex items-center justify-between">
                 <h2 class="font-semibold flex items-center gap-2">
-                    <i class="fas fa-network-wired text-primary"></i>Network &amp; Outgoing Bind IP Settings
+                    <i class="fas fa-network-wired text-primary"></i>Network &amp; Outgoing Proxy Settings
                 </h2>
             </div>
             <div class="card-body p-5">
@@ -422,28 +422,19 @@
                     {{ csrf_field() }}
                     <div class="form-control">
                         <label class="label py-1">
-                            <span class="label-text font-medium">Outgoing Bind IP (Source IP)</span>
+                            <span class="label-text font-medium">Outgoing Proxy URL</span>
                         </label>
                         <p class="text-xs text-base-content/60 mb-2">
-                            Select or enter the specific local IP address that the panel should use for all outbound connections (communicating with Keenetic Routers, VPN Servers, Telegram API, etc.).
+                            Enter an HTTP or SOCKS5 proxy URL for all outbound connections (Telegram API, Keenetic Routers, remote nodes, etc.).
                         </p>
-                        <input type="text" name="outgoing_bind_ip" value="{{ outgoing_bind_ip }}" placeholder="e.g. 192.168.1.50 or leave empty for default" class="input input-bordered input-sm font-mono w-full">
-                        {% if server_ips is not empty %}
-                        <div class="mt-2 text-xs">
-                            <span class="text-base-content/50">Detected Local Server IPs:</span>
-                            <div class="flex flex-wrap gap-1.5 mt-1">
-                                {% for ip in server_ips %}
-                                <button type="button" onclick="document.querySelector('input[name=outgoing_bind_ip]').value='{{ ip }}'" class="badge badge-outline badge-sm cursor-pointer hover:bg-primary hover:text-primary-content transition-colors font-mono">
-                                    {{ ip }}
-                                </button>
-                                {% endfor %}
-                            </div>
-                        </div>
-                        {% endif %}
+                        <input type="text" name="outgoing_proxy" value="{{ outgoing_proxy }}" placeholder="e.g. http://127.0.0.1:8888 or socks5://user:pass@1.2.3.4:1080 (leave empty for direct connection)" class="input input-bordered input-sm font-mono w-full">
+                        <label class="label py-1">
+                            <span class="label-text-alt text-base-content/40">Supported protocols: <code>http://</code>, <code>https://</code>, <code>socks5://</code></span>
+                        </label>
                     </div>
                     <div class="pt-2">
                         <button type="submit" class="btn btn-primary btn-sm gap-2">
-                            <i class="fas fa-save"></i>Save Network Settings
+                            <i class="fas fa-save"></i>Save Proxy Settings
                         </button>
                     </div>
                 </form>

@@ -623,9 +623,7 @@ class TelegramClientBot {
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
         curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-        if ($outgoingIp = Config::getOutgoingIp()) {
-            curl_setopt($ch, CURLOPT_INTERFACE, $outgoingIp);
-        }
+        Config::applyCurlProxy($ch);
         $res = curl_exec($ch);
         curl_close($ch);
         
@@ -650,9 +648,7 @@ class TelegramClientBot {
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
         curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-        if ($outgoingIp = Config::getOutgoingIp()) {
-            curl_setopt($ch, CURLOPT_INTERFACE, $outgoingIp);
-        }
+        Config::applyCurlProxy($ch);
         curl_exec($ch);
         curl_close($ch);
     }
@@ -670,9 +666,7 @@ class TelegramClientBot {
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
         curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-        if ($outgoingIp = Config::getOutgoingIp()) {
-            curl_setopt($ch, CURLOPT_INTERFACE, $outgoingIp);
-        }
+        Config::applyCurlProxy($ch);
         curl_exec($ch);
         $res = curl_close($ch);
     }

@@ -54,10 +54,7 @@ class KeeneticRouter {
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_POSTREDIR, 7);
 
-        $outgoingIp = Config::getOutgoingIp();
-        if ($outgoingIp) {
-            curl_setopt($ch, CURLOPT_INTERFACE, $outgoingIp);
-        }
+        Config::applyCurlProxy($ch);
 
         if ($body !== null) {
             $jsonBody = is_string($body) ? $body : json_encode($body);
@@ -118,10 +115,7 @@ class KeeneticRouter {
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
 
-        $outgoingIp = Config::getOutgoingIp();
-        if ($outgoingIp) {
-            curl_setopt($ch, CURLOPT_INTERFACE, $outgoingIp);
-        }
+        Config::applyCurlProxy($ch);
 
         $headers = [];
         curl_setopt($ch, CURLOPT_HEADERFUNCTION, function($curl, $headerLine) use (&$headers) {
@@ -197,9 +191,7 @@ class KeeneticRouter {
         curl_setopt($ch2, CURLOPT_SSL_VERIFYHOST, false);
         curl_setopt($ch2, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch2, CURLOPT_POSTREDIR, 7);
-        if ($outgoingIp) {
-            curl_setopt($ch2, CURLOPT_INTERFACE, $outgoingIp);
-        }
+        Config::applyCurlProxy($ch2);
         curl_setopt($ch2, CURLOPT_HTTPHEADER, $postHeaders);
         curl_setopt($ch2, CURLOPT_POSTFIELDS, json_encode([
             'login' => $this->login,

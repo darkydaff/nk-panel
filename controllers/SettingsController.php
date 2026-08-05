@@ -64,27 +64,10 @@ class SettingsController {
         $stmtNetwork = $this->pdo->prepare("SELECT `key`, value FROM settings WHERE namespace = 'network'");
         $stmtNetwork->execute();
         $networkRows = $stmtNetwork->fetchAll(PDO::FETCH_ASSOC);
-        $outgoingBindIp = '';
+        $outgoingProxy = '';
         foreach ($networkRows as $r) {
-            if ($r['key'] === 'outgoing_bind_ip') {
-                $outgoingBindIp = json_decode($r['value'], true) ?: '';
-            }
-        }
-
-        // Get server available local IPs
-        $serverIps = [];
-        if (function_exists('net_get_interfaces')) {
-            $interfaces = @net_get_interfaces();
-            if (is_array($interfaces)) {
-                foreach ($interfaces as $ifaceName => $ifaceData) {
-                    if (isset($ifaceData['unicast']) && is_array($ifaceData['unicast'])) {
-                        foreach ($ifaceData['unicast'] as $unicast) {
-                            if (isset($unicast['address']) && filter_var($unicast['address'], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) && $unicast['address'] !== '127.0.0.1') {
-                                $serverIps[] = $unicast['address'];
-                            }
-                        }
-                    }
-                }
+            if ($r['key'] === 'outgoing_proxy') {
+                $outgoingProxy = json_decode($r['value'], true) ?: '';
             }
         }
 
@@ -97,8 +80,7 @@ class SettingsController {
             'servers' => $serversList,
             'metrics_interval' => $metricsInterval,
             'client_bot' => $clientBotSettings,
-            'outgoing_bind_ip' => $outgoingBindIp,
-            'server_ips' => array_unique($serverIps)
+            'outgoing_proxy' => $outgoingProxy
         ];
         
         // Check for session messages
@@ -335,19 +317,19 @@ class SettingsController {
             exit;
         }
 
-        $ip = trim($_POST['outgoing_bind_ip'] ?? '');
+        $proxy = trim($_POST['outgoing_proxy'] ?? '');
 
-        if ($ip !== '' && !filter_var($ip, FILTER_VALIDATE_IP)) {
-            $_SESSION['settings_error'] = 'Invalid IP address format';
+        if ($proxy !== '' && !preg_match('/^(https?|socks5|socks5h):\/\//i', $proxy)) {
+            $_SESSION['settings_error'] = 'Proxy URL must start with http://, https://, or socks5://';
             header('Location: /settings#network');
             exit;
         }
 
-        $jsonVal = json_encode($ip);
-        $stmt = $this->pdo->prepare("INSERT INTO settings (user_id, namespace, `key`, value) VALUES (NULL, 'network', 'outgoing_bind_ip', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)");
+        $jsonVal = json_encode($proxy);
+        $stmt = $this->pdo->prepare("INSERT INTO settings (user_id, namespace, `key`, value) VALUES (NULL, 'network', 'outgoing_proxy', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)");
         $stmt->execute([$jsonVal]);
 
-        $_SESSION['settings_success'] = 'Network settings updated successfully';
+        $_SESSION['settings_success'] = 'Network proxy settings updated successfully';
         header('Location: /settings#network');
         exit;
     }
