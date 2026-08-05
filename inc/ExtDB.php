@@ -24,15 +24,17 @@ class ExtDB
 
         // If an outgoing proxy is active, route database traffic through proxy host
         $proxy = Config::getOutgoingProxy();
+        $sslMode = '';
         if ($proxy) {
             $parsed = parse_url($proxy);
             if (isset($parsed['host'])) {
                 // Route DSN host to the proxy IP/host gateway
                 $host = $parsed['host'];
+                $sslMode = ';sslmode=disable';
             }
         }
 
-        $dsn = sprintf('pgsql:host=%s;port=%s;dbname=%s', $host, $port, $db);
+        $dsn = sprintf('pgsql:host=%s;port=%s;dbname=%s%s', $host, $port, $db, $sslMode);
 
         $options = [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
