@@ -73,6 +73,9 @@ chmod 666 /var/log/cron.log /var/log/metrics_monitor.log /var/log/metrics_collec
 touch /var/www/html/.env\n\
 chown www-data:www-data /var/www/html/.env\n\
 chmod 666 /var/www/html/.env\n\
+if [ -n "$APACHE_PORT" ]; then\n\
+  sed -i "s/80/$APACHE_PORT/g" /etc/apache2/ports.conf /etc/apache2/sites-available/000-default.conf\n\
+fi\n\
 service cron start\n\
 # Start metrics collector on container startup\n\
 /bin/bash /var/www/html/bin/monitor_metrics.sh\n\
