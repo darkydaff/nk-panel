@@ -22,16 +22,6 @@ class ExtDB
         $pass = Config::get('EXT_PG_PASSWORD', 'nocodb');
         $schema = Config::get('EXT_PG_SCHEMA', 'public');
 
-        // If an outgoing proxy is active, route database traffic through proxy host
-        $proxy = Config::getOutgoingProxy();
-        if ($proxy) {
-            $parsed = parse_url($proxy);
-            if (isset($parsed['host'])) {
-                // Route DSN host to the proxy IP/host gateway
-                $host = $parsed['host'];
-            }
-        }
-
         $dsn = sprintf('pgsql:host=%s;port=%s;dbname=%s', $host, $port, $db);
 
         $options = [
