@@ -25,4 +25,22 @@ class Config {
     if ($env !== false && $env !== null) return $env;
     return self::$env[$key] ?? $default;
   }
+
+  public static function getOutgoingIp(): ?string {
+    try {
+      $pdo = DB::conn();
+      $stmt = $pdo->prepare("SELECT `value` FROM settings WHERE namespace = 'network' AND `key` = 'outgoing_bind_ip' LIMIT 1");
+      $stmt->execute();
+      $res = $stmt->fetchColumn();
+      if ($res) {
+        $val = json_decode($res, true);
+        if (is_string($val) && trim($val) !== '') {
+          return trim($val);
+        }
+      }
+    } catch (\Throwable $e) {
+      // Return default if DB table/connection fails
+    }
+    return null;
+  }
 }

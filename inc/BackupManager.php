@@ -226,6 +226,9 @@ class BackupManager {
                 'document' => new CURLFile($filePath),
                 'caption' => $caption
             ]);
+            if ($outgoingIp = Config::getOutgoingIp()) {
+                curl_setopt($ch, CURLOPT_INTERFACE, $outgoingIp);
+            }
             
             $response = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);

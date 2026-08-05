@@ -3211,6 +3211,9 @@ Router::post('/settings/client-bot-webhook-set', function () {
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    if ($outgoingIp = Config::getOutgoingIp()) {
+        curl_setopt($ch, CURLOPT_INTERFACE, $outgoingIp);
+    }
     $res = curl_exec($ch);
     curl_close($ch);
 
@@ -3244,6 +3247,9 @@ Router::post('/settings/client-bot-webhook-delete', function () {
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    if ($outgoingIp = Config::getOutgoingIp()) {
+        curl_setopt($ch, CURLOPT_INTERFACE, $outgoingIp);
+    }
     $res = curl_exec($ch);
     curl_close($ch);
 
@@ -3272,6 +3278,13 @@ Router::post('/settings/monitoring-config', function () {
     redirect('/settings#monitoring');
 });
 
+// Save Network Config
+Router::post('/settings/network-config', function () {
+    requireAdmin();
+    $controller = new SettingsController();
+    $controller->saveNetworkConfig();
+});
+
 // Test Telegram Connection (AJAX)
 Router::post('/settings/backup-test-telegram', function () {
     requireAdmin();
@@ -3297,6 +3310,9 @@ Router::post('/settings/backup-test-telegram', function () {
         'text' => $message,
         'parse_mode' => 'Markdown'
     ]);
+    if ($outgoingIp = Config::getOutgoingIp()) {
+        curl_setopt($ch, CURLOPT_INTERFACE, $outgoingIp);
+    }
 
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);

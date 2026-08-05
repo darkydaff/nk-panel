@@ -41,6 +41,9 @@
         <button role="tab" onclick="showTab('monitoring')" id="tab-monitoring" class="tab gap-2">
             <i class="fas fa-chart-line"></i>Monitoring
         </button>
+        <button role="tab" onclick="showTab('network')" id="tab-network" class="tab gap-2">
+            <i class="fas fa-network-wired text-emerald-400"></i>Network
+        </button>
         <button role="tab" onclick="showTab('telegram-bot')" id="tab-telegram-bot" class="tab gap-2">
             <i class="fab fa-telegram text-sky-400"></i>Telegram Bot
         </button>
@@ -402,6 +405,48 @@
                         <li>Add a <code>tgid</code> to clients in your external database (e.g. using @userinfobot to find Telegram IDs). The changes will sync automatically.</li>
                     </ol>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Network Tab -->
+    <div id="content-network" class="hidden space-y-6">
+        <div class="card bg-base-200 border border-base-300 shadow overflow-hidden">
+            <div class="px-5 py-4 border-b border-base-300 bg-base-300/30 flex items-center justify-between">
+                <h2 class="font-semibold flex items-center gap-2">
+                    <i class="fas fa-network-wired text-primary"></i>Network &amp; Outgoing Bind IP Settings
+                </h2>
+            </div>
+            <div class="card-body p-5">
+                <form method="POST" action="/settings/network-config" class="max-w-xl space-y-4">
+                    {{ csrf_field() }}
+                    <div class="form-control">
+                        <label class="label py-1">
+                            <span class="label-text font-medium">Outgoing Bind IP (Source IP)</span>
+                        </label>
+                        <p class="text-xs text-base-content/60 mb-2">
+                            Select or enter the specific local IP address that the panel should use for all outbound connections (communicating with Keenetic Routers, VPN Servers, Telegram API, etc.).
+                        </p>
+                        <input type="text" name="outgoing_bind_ip" value="{{ outgoing_bind_ip }}" placeholder="e.g. 192.168.1.50 or leave empty for default" class="input input-bordered input-sm font-mono w-full">
+                        {% if server_ips is not empty %}
+                        <div class="mt-2 text-xs">
+                            <span class="text-base-content/50">Detected Local Server IPs:</span>
+                            <div class="flex flex-wrap gap-1.5 mt-1">
+                                {% for ip in server_ips %}
+                                <button type="button" onclick="document.querySelector('input[name=outgoing_bind_ip]').value='{{ ip }}'" class="badge badge-outline badge-sm cursor-pointer hover:bg-primary hover:text-primary-content transition-colors font-mono">
+                                    {{ ip }}
+                                </button>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="pt-2">
+                        <button type="submit" class="btn btn-primary btn-sm gap-2">
+                            <i class="fas fa-save"></i>Save Network Settings
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>

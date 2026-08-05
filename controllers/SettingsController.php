@@ -60,6 +60,34 @@ class SettingsController {
             }
         }
 
+        // Load network settings
+        $stmtNetwork = $this->pdo->prepare("SELECT `key`, value FROM settings WHERE namespace = 'network'");
+        $stmtNetwork->execute();
+        $networkRows = $stmtNetwork->fetchAll(PDO::FETCH_ASSOC);
+        $outgoingBindIp = '';
+        foreach ($networkRows as $r) {
+            if ($r['key'] === 'outgoing_bind_ip') {
+                $outgoingBindIp = json_decode($r['value'], true) ?: '';
+            }
+        }
+
+        // Get server available local IPs
+        $serverIps = [];
+        if (function_exists('net_get_interfaces')) {
+            $interfaces = @net_get_interfaces();
+            if (is_array($interfaces)) {
+                foreach ($interfaces as $ifaceName => $ifaceData) {
+                    if (isset($ifaceData['unicast']) && is_array($ifaceData['unicast'])) {
+                        foreach ($ifaceData['unicast'] as $unicast) {
+                            if (isset($unicast['address']) && filter_var($unicast['address'], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) && $unicast['address'] !== '127.0.0.1') {
+                                $serverIps[] = $unicast['address'];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         $data = [
             'translation_stats' => $stats,
             'users' => $users,
@@ -68,7 +96,9 @@ class SettingsController {
             'backups' => $backups,
             'servers' => $serversList,
             'metrics_interval' => $metricsInterval,
-            'client_bot_settings' => $clientBotSettings
+            'client_bot' => $clientBotSettings,
+            'outgoing_bind_ip' => $outgoingBindIp,
+            'server_ips' => array_unique($serverIps)
         ];
         
         // Check for session messages
@@ -290,6 +320,36 @@ class SettingsController {
             header('Location: /settings#api');
             exit;
         }
+    }
+
+    public function saveNetworkConfig() {
+        $user = Auth::user();
+        if ($user['role'] !== 'admin') {
+            http_response_code(403);
+            echo 'Forbidden';
+            return;
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            header('Location: /settings#network');
+            exit;
+        }
+
+        $ip = trim($_POST['outgoing_bind_ip'] ?? '');
+
+        if ($ip !== '' && !filter_var($ip, FILTER_VALIDATE_IP)) {
+            $_SESSION['settings_error'] = 'Invalid IP address format';
+            header('Location: /settings#network');
+            exit;
+        }
+
+        $jsonVal = json_encode($ip);
+        $stmt = $this->pdo->prepare("INSERT INTO settings (user_id, namespace, `key`, value) VALUES (NULL, 'network', 'outgoing_bind_ip', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)");
+        $stmt->execute([$jsonVal]);
+
+        $_SESSION['settings_success'] = 'Network settings updated successfully';
+        header('Location: /settings#network');
+        exit;
     }
     
     private function testOpenRouterKey($apiKey) {
