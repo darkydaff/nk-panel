@@ -43,6 +43,18 @@ class View {
     }, ['is_safe' => ['html']]);
     self::$twig->addFilter($formatBytesFilter);
 
+    // Add format_date filter (formats YYYY-MM-DD to DD.MM.YYYY)
+    $formatDateFilter = new TwigFilter('format_date', function ($dateStr) {
+      if (empty($dateStr)) return '-';
+      $str = trim((string)$dateStr);
+      if (preg_match('/^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}:\d{2}(?::\d{2})?))?$/', $str, $m)) {
+          $datePart = "{$m[3]}.{$m[2]}.{$m[1]}";
+          return !empty($m[4]) ? "{$datePart} {$m[4]}" : $datePart;
+      }
+      return $str;
+    });
+    self::$twig->addFilter($formatDateFilter);
+
     // Add flag emoji function
     $flagFunc = new TwigFunction('getFlag', function (string $langCode) {
       $flags = [

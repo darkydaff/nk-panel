@@ -161,7 +161,7 @@
                                 <span class="badge badge-ghost badge-sm">{{ t('users.role_user') }}</span>
                                 {% endif %}
                             </td>
-                            <td class="hidden md:table-cell"><span class="text-xs text-base-content/40">{{ u.created_at|date('Y-m-d') }}</span></td>
+                            <td class="hidden md:table-cell"><span class="text-xs text-base-content/40">{{ u.created_at|format_date }}</span></td>
                             <td class="text-right">
                                 {% if u.id != user.id %}
                                 <form method="POST" action="/settings/delete-user/{{ u.id }}" class="inline" onsubmit="return confirm('Delete user {{ u.name }}?')">

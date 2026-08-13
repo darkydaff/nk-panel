@@ -8,37 +8,45 @@
 
 {% block content %}
 <div class="w-full space-y-6">
-    <!-- Header -->
+    <!-- Header & Status Bar -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
             <h1 class="text-2xl font-bold flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shadow-sm">
                     <i class="fas fa-database text-lg"></i>
                 </div>
                 Internal Database Manager
             </h1>
             <p class="mt-1 text-sm text-base-content/60">
-                Direct read &amp; write access to PostgreSQL tables &mdash; full field editing (NocoDB replacement)
+                Airtable &amp; NocoDB style database manager for PostgreSQL tables &mdash; full field formatting &amp; row editing
             </p>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
             {% if is_available %}
-                <span class="badge badge-success gap-1.5 py-3 px-3">
+                <span class="badge badge-success gap-1.5 py-3 px-3 shadow-xs">
                     <span class="w-2 h-2 rounded-full bg-success-content animate-pulse"></span>
                     PostgreSQL Online
                 </span>
             {% else %}
-                <span class="badge badge-error gap-1.5 py-3 px-3">
+                <span class="badge badge-error gap-1.5 py-3 px-3 shadow-xs">
                     <i class="fas fa-exclamation-triangle text-xs"></i>
                     PostgreSQL Offline
                 </span>
             {% endif %}
+
+            {% if is_available and selected_table %}
+                <a href="/api/db-manager/export?table={{ selected_table|url_encode }}&search={{ search|url_encode }}" 
+                   class="btn btn-outline btn-sm gap-2 whitespace-nowrap" title="Export current table view to CSV">
+                    <i class="fas fa-file-export text-xs"></i> Export CSV
+                </a>
+            {% endif %}
+
             {% if user.role == 'admin' %}
             <button type="button" onclick="toggleDbEditLock()" id="btnDbEditLock" class="btn btn-warning btn-outline btn-sm gap-2 whitespace-nowrap">
                 <i class="fas fa-lock" id="dbEditLockIcon"></i><span id="dbEditLockText">Unlock Editing</span>
             </button>
-            <button onclick="openAddRowModal()" id="btnAddRowHeader" class="btn btn-primary btn-sm gap-2 hidden" {% if not is_available %}disabled{% endif %}>
+            <button onclick="openAddRowModal()" id="btnAddRowHeader" class="btn btn-primary btn-sm gap-2 hidden shadow-sm" {% if not is_available %}disabled{% endif %}>
                 <i class="fas fa-plus"></i> Add New Record
             </button>
             {% endif %}
@@ -50,20 +58,20 @@
         <i class="fas fa-exclamation-circle text-lg"></i>
         <div>
             <h3 class="font-bold">PostgreSQL Unreachable</h3>
-            <div class="text-xs opacity-90 mt-0.5">Please make sure the internal `pgdb` container is running and initialized via Settings > Import postgres_db.sql.</div>
+            <div class="text-xs opacity-90 mt-0.5">Please make sure the PostgreSQL database container is active or reachable.</div>
         </div>
     </div>
     {% endif %}
 
-    <!-- Controls Bar: Table Selector, Search, Pagination -->
-    <div class="bg-base-200 p-4 border border-base-300 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <!-- Controls Bar: Table Selector Tabs, Search & Filters -->
+    <div class="bg-base-200 p-4 border border-base-300 rounded-2xl flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-xs">
         <!-- Table Selector Tabs -->
         <div class="flex flex-wrap items-center gap-2">
-            <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Table:</span>
+            <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Tables:</span>
             <div class="flex flex-wrap gap-1">
                 {% for tbl in tables %}
-                    <a href="/db-manager?table={{ tbl|url_encode }}&search={{ search|url_encode }}" 
-                       class="btn btn-sm {% if tbl == selected_table %}btn-primary{% else %}btn-ghost{% endif %} font-mono text-xs">
+                    <a href="/db-manager?table={{ tbl|url_encode }}&search={{ search|url_encode }}&limit={{ limit }}" 
+                       class="btn btn-sm {% if tbl == selected_table %}btn-primary shadow-sm{% else %}btn-ghost{% endif %} font-mono text-xs gap-1.5">
                         <i class="fas fa-table text-xs opacity-60"></i>
                         {{ tbl }}
                     </a>
@@ -71,29 +79,71 @@
             </div>
         </div>
 
-        <!-- Search & Filter Form -->
-        <form method="GET" action="/db-manager" class="flex items-center gap-2 w-full md:w-auto">
-            <input type="hidden" name="table" value="{{ selected_table }}">
-            <div class="relative flex-1 md:w-64">
-                <input type="text" name="search" value="{{ search }}" placeholder="Search rows..." class="input input-bordered input-sm w-full pl-8 font-mono text-xs">
-                <i class="fas fa-search absolute left-2.5 top-2.5 text-xs text-base-content/40"></i>
+        <!-- Search, View Switcher & Per-Page Controls -->
+        <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+            <!-- View Mode Switcher (Grid vs Card) -->
+            <div class="join border border-base-300 bg-base-100 rounded-lg p-0.5">
+                <button type="button" onclick="switchDbView('grid')" id="btnViewGrid" class="join-item btn btn-xs btn-primary gap-1 font-sans">
+                    <i class="fas fa-th-list text-[10px]"></i> Grid View
+                </button>
+                <button type="button" onclick="switchDbView('card')" id="btnViewCard" class="join-item btn btn-xs btn-ghost gap-1 font-sans">
+                    <i class="fas fa-th-large text-[10px]"></i> Card View
+                </button>
             </div>
-            <button type="submit" class="btn btn-sm btn-ghost gap-1"><i class="fas fa-filter text-xs"></i> Filter</button>
-            {% if search %}
-                <a href="/db-manager?table={{ selected_table|url_encode }}" class="btn btn-sm btn-circle btn-ghost text-xs"><i class="fas fa-times"></i></a>
-            {% endif %}
-        </form>
+
+            <!-- Column Visibility Dropdown -->
+            <div class="dropdown dropdown-end">
+                <label tabindex="0" class="btn btn-sm btn-ghost border border-base-300 gap-1 text-xs">
+                    <i class="fas fa-columns text-xs opacity-60"></i> Columns <i class="fas fa-chevron-down text-[10px] opacity-40"></i>
+                </label>
+                <div tabindex="0" class="dropdown-content z-[100] menu p-3 shadow-xl bg-base-200 border border-base-300 rounded-xl w-56 text-xs max-h-64 overflow-y-auto space-y-1 mt-1">
+                    <div class="font-bold text-[11px] text-base-content/60 uppercase pb-1 border-b border-base-300">Toggle Visible Columns</div>
+                    {% for col in table_data.columns %}
+                        <label class="flex items-center gap-2 cursor-pointer py-1 hover:bg-base-300 rounded px-1">
+                            <input type="checkbox" checked data-col-toggle="{{ col.column_name }}" onchange="toggleColumnVisibility('{{ col.column_name }}', this.checked)" class="checkbox checkbox-xs checkbox-primary">
+                            <span class="font-mono text-xs text-base-content/80">{{ col.column_name }}</span>
+                        </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Search Form -->
+            <form method="GET" action="/db-manager" class="flex items-center gap-2 flex-1 sm:flex-none">
+                <input type="hidden" name="table" value="{{ selected_table }}">
+                <div class="relative flex-1 sm:w-56">
+                    <input type="text" name="search" value="{{ search }}" placeholder="Search rows..." class="input input-bordered input-sm w-full pl-8 font-mono text-xs">
+                    <i class="fas fa-search absolute left-2.5 top-2.5 text-xs text-base-content/40"></i>
+                    {% if search %}
+                        <a href="/db-manager?table={{ selected_table|url_encode }}&limit={{ limit }}" class="absolute right-2 top-1.5 btn btn-ghost btn-xs btn-circle text-base-content/50" title="Clear search">
+                            <i class="fas fa-times text-xs"></i>
+                        </a>
+                    {% endif %}
+                </div>
+
+                <select name="limit" onchange="this.form.submit()" class="select select-bordered select-sm font-mono text-xs">
+                    <option value="10" {% if limit == 10 %}selected{% endif %}>10 / page</option>
+                    <option value="25" {% if limit == 25 %}selected{% endif %}>25 / page</option>
+                    <option value="50" {% if limit == 50 %}selected{% endif %}>50 / page</option>
+                    <option value="100" {% if limit == 100 %}selected{% endif %}>100 / page</option>
+                </select>
+
+                <button type="submit" class="btn btn-sm btn-secondary gap-1"><i class="fas fa-filter text-xs"></i> Filter</button>
+            </form>
+        </div>
     </div>
 
-    <!-- Data Table Card -->
-    <div class="bg-base-100 border border-base-300 rounded-2xl overflow-hidden shadow-sm">
+    <!-- Data Container: Grid View (Spreadsheet Table) -->
+    <div id="dbGridView" class="bg-base-100 border border-base-300 rounded-2xl overflow-hidden shadow-sm">
         <div class="p-4 border-b border-base-300 flex items-center justify-between bg-base-200/50">
             <div class="flex items-center gap-2">
-                <i class="fas fa-layer-group text-primary text-sm"></i>
-                <span class="font-mono font-bold text-sm">{{ selected_table }}</span>
-                <span class="badge badge-neutral text-xs font-mono">{{ table_data.total|default(0) }} rows</span>
+                <i class="fas fa-table text-primary text-sm"></i>
+                <span class="font-mono font-bold text-sm text-base-content/90">{{ selected_table }}</span>
+                <span class="badge badge-neutral text-xs font-mono">{{ table_data.total|default(0) }} records</span>
+                {% if search %}
+                    <span class="badge badge-outline badge-primary text-xs font-mono">Filtered by: "{{ search }}"</span>
+                {% endif %}
             </div>
-            <span class="text-xs text-base-content/50">Double-click or use Edit action to modify any field</span>
+            <span class="text-xs text-base-content/50 hidden sm:inline">Double-click any row to inspect &mdash; Click cell values to copy</span>
         </div>
 
         <div class="overflow-x-auto max-h-[650px] overflow-y-auto">
@@ -102,50 +152,121 @@
                     <tr class="bg-base-200 text-base-content/70">
                         <th class="w-12 text-center">#</th>
                         {% for col in table_data.columns %}
-                            <th class="whitespace-nowrap">
-                                <a href="/db-manager?table={{ selected_table|url_encode }}&search={{ search|url_encode }}&sort_col={{ col.column_name }}&sort_dir={% if sort_col == col.column_name and sort_dir == 'ASC' %}DESC{% else %}ASC{% endif %}"
-                                   class="hover:text-primary transition-colors inline-flex items-center gap-1">
-                                    {{ col.column_name }}
-                                    {% if sort_col == col.column_name %}
+                            {% set colName = col.column_name %}
+                            {% set colLower = colName|lower %}
+                            {% set colTypeLower = col.data_type|lower %}
+                            <th class="whitespace-nowrap py-3" data-col="{{ colName }}">
+                                <a href="/db-manager?table={{ selected_table|url_encode }}&search={{ search|url_encode }}&limit={{ limit }}&sort_col={{ colName }}&sort_dir={% if sort_col == colName and sort_dir == 'ASC' %}DESC{% else %}ASC{% endif %}"
+                                   class="hover:text-primary transition-colors inline-flex items-center gap-1.5 group">
+                                    {% if colLower in ['code', 'client_id', 'client_code', 'ext_client_code', 'tgid', 'vless_id'] %}
+                                        <i class="fas fa-link text-[10px] text-primary/80" title="Linked record field"></i>
+                                    {% elseif colLower in ['amount', 'price', 'cost', 'total_income', 'total_expense'] or 'numeric' in colTypeLower or 'decimal' in colTypeLower %}
+                                        <i class="fas fa-coins text-[10px] text-emerald-400/80" title="Currency field"></i>
+                                    {% elseif colLower in ['date', 'start_date', 'created_at', 'updated_at'] or 'time' in colTypeLower or 'date' in colTypeLower %}
+                                        <i class="far fa-calendar-alt text-[10px] text-info/80" title="Date field"></i>
+                                    {% elseif 'bool' in colTypeLower %}
+                                        <i class="far fa-check-square text-[10px] text-warning/80" title="Boolean field"></i>
+                                    {% elseif colLower == 'id' or 'int' in colTypeLower %}
+                                        <i class="fas fa-hashtag text-[10px] text-base-content/40" title="ID / Number field"></i>
+                                    {% else %}
+                                        <i class="fas fa-font text-[10px] text-base-content/40" title="Text field"></i>
+                                    {% endif %}
+
+                                    {{ colName }}
+                                    {% if sort_col == colName %}
                                         <i class="fas fa-sort-{{ sort_dir|lower }} text-primary"></i>
+                                    {% else %}
+                                        <i class="fas fa-sort opacity-20 group-hover:opacity-60 transition-opacity"></i>
                                     {% endif %}
                                 </a>
                                 <span class="block text-[10px] text-base-content/40 font-normal font-sans">{{ col.data_type }}</span>
                             </th>
                         {% endfor %}
-                        <th class="text-right w-24">Actions</th>
+                        <th class="text-right w-24 py-3">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% if table_data.rows is empty %}
                     <tr>
                         <td colspan="{{ (table_data.columns|length) + 2 }}" class="text-center py-12 text-base-content/40 font-sans">
-                            <i class="fas fa-inbox text-3xl mb-2 block"></i>
+                            <i class="fas fa-inbox text-3xl mb-2 block text-base-content/20"></i>
                             No records found in table <span class="font-mono font-bold">{{ selected_table }}</span>
                         </td>
                     </tr>
                     {% else %}
                         {% for row in table_data.rows %}
                         {% set rowIdx = loop.index %}
-                        <tr class="hover group">
+                        <tr class="hover group cursor-pointer" ondblclick='openInspectRowModal({{ row|json_encode|e("html_attr") }})'>
                             <td class="text-center text-base-content/40 font-sans">{{ (page - 1) * limit + rowIdx }}</td>
                             {% for col in table_data.columns %}
                                 {% set colName = col.column_name %}
                                 {% set val = row[colName] %}
-                                <td class="whitespace-nowrap max-w-xs truncate font-mono" title="{{ val }}">
+                                {% set colLower = colName|lower %}
+                                <td class="whitespace-nowrap max-w-xs truncate py-2" data-col="{{ colName }}" ondblclick='event.stopPropagation(); makeCellEditable(this, {{ row|json_encode|e("html_attr") }}, "{{ colName }}")'>
                                     {% if val is null %}
-                                        <span class="text-base-content/30 italic">NULL</span>
+                                        <span class="text-base-content/20 italic font-sans text-[11px]">NULL</span>
                                     {% elseif val is same as(true) or val == 't' or val == 'true' %}
-                                        <span class="badge badge-xs badge-success">TRUE</span>
+                                        <span class="badge badge-xs badge-success gap-1 font-bold text-[10px]"><i class="fas fa-check text-[9px]"></i> TRUE</span>
                                     {% elseif val is same as(false) or val == 'f' or val == 'false' %}
-                                        <span class="badge badge-xs badge-ghost">FALSE</span>
+                                        <span class="badge badge-xs badge-ghost text-[10px]">FALSE</span>
+                                    {% elseif colLower in ['code', 'client_id', 'client_code', 'ext_client_code'] and val != '' %}
+                                        <a href="/finances?client={{ val|url_encode }}" title="Open client transactions in Finances" 
+                                           onclick="event.stopPropagation()"
+                                           class="inline-flex items-center gap-1 font-mono font-bold text-primary hover:underline bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded transition-colors text-xs">
+                                            <i class="fas fa-user-circle text-[11px] opacity-70"></i>
+                                            {{ val }}
+                                        </a>
+                                    {% elseif colLower in ['tgid', 'telegram_id'] and val != '' %}
+                                        <a href="https://t.me/{{ val|replace({'@': ''}) }}" target="_blank" title="Open Telegram profile"
+                                           onclick="event.stopPropagation()"
+                                           class="inline-flex items-center gap-1 font-mono font-medium text-info hover:underline bg-info/10 hover:bg-info/20 px-2 py-0.5 rounded transition-colors text-xs">
+                                            <i class="fab fa-telegram-plane text-[11px]"></i>
+                                            {{ val }}
+                                        </a>
+                                    {% elseif colLower in ['vless_id', 'uuid'] and val != '' %}
+                                        <span onclick="event.stopPropagation(); copyToClipboard('{{ val|e('js') }}', 'UUID copied!')" title="Click to copy full UUID: {{ val }}"
+                                              class="cursor-pointer font-mono text-[11px] text-base-content/80 inline-flex items-center gap-1 bg-base-200 hover:bg-base-300 px-1.5 py-0.5 rounded border border-base-300 transition-colors">
+                                            <span>{{ val|slice(0, 8) }}…</span>
+                                            <i class="far fa-copy text-[10px] opacity-40"></i>
+                                        </span>
+                                    {% elseif colLower in ['func', 'status', 'type'] %}
+                                        {% set valUpper = val|upper %}
+                                        {% if valUpper in ['WORK', 'INCOME', 'ACTIVE', 'COMPLETED', 'PAID'] %}
+                                            <span class="badge badge-xs badge-success gap-1 font-bold text-[10px]"><i class="fas fa-circle text-[6px]"></i>{{ val }}</span>
+                                        {% elseif valUpper in ['PAUSE', 'EXPENSE', 'EXPIRED', 'CANCELLED', 'FAILED'] %}
+                                            <span class="badge badge-xs badge-warning gap-1 font-bold text-[10px]"><i class="fas fa-circle text-[6px]"></i>{{ val }}</span>
+                                        {% else %}
+                                            <span class="badge badge-xs badge-neutral text-[10px]">{{ val }}</span>
+                                        {% endif %}
+                                    {% elseif colLower in ['amount', 'price', 'cost', 'total_income', 'total_expense'] %}
+                                        {% set numVal = val|number_format(2, '.', ' ') %}
+                                        <span class="font-mono font-semibold {% if val > 0 %}text-emerald-400{% elseif val < 0 %}text-amber-400{% endif %}">
+                                            ₽{{ numVal }}
+                                        </span>
+                                    {% elseif colLower in ['date', 'start_date', 'created_at', 'updated_at', 'last_login_at', 'last_handshake', 'last_payment_date'] and val != '' %}
+                                        <span class="inline-flex items-center gap-1 font-mono text-[11px] text-base-content/80 bg-base-200 px-1.5 py-0.5 rounded border border-base-300">
+                                            <i class="far fa-clock text-[10px] opacity-40"></i>
+                                            {{ val|format_date }}
+                                        </span>
+                                    {% elseif colLower in ['domain', 'router', 'server_ip', 'ip'] and val != '' %}
+                                        <span onclick="event.stopPropagation(); copyToClipboard('{{ val|e('js') }}', 'Copied!')" title="Click to copy: {{ val }}"
+                                              class="cursor-pointer font-mono text-xs text-info hover:underline inline-flex items-center gap-1 bg-info/5 px-1.5 py-0.5 rounded border border-info/20">
+                                            <i class="fas fa-globe text-[10px] opacity-60"></i>
+                                            {{ val }}
+                                        </span>
                                     {% else %}
-                                        {{ val }}
+                                        <span onclick="event.stopPropagation(); copyToClipboard('{{ val|e('js') }}', 'Cell copied!')" class="cursor-pointer hover:text-primary transition-colors" title="Click to copy cell value">
+                                            {{ val }}
+                                        </span>
                                     {% endif %}
                                 </td>
                             {% endfor %}
-                            <td class="text-right whitespace-nowrap">
+                            <td class="text-right whitespace-nowrap py-2" onclick="event.stopPropagation()">
                                 <div class="flex justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                                    <button onclick='openInspectRowModal({{ row|json_encode|e("html_attr") }})' 
+                                            class="btn btn-ghost btn-xs text-base-content/60 hover:text-primary hover:bg-base-200" title="Inspect row details">
+                                        <i class="fas fa-search-plus"></i>
+                                    </button>
                                     <button onclick='openEditRowModal({{ row|json_encode|e("html_attr") }})' 
                                             class="btn btn-ghost btn-xs text-info hover:bg-info/10 db-edit-btn hidden" title="Edit row">
                                         <i class="fas fa-edit"></i>
@@ -168,22 +289,105 @@
         {% if totalPages > 1 %}
         <div class="p-4 border-t border-base-300 flex flex-col sm:flex-row items-center justify-between gap-3 bg-base-200/30">
             <span class="text-xs text-base-content/60">
-                Page <span class="font-bold font-mono">{{ page }}</span> of <span class="font-bold font-mono">{{ totalPages }}</span>
+                Showing page <span class="font-bold font-mono text-primary">{{ page }}</span> of <span class="font-bold font-mono">{{ totalPages }}</span> (Total {{ table_data.total }} rows)
             </span>
 
             <div class="join">
                 {% if page > 1 %}
-                    <a href="/db-manager?table={{ selected_table|url_encode }}&search={{ search|url_encode }}&page={{ page - 1 }}" class="join-item btn btn-xs btn-ghost">« Prev</a>
+                    <a href="/db-manager?table={{ selected_table|url_encode }}&search={{ search|url_encode }}&limit={{ limit }}&page=1" class="join-item btn btn-xs btn-ghost">« First</a>
+                    <a href="/db-manager?table={{ selected_table|url_encode }}&search={{ search|url_encode }}&limit={{ limit }}&page={{ page - 1 }}" class="join-item btn btn-xs btn-ghost">‹ Prev</a>
                 {% endif %}
                 <span class="join-item btn btn-xs btn-active font-mono">{{ page }}</span>
                 {% if page < totalPages %}
-                    <a href="/db-manager?table={{ selected_table|url_encode }}&search={{ search|url_encode }}&page={{ page + 1 }}" class="join-item btn btn-xs btn-ghost">Next »</a>
+                    <a href="/db-manager?table={{ selected_table|url_encode }}&search={{ search|url_encode }}&limit={{ limit }}&page={{ page + 1 }}" class="join-item btn btn-xs btn-ghost">Next ›</a>
+                    <a href="/db-manager?table={{ selected_table|url_encode }}&search={{ search|url_encode }}&limit={{ limit }}&page={{ totalPages }}" class="join-item btn btn-xs btn-ghost">Last »</a>
                 {% endif %}
             </div>
         </div>
         {% endif %}
     </div>
+
+    <!-- Data Container: Card View (Airtable / NocoDB Gallery Cards) -->
+    <div id="dbCardView" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {% if table_data.rows is empty %}
+            <div class="col-span-full text-center py-16 bg-base-100 border border-base-300 rounded-2xl text-base-content/40 font-sans">
+                <i class="fas fa-inbox text-4xl mb-2 block text-base-content/20"></i>
+                No records found in table <span class="font-mono font-bold">{{ selected_table }}</span>
+            </div>
+        {% else %}
+            {% for row in table_data.rows %}
+                {% set mainKey = row.Code|default(row.id|default(row.name|default(loop.index))) %}
+                <div class="bg-base-100 border border-base-300 rounded-2xl p-4 shadow-xs hover:border-primary/40 transition-all flex flex-col justify-between space-y-3 group">
+                    <div class="flex items-center justify-between border-b border-base-300 pb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-primary"></span>
+                            <span class="font-mono font-bold text-sm text-primary">#{{ mainKey }}</span>
+                        </div>
+                        <button onclick='openInspectRowModal({{ row|json_encode|e("html_attr") }})' class="btn btn-ghost btn-xs gap-1 text-xs">
+                            <i class="fas fa-search-plus"></i> Inspect
+                        </button>
+                    </div>
+
+                    <div class="space-y-2 font-mono text-xs py-1">
+                        {% for col in table_data.columns %}
+                            {% set colName = col.column_name %}
+                            {% set val = row[colName] %}
+                            {% set colLower = colName|lower %}
+                            <div class="flex items-center justify-between gap-2 border-b border-base-200/50 pb-1.5 last:border-0" data-col="{{ colName }}">
+                                <span class="text-base-content/50 text-[11px] font-sans shrink-0">{{ colName }}:</span>
+                                <div class="truncate text-right">
+                                    {% if val is null %}
+                                        <span class="text-base-content/20 italic font-sans text-[11px]">NULL</span>
+                                    {% elseif colLower in ['code', 'client_id', 'client_code'] and val != '' %}
+                                        <a href="/finances?client={{ val|url_encode }}" class="font-bold text-primary hover:underline">{{ val }}</a>
+                                    {% elseif colLower in ['func', 'status', 'type'] %}
+                                        <span class="badge badge-xs badge-outline font-bold text-[10px]">{{ val }}</span>
+                                    {% else %}
+                                        <span class="text-base-content/90">{{ val }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="flex justify-end gap-1 pt-2 border-t border-base-300">
+                        <button onclick='openEditRowModal({{ row|json_encode|e("html_attr") }})' 
+                                class="btn btn-ghost btn-xs text-info db-edit-btn hidden">
+                            <i class="fas fa-edit"></i> Edit
+                        </button>
+                        <button onclick='confirmDeleteRow({{ row|json_encode|e("html_attr") }})' 
+                                class="btn btn-ghost btn-xs text-error db-edit-btn hidden">
+                            <i class="fas fa-trash-alt"></i> Delete
+                        </button>
+                    </div>
+                </div>
+            {% endfor %}
+        {% endif %}
+    </div>
 </div>
+
+<!-- Inspect Row Modal -->
+<dialog id="inspectRowModal" class="modal">
+    <div class="modal-box max-w-3xl bg-base-100 border border-base-300 rounded-2xl shadow-2xl">
+        <h3 class="font-bold text-lg flex items-center justify-between border-b border-base-300 pb-3">
+            <span class="flex items-center gap-2">
+                <i class="fas fa-binoculars text-primary"></i> Row Inspector &mdash; <span class="font-mono text-primary">{{ selected_table }}</span>
+            </span>
+            <button type="button" onclick="copyActiveRowJson()" class="btn btn-xs btn-outline gap-1 font-mono">
+                <i class="far fa-copy text-xs"></i> Copy JSON
+            </button>
+        </h3>
+        
+        <div id="inspectContent" class="py-4 max-h-[60vh] overflow-y-auto space-y-2 font-mono text-xs">
+            <!-- Dynamically populated -->
+        </div>
+
+        <div class="modal-action border-t border-base-300 pt-3">
+            <button type="button" onclick="document.getElementById('inspectRowModal').close()" class="btn btn-ghost btn-sm">Close</button>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
 
 <!-- Add Row Modal -->
 <dialog id="addRowModal" class="modal">
@@ -241,9 +445,207 @@
     <form method="dialog" class="modal-backdrop"><button>close</button></form>
 </dialog>
 
+<!-- Toast Container for Notifications -->
+<div id="toastContainer" class="toast toast-bottom toast-end z-[9999] p-4 pointer-events-none"></div>
+
 <script>
 let currentColumns = {{ table_data.columns|json_encode|raw }};
 let selectedTable = "{{ selected_table }}";
+let activeInspectRow = null;
+
+function switchDbView(mode) {
+    const gridView = document.getElementById('dbGridView');
+    const cardView = document.getElementById('dbCardView');
+    const btnGrid = document.getElementById('btnViewGrid');
+    const btnCard = document.getElementById('btnViewCard');
+
+    if (mode === 'card') {
+        gridView.classList.add('hidden');
+        cardView.classList.remove('hidden');
+        btnGrid.classList.remove('btn-active', 'btn-primary');
+        btnGrid.classList.add('btn-ghost');
+        btnCard.classList.add('btn-active', 'btn-primary');
+        btnCard.classList.remove('btn-ghost');
+    } else {
+        cardView.classList.add('hidden');
+        gridView.classList.remove('hidden');
+        btnCard.classList.remove('btn-active', 'btn-primary');
+        btnCard.classList.add('btn-ghost');
+        btnGrid.classList.add('btn-active', 'btn-primary');
+        btnGrid.classList.remove('btn-ghost');
+    }
+}
+
+function toggleColumnVisibility(colName, isVisible) {
+    const cells = document.querySelectorAll(`[data-col="${colName}"]`);
+    cells.forEach(el => {
+        if (isVisible) el.classList.remove('hidden');
+        else el.classList.add('hidden');
+    });
+}
+
+function makeCellEditable(cellEl, rowData, colName) {
+    if (!isDbEditingUnlocked) {
+        openInspectRowModal(rowData);
+        return;
+    }
+    if (cellEl.dataset.editing === 'true') return;
+    cellEl.dataset.editing = 'true';
+
+    const origVal = rowData[colName] !== null ? String(rowData[colName]) : '';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = origVal;
+    input.className = 'input input-xs input-primary w-full font-mono text-xs';
+
+    const origContent = cellEl.innerHTML;
+    cellEl.innerHTML = '';
+    cellEl.appendChild(input);
+    input.focus();
+    input.select();
+
+    async function saveCell() {
+        const newVal = input.value.trim();
+        if (newVal === origVal) {
+            cellEl.innerHTML = origContent;
+            delete cellEl.dataset.editing;
+            return;
+        }
+
+        let pk = {};
+        if (rowData.hasOwnProperty('id') && rowData.id !== null) {
+            pk = { id: rowData.id };
+        } else if (rowData.hasOwnProperty('Code') && rowData.Code !== null) {
+            pk = { Code: rowData.Code };
+        } else if (currentColumns.length > 0) {
+            const firstCol = currentColumns[0].column_name;
+            pk[firstCol] = rowData[firstCol];
+        }
+
+        const updates = {};
+        updates[colName] = newVal;
+
+        try {
+            const res = await fetch('/api/db-manager/row-update', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    table: selectedTable,
+                    pk: pk,
+                    updates: updates
+                })
+            });
+            const json = await res.json();
+            if (json.success) {
+                showToast(`Updated ${colName} successfully!`);
+                rowData[colName] = newVal;
+                setTimeout(() => window.location.reload(), 400);
+            } else {
+                showToast('Update failed: ' + (json.error || 'Unknown error'), 'error');
+                cellEl.innerHTML = origContent;
+                delete cellEl.dataset.editing;
+            }
+        } catch (e) {
+            showToast('Error: ' + e.message, 'error');
+            cellEl.innerHTML = origContent;
+            delete cellEl.dataset.editing;
+        }
+    }
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            saveCell();
+        } else if (e.key === 'Escape') {
+            cellEl.innerHTML = origContent;
+            delete cellEl.dataset.editing;
+        }
+    });
+
+    input.addEventListener('blur', () => {
+        if (cellEl.dataset.editing === 'true') {
+            saveCell();
+        }
+    });
+}
+
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+    const toast = document.createElement('div');
+    const bgClass = type === 'error' ? 'alert-error' : type === 'warning' ? 'alert-warning' : 'alert-success';
+    const icon = type === 'error' ? 'fa-exclamation-triangle' : 'fa-check-circle';
+    toast.className = `alert ${bgClass} shadow-xl text-xs font-sans py-2.5 px-4 flex items-center gap-2 rounded-xl text-white pointer-events-auto transition-all transform duration-300 translate-y-2 opacity-0`;
+    toast.innerHTML = `<i class="fas ${icon}"></i> <span>${escapeHtml(message)}</span>`;
+    container.appendChild(toast);
+
+    requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+    });
+
+    setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+    }, 2800);
+}
+
+function copyToClipboard(text, noticeMsg = 'Copied to clipboard!') {
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+        showToast(noticeMsg);
+    }).catch(() => {
+        showToast('Failed to copy', 'error');
+    });
+}
+
+function formatDateUser(dateStr) {
+    if (!dateStr) return '-';
+    const str = String(dateStr).trim();
+    const match = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}:\d{2}(?::\d{2})?))?/);
+    if (match) {
+        const [, y, m, d, time] = match;
+        return `${d}.${m}.${y}` + (time ? ` ${time}` : '');
+    }
+    return str;
+}
+
+function openInspectRowModal(rowData) {
+    activeInspectRow = rowData;
+    const container = document.getElementById('inspectContent');
+    container.innerHTML = '';
+
+    Object.keys(rowData).forEach(col => {
+        const val = rowData[col];
+        const colLower = col.toLowerCase();
+        let valStr = val !== null ? String(val) : 'NULL';
+        if (val !== null && ['date', 'start_date', 'created_at', 'updated_at', 'last_login_at', 'last_handshake', 'last_payment_date', 'expiry_date'].includes(colLower)) {
+            valStr = formatDateUser(valStr);
+        }
+        const isNull = val === null;
+
+        const item = document.createElement('div');
+        item.className = 'flex flex-col sm:flex-row sm:items-center justify-between p-2.5 bg-base-200/60 rounded-xl border border-base-300/50 gap-2';
+        item.innerHTML = `
+            <span class="font-bold text-primary text-xs shrink-0">${escapeHtml(col)}:</span>
+            <div class="flex items-center gap-2 overflow-hidden">
+                <span class="${isNull ? 'text-base-content/20 italic' : 'text-base-content/90'} truncate" title="${escapeHtml(valStr)}">${escapeHtml(valStr)}</span>
+                ${!isNull ? `<button type="button" onclick="copyToClipboard('${escapeHtml(valStr).replace(/'/g, "\\'")}')" class="btn btn-ghost btn-xs text-base-content/40 hover:text-primary"><i class="far fa-copy"></i></button>` : ''}
+            </div>
+        `;
+        container.appendChild(item);
+    });
+
+    document.getElementById('inspectRowModal').showModal();
+}
+
+function copyActiveRowJson() {
+    if (activeInspectRow) {
+        copyToClipboard(JSON.stringify(activeInspectRow, null, 2), 'Row JSON copied!');
+    }
+}
 
 function openAddRowModal() {
     document.getElementById('addRowForm').reset();
@@ -275,11 +677,11 @@ function openEditRowModal(rowData) {
         div.innerHTML = `
             <label class="label py-1">
                 <span class="label-text text-xs font-mono font-bold ${isPk ? 'text-primary' : ''}">
-                    ${colName} ${isPk ? '(PK)' : ''}
+                    ${escapeHtml(colName)} ${isPk ? '(PK)' : ''}
                 </span>
-                <span class="label-text-alt text-[10px] text-base-content/40">${col.data_type}</span>
+                <span class="label-text-alt text-[10px] text-base-content/40">${escapeHtml(col.data_type)}</span>
             </label>
-            <input type="text" name="updates[${colName}]" value="${escapeHtml(String(val))}" 
+            <input type="text" name="updates[${escapeHtml(colName)}]" value="${escapeHtml(String(val))}" 
                    class="input input-bordered input-sm w-full font-mono text-xs ${isPk ? 'bg-base-200' : ''}">
         `;
         container.appendChild(div);
@@ -289,7 +691,8 @@ function openEditRowModal(rowData) {
 }
 
 function escapeHtml(str) {
-    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 async function submitAddRow(e) {
@@ -322,12 +725,13 @@ async function submitAddRow(e) {
         });
         const json = await res.json();
         if (json.success) {
-            window.location.reload();
+            showToast('Record inserted successfully!');
+            setTimeout(() => window.location.reload(), 600);
         } else {
-            alert('Error: ' + (json.error || 'Failed to insert row'));
+            showToast('Error: ' + (json.error || 'Failed to insert row'), 'error');
         }
     } catch (err) {
-        alert('Network Error: ' + err.message);
+        showToast('Network Error: ' + err.message, 'error');
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-save"></i> Save Record';
@@ -365,12 +769,13 @@ async function submitEditRow(e) {
         });
         const json = await res.json();
         if (json.success) {
-            window.location.reload();
+            showToast('Record updated successfully!');
+            setTimeout(() => window.location.reload(), 600);
         } else {
-            alert('Error: ' + (json.error || 'Failed to update row'));
+            showToast('Error: ' + (json.error || 'Failed to update row'), 'error');
         }
     } catch (err) {
-        alert('Network Error: ' + err.message);
+        showToast('Network Error: ' + err.message, 'error');
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-check"></i> Update Record';
@@ -406,12 +811,13 @@ async function confirmDeleteRow(rowData) {
         });
         const json = await res.json();
         if (json.success) {
-            window.location.reload();
+            showToast('Row deleted successfully');
+            setTimeout(() => window.location.reload(), 600);
         } else {
-            alert('Error: ' + (json.error || 'Failed to delete row'));
+            showToast('Error: ' + (json.error || 'Failed to delete row'), 'error');
         }
     } catch (err) {
-        alert('Network Error: ' + err.message);
+        showToast('Network Error: ' + err.message, 'error');
     }
 }
 

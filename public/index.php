@@ -134,7 +134,10 @@ function isJsonRequest(): bool
 {
     $accept = $_SERVER['HTTP_ACCEPT'] ?? '';
     $requestedWith = strtolower($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '');
-    return stripos($accept, 'application/json') !== false || $requestedWith === 'xmlhttprequest';
+    $requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?? '';
+    return stripos($accept, 'application/json') !== false
+        || $requestedWith === 'xmlhttprequest'
+        || str_starts_with($requestUri, '/api/');
 }
 
 // Global CSRF Validation Middleware for state-changing requests
@@ -197,9 +200,24 @@ function requireAuth(): void
 // Helper function to require admin
 function requireAdmin(): void
 {
-    requireAuth();
-    if (!Auth::isAdmin()) {
+    $user = getAuthUser();
+    if ($user === null) {
+        if (isJsonRequest()) {
+            http_response_code(401);
+            header('Content-Type: application/json');
+            echo json_encode(['error' => 'Authentication required']);
+            exit;
+        }
+        redirect('/login');
+        exit;
+    }
+    if (($user['role'] ?? '') !== 'admin') {
         http_response_code(403);
+        if (isJsonRequest()) {
+            header('Content-Type: application/json');
+            echo json_encode(['error' => 'Forbidden: Admin access required']);
+            exit;
+        }
         echo 'Forbidden: Admin access required';
         exit;
     }
@@ -1269,7 +1287,7 @@ Router::get('/clients', function () {
     ]);
 });
 
-// API: Autocomplete client codes from local cached MySQL table
+// API: Autocomplete client codes from local cached MySQL table or external Postgres
 Router::get('/api/ext-clients/search', function () {
     requireAuth();
     header('Content-Type: application/json');
@@ -1279,12 +1297,19 @@ Router::get('/api/ext-clients/search', function () {
 
     try {
         $pdo = DB::conn();
-        $stmt = $pdo->prepare('SELECT code FROM ext_clients WHERE code LIKE ? ORDER BY code LIMIT ?');
+        $stmt = $pdo->prepare('SELECT code FROM ext_clients WHERE code LIKE ? OR name LIKE ? ORDER BY code LIMIT ?');
         $stmt->bindValue(1, '%' . $q . '%', PDO::PARAM_STR);
-        $stmt->bindValue(2, $limit, PDO::PARAM_INT);
+        $stmt->bindValue(2, '%' . $q . '%', PDO::PARAM_STR);
+        $stmt->bindValue(3, $limit, PDO::PARAM_INT);
         $stmt->execute();
-        $codes = $stmt->fetchAll(PDO::FETCH_COLUMN);
-        echo json_encode(['codes' => $codes]);
+        $codes = $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+
+        if (empty($codes) && ExtDB::isAvailable()) {
+            $extClients = ExtDB::searchClients($q, $limit, 0);
+            $codes = array_column($extClients, 'Code');
+        }
+
+        echo json_encode(['codes' => array_values(array_unique($codes))]);
     } catch (Throwable $e) {
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage(), 'codes' => []]);
@@ -4506,6 +4531,36 @@ Router::get('/db-manager', function () {
         'sort_dir' => $sortDir,
         'title' => 'Database Manager'
     ]);
+});
+
+Router::get('/api/db-manager/export', function () {
+    requireAdmin();
+    $table = trim($_GET['table'] ?? '');
+    $search = trim($_GET['search'] ?? '');
+    if (empty($table)) {
+        http_response_code(400);
+        echo "Table required";
+        return;
+    }
+    $data = ExtDB::getTableData($table, $search, 10000, 0);
+    $filename = strtolower($table) . '_export_' . date('Y-m-d_H-i-s') . '.csv';
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    $output = fopen('php://output', 'w');
+    fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF));
+    if (!empty($data['columns'])) {
+        $headers = array_column($data['columns'], 'column_name');
+        fputcsv($output, $headers);
+        foreach ($data['rows'] as $r) {
+            $row = [];
+            foreach ($headers as $h) {
+                $row[] = $r[$h] ?? '';
+            }
+            fputcsv($output, $row);
+        }
+    }
+    fclose($output);
+    exit;
 });
 
 Router::get('/api/db-manager/table-data', function () {

@@ -24,7 +24,7 @@
             <div class="mt-2 ml-13 flex flex-wrap items-center gap-3">
                 <code class="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded">{{ client.client_ip }}</code>
                 <span class="text-xs text-slate-500">
-                    <i class="fas fa-calendar-alt mr-1"></i>{{ client.created_at|date('Y-m-d H:i') }}
+                    <i class="fas fa-calendar-alt mr-1"></i>{{ client.created_at|format_date }}
                 </span>
                 {% if client.ext_client_code %}
                 <a href="/clients?code={{ client.ext_client_code|url_encode }}"

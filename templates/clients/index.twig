@@ -40,8 +40,8 @@
                 {% if search or code_filter %}<a href="/clients" class="btn btn-ghost btn-sm gap-2"><i class="fas fa-times"></i>Clear</a>{% endif %}
             </form>
 
-            <button type="button" onclick="triggerClientSync()" id="syncClientBtn" class="btn btn-ghost btn-sm gap-2 whitespace-nowrap">
-                <i class="fas fa-sync-alt" id="syncClientIcon"></i>Sync DB
+            <button type="button" onclick="triggerClientSync()" id="syncClientBtn" title="Sync clients with external DB" class="btn btn-ghost btn-sm gap-2 whitespace-nowrap text-xs">
+                <i class="fas fa-sync-alt" id="syncClientIcon"></i><span id="syncClientText">Sync DB</span>
             </button>
             {% if user.role == 'admin' %}
             <button type="button" onclick="toggleClientEditLock()" id="btnClientEditLock" class="btn btn-warning btn-outline btn-sm gap-2 whitespace-nowrap">
@@ -595,15 +595,32 @@ function escapeHtml(str) { return str.replace(/[&<>"']/g, c => ({'&':'&amp;','<'
 function triggerClientSync() {
     const btn = document.getElementById('syncClientBtn');
     const icon = document.getElementById('syncClientIcon');
-    if (btn.disabled) return;
-    btn.disabled = true; btn.classList.add('opacity-70', 'cursor-not-allowed'); icon.classList.add('fa-spin');
+    const text = document.getElementById('syncClientText');
+    if (!btn || btn.dataset.syncing === 'true') return;
+    
+    btn.dataset.syncing = 'true';
+    if (icon) icon.classList.add('fa-spin');
+    if (text) text.textContent = 'Syncing...';
+
     fetch('/api/ext-clients/sync', { method: 'POST' })
         .then(r => r.json().then(data => ({ status: r.status, body: data })))
         .then(res => {
-            if (res.status === 200 && res.body.success) { alert('Sync successful! Loaded ' + res.body.count + ' clients.'); window.location.reload(); }
-            else { alert('Sync failed: ' + (res.body.error || 'Unknown error')); btn.disabled = false; btn.classList.remove('opacity-70', 'cursor-not-allowed'); icon.classList.remove('fa-spin'); }
+            if (res.status === 200 && res.body.success) {
+                if (text) text.textContent = 'Synced!';
+                setTimeout(() => window.location.reload(), 500);
+            } else {
+                alert('Sync notice: ' + (res.body.error || res.body.message || 'Already synchronized'));
+                if (text) text.textContent = 'Sync DB';
+                if (icon) icon.classList.remove('fa-spin');
+                delete btn.dataset.syncing;
+            }
         })
-        .catch(err => { alert('Sync error: ' + err.message); btn.disabled = false; btn.classList.remove('opacity-70', 'cursor-not-allowed'); icon.classList.remove('fa-spin'); });
+        .catch(err => {
+            alert('Sync error: ' + err.message);
+            if (text) text.textContent = 'Sync DB';
+            if (icon) icon.classList.remove('fa-spin');
+            delete btn.dataset.syncing;
+        });
 }
 
 document.addEventListener('click', function(e) {
