@@ -36,14 +36,18 @@ while (true) {
     
     $ch = curl_init($pollUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15);
     curl_setopt($ch, CURLOPT_TIMEOUT, 35);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
     Config::applyCurlProxy($ch);
     $res = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr = curl_error($ch);
     curl_close($ch);
 
     if ($httpCode !== 200) {
-        echo "[" . date('Y-m-d H:i:s') . "] Error fetching updates (HTTP Code: {$httpCode}). Sleeping 5s...\n";
+        echo "[" . date('Y-m-d H:i:s') . "] Error fetching updates (HTTP Code: {$httpCode}, Error: '{$curlErr}'). Sleeping 5s...\n";
         sleep(5);
         continue;
     }
