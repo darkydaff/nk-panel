@@ -3,19 +3,31 @@
 class TelegramClientBot {
     
     public static function getBotToken(): ?string {
-        $pdo = DB::conn();
-        $stmt = $pdo->prepare("SELECT value FROM settings WHERE namespace = 'client_bot' AND `key` = 'bot_token' LIMIT 1");
-        $stmt->execute();
-        $val = $stmt->fetchColumn();
-        return $val ? json_decode($val, true) : null;
+        try {
+            $pdo = DB::conn();
+            $stmt = $pdo->prepare("SELECT value FROM settings WHERE namespace = 'client_bot' AND `key` = 'bot_token' LIMIT 1");
+            $stmt->execute();
+            $val = $stmt->fetchColumn();
+            if ($val) {
+                $decoded = json_decode($val, true);
+                if (!empty($decoded)) return $decoded;
+            }
+        } catch (Throwable $e) {}
+        return Config::get('TELEGRAM_BOT_TOKEN', null);
     }
 
     public static function isEnabled(): bool {
-        $pdo = DB::conn();
-        $stmt = $pdo->prepare("SELECT value FROM settings WHERE namespace = 'client_bot' AND `key` = 'enabled' LIMIT 1");
-        $stmt->execute();
-        $val = $stmt->fetchColumn();
-        return $val ? (bool)json_decode($val, true) : false;
+        try {
+            $pdo = DB::conn();
+            $stmt = $pdo->prepare("SELECT value FROM settings WHERE namespace = 'client_bot' AND `key` = 'enabled' LIMIT 1");
+            $stmt->execute();
+            $val = $stmt->fetchColumn();
+            if ($val !== false && $val !== null) {
+                $decoded = json_decode($val, true);
+                if ($decoded !== null) return (bool)$decoded;
+            }
+        } catch (Throwable $e) {}
+        return !empty(self::getBotToken());
     }
 
     public static function handleUpdate(array $update): void {
