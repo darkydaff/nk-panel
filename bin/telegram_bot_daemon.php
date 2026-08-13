@@ -44,6 +44,15 @@ while (true) {
     $res = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $curlErr = curl_error($ch);
+
+    // If configured proxy failed, auto-fallback to direct connection
+    if ($httpCode !== 200 && !empty($curlErr) && (str_contains(strtolower($curlErr), 'proxy') || str_contains(strtolower($curlErr), 'tunnel') || str_contains($curlErr, '502'))) {
+        curl_setopt($ch, CURLOPT_PROXY, null);
+        $res = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr = curl_error($ch);
+    }
+
     curl_close($ch);
 
     if ($httpCode !== 200) {
