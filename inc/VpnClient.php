@@ -116,16 +116,17 @@ class VpnClient {
      */
     private static function generateClientKeys(array $serverData, string $clientName): array {
         $containerName = $serverData['container_name'];
+        $safeTag = 'client_' . bin2hex(random_bytes(8));
         
         $cmd = sprintf(
             "docker exec -i %s sh -c \"umask 077; /usr/local/bin/awg genkey | tee /tmp/%s_priv.key | /usr/local/bin/awg pubkey > /tmp/%s_pub.key; cat /tmp/%s_priv.key; echo '---'; cat /tmp/%s_pub.key; rm -f /tmp/%s_priv.key /tmp/%s_pub.key\"",
             $containerName,
-            $clientName, $clientName, $clientName, $clientName, $clientName, $clientName
+            $safeTag, $safeTag, $safeTag, $safeTag, $safeTag, $safeTag
         );
         
         $escaped = escapeshellarg($cmd);
         $sshCmd = sprintf(
-            "SSHPASS='%s' sshpass -e ssh -p %d -q -o LogLevel=ERROR -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=3 -o ServerAliveInterval=3 -o ServerAliveCountMax=2 -o BatchMode=yes %s@%s %s 2>&1",
+            "SSHPASS='%s' sshpass -e ssh -p %d -q -o LogLevel=ERROR -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=5 -o ServerAliveInterval=3 -o ServerAliveCountMax=2 -o BatchMode=yes %s@%s %s 2>&1",
             str_replace("'", "'\\''", $serverData['password']),
             $serverData['port'],
             $serverData['username'],
@@ -136,14 +137,27 @@ class VpnClient {
         $out = shell_exec($sshCmd);
         $parts = explode("---", trim($out ?? ''));
         
-        if (count($parts) < 2) {
-            throw new Exception("Failed to generate client keys");
+        if (count($parts) >= 2 && !empty(trim($parts[0])) && !empty(trim($parts[1]))) {
+            return [
+                'private' => trim($parts[0]),
+                'public' => trim($parts[1])
+            ];
+        }
+
+        // Local Sodium fallback if SSH keygen fails
+        if (function_exists('sodium_crypto_box_keypair')) {
+            $kp = sodium_crypto_box_keypair();
+            $sk = sodium_crypto_box_secretkey($kp);
+            $sk[0] = chr(ord($sk[0]) & 248);
+            $sk[31] = chr((ord($sk[31]) & 127) | 64);
+            $pk = sodium_crypto_box_publickey($kp);
+            return [
+                'private' => base64_encode($sk),
+                'public' => base64_encode($pk)
+            ];
         }
         
-        return [
-            'private' => trim($parts[0]),
-            'public' => trim($parts[1])
-        ];
+        throw new Exception("Failed to generate client keys: " . trim($out ?? 'Unknown error'));
     }
     
     /**
