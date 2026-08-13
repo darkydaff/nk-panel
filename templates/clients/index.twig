@@ -960,11 +960,13 @@ async function openClientPaymentsModal(code) {
         tbody.innerHTML = '<tr><td colspan="4" class="text-center py-6 text-error">Network error loading payments</td></tr>';
     }
 }
+window.openClientPaymentsModal = openClientPaymentsModal;
 
 function openAddTxForClient() {
     if (!activePaymentClientCode) return;
     window.location.href = '/finances?client=' + encodeURIComponent(activePaymentClientCode);
 }
+window.openAddTxForClient = openAddTxForClient;
 </script>
 
 <!-- Client Payments Modal -->

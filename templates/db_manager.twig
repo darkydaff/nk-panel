@@ -33,6 +33,7 @@
                     <i class="fas fa-exclamation-triangle text-xs"></i>
                     PostgreSQL Offline
                 </span>
+            {% endif %}
             {% if user.role == 'admin' %}
             <button type="button" onclick="toggleDbEditLock()" id="btnDbEditLock" class="btn btn-warning btn-outline btn-sm gap-2 whitespace-nowrap">
                 <i class="fas fa-lock" id="dbEditLockIcon"></i><span id="dbEditLockText">Unlock Editing</span>
