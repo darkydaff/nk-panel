@@ -1293,23 +1293,36 @@ Router::get('/api/ext-clients/search', function () {
     header('Content-Type: application/json');
 
     $q = trim($_GET['q'] ?? '');
-    $limit = min(20, max(1, (int) ($_GET['limit'] ?? 15)));
+    $limit = min(50, max(1, (int) ($_GET['limit'] ?? 20)));
+    $codes = [];
 
     try {
+        if (ExtDB::isAvailable()) {
+            $extClients = ExtDB::searchClients($q, $limit, 0);
+            foreach ($extClients as $c) {
+                if (!empty($c['Code'])) {
+                    $codes[] = $c['Code'];
+                }
+            }
+        }
+
         $pdo = DB::conn();
         $stmt = $pdo->prepare('SELECT code FROM ext_clients WHERE code LIKE ? OR name LIKE ? ORDER BY code LIMIT ?');
         $stmt->bindValue(1, '%' . $q . '%', PDO::PARAM_STR);
         $stmt->bindValue(2, '%' . $q . '%', PDO::PARAM_STR);
         $stmt->bindValue(3, $limit, PDO::PARAM_INT);
         $stmt->execute();
-        $codes = $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
-
-        if (empty($codes) && ExtDB::isAvailable()) {
-            $extClients = ExtDB::searchClients($q, $limit, 0);
-            $codes = array_column($extClients, 'Code');
+        $localCodes = $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        foreach ($localCodes as $lc) {
+            if (!empty($lc)) {
+                $codes[] = $lc;
+            }
         }
 
-        echo json_encode(['codes' => array_values(array_unique($codes))]);
+        $uniqueCodes = array_values(array_filter(array_unique($codes)));
+        sort($uniqueCodes);
+
+        echo json_encode(['success' => true, 'codes' => array_slice($uniqueCodes, 0, $limit)]);
     } catch (Throwable $e) {
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage(), 'codes' => []]);

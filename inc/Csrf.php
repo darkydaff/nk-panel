@@ -33,10 +33,32 @@ class Csrf {
      * Validate CSRF token from current request (POST parameters or X-CSRF-TOKEN HTTP header)
      */
     public static function validateRequest(): bool {
-        $token = $_POST['csrf_token'] ?? null;
+        $token = $_POST['csrf_token'] ?? $_POST['_token'] ?? null;
         
         if ($token === null) {
             $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_SERVER['HTTP_X_XSRF_TOKEN'] ?? null;
+        }
+
+        if ($token === null && function_exists('getallheaders')) {
+            $headers = getallheaders();
+            if (is_array($headers)) {
+                foreach ($headers as $key => $val) {
+                    if (in_array(strtolower((string)$key), ['x-csrf-token', 'x-xsrf-token', 'csrf-token'], true)) {
+                        $token = $val;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if ($token === null) {
+            $rawInput = file_get_contents('php://input');
+            if (!empty($rawInput)) {
+                $jsonData = json_decode($rawInput, true);
+                if (is_array($jsonData)) {
+                    $token = $jsonData['csrf_token'] ?? $jsonData['_token'] ?? null;
+                }
+            }
         }
         
         return self::verifyToken($token);

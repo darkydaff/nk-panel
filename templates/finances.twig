@@ -391,6 +391,7 @@
             <i class="fas fa-plus-circle text-emerald-400"></i> Add New Transaction
         </h3>
         <form id="formAddTx" onsubmit="submitAddTx(event)" class="space-y-4 py-4 font-sans text-xs">
+            {{ csrf_field() }}
             <div class="form-control">
                 <label class="label py-1"><span class="label-text font-bold">Date *</span></label>
                 <input type="date" name="date" required class="input input-bordered input-sm font-mono w-full">
@@ -408,7 +409,7 @@
             </div>
             <div class="form-control relative">
                 <label class="label py-1"><span class="label-text font-bold">Client ID / Code</span></label>
-                <input type="text" name="client_id" id="addTxClientId" list="clientCodesDatalist" placeholder="NK-12345" class="input input-bordered input-sm font-mono w-full" autocomplete="off" oninput="onFinancesClientInput(this, 'addTxClientDropdown')" onfocus="onFinancesClientInput(this, 'addTxClientDropdown')">
+                <input type="text" name="client_id" id="addTxClientId" placeholder="NK-12345" class="input input-bordered input-sm font-mono w-full" autocomplete="off" oninput="onFinancesClientInput(this, 'addTxClientDropdown')" onfocus="onFinancesClientInput(this, 'addTxClientDropdown')">
                 <div id="addTxClientDropdown" class="hidden absolute left-0 right-0 top-full z-[100] mt-1 bg-base-300 border border-base-content/10 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto text-xs font-mono"></div>
             </div>
             <div class="form-control">
@@ -433,6 +434,7 @@
             <i class="fas fa-edit text-info"></i> Edit Transaction <span id="editTxIdHeader" class="font-mono text-info"></span>
         </h3>
         <form id="formEditTx" onsubmit="submitEditTx(event)" class="space-y-4 py-4 font-sans text-xs">
+            {{ csrf_field() }}
             <input type="hidden" name="id" id="editTxId">
             <div class="form-control">
                 <label class="label py-1"><span class="label-text font-bold">Date *</span></label>
@@ -451,7 +453,7 @@
             </div>
             <div class="form-control relative">
                 <label class="label py-1"><span class="label-text font-bold">Client ID / Code</span></label>
-                <input type="text" name="client_id" id="editTxClientId" list="clientCodesDatalist" placeholder="NK-12345" class="input input-bordered input-sm font-mono w-full" autocomplete="off" oninput="onFinancesClientInput(this, 'editTxClientDropdown')" onfocus="onFinancesClientInput(this, 'editTxClientDropdown')">
+                <input type="text" name="client_id" id="editTxClientId" placeholder="NK-12345" class="input input-bordered input-sm font-mono w-full" autocomplete="off" oninput="onFinancesClientInput(this, 'editTxClientDropdown')" onfocus="onFinancesClientInput(this, 'editTxClientDropdown')">
                 <div id="editTxClientDropdown" class="hidden absolute left-0 right-0 top-full z-[100] mt-1 bg-base-300 border border-base-content/10 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto text-xs font-mono"></div>
             </div>
             <div class="form-control">
@@ -1013,12 +1015,16 @@ async function submitAddTx(e) {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
 
     const formData = new FormData(e.target);
+    const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token }}';
+    if (!formData.has('csrf_token')) {
+        formData.append('csrf_token', token);
+    }
     try {
         const res = await fetch('/api/finances/create', {
             method: 'POST',
             headers: {
                 'Accept': 'application/json',
-                'X-CSRF-Token': '{{ csrf_token() }}',
+                'X-CSRF-Token': token,
                 'X-Requested-With': 'XMLHttpRequest'
             },
             body: formData
@@ -1062,12 +1068,16 @@ async function submitEditTx(e) {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
 
     const formData = new FormData(e.target);
+    const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token }}';
+    if (!formData.has('csrf_token')) {
+        formData.append('csrf_token', token);
+    }
     try {
         const res = await fetch('/api/finances/update', {
             method: 'POST',
             headers: {
                 'Accept': 'application/json',
-                'X-CSRF-Token': '{{ csrf_token() }}',
+                'X-CSRF-Token': token,
                 'X-Requested-With': 'XMLHttpRequest'
             },
             body: formData
@@ -1097,13 +1107,15 @@ async function deleteTransactionRecord(id) {
     if (!confirm('Are you sure you want to delete transaction #' + id + '?')) return;
 
     try {
+        const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token }}';
         const formData = new FormData();
         formData.append('id', id);
+        formData.append('csrf_token', token);
         const res = await fetch('/api/finances/delete', {
             method: 'POST',
             headers: {
                 'Accept': 'application/json',
-                'X-CSRF-Token': '{{ csrf_token() }}',
+                'X-CSRF-Token': token,
                 'X-Requested-With': 'XMLHttpRequest'
             },
             body: formData
