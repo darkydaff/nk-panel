@@ -545,6 +545,41 @@ class Finances {
     }
 
     /**
+     * Resolve and validate client code against external Clients table.
+     * Supports exact match, # prefix fallback, and case-insensitive matching.
+     */
+    public static function resolveClientCode(string $code): ?string {
+        $code = trim($code);
+        if ($code === '') return null;
+        if (!ExtDB::isAvailable()) return $code;
+
+        try {
+            $pdo = ExtDB::conn();
+            $table = Config::get('EXT_PG_CLIENTS_TABLE', 'Clients');
+
+            // 1. Exact match
+            $stmt = $pdo->prepare("SELECT \"Code\" FROM \"{$table}\" WHERE \"Code\" = ? LIMIT 1");
+            $stmt->execute([$code]);
+            $found = $stmt->fetchColumn();
+            if ($found !== false) return (string)$found;
+
+            // 2. Hash / non-hash match (#0023 vs 0023)
+            $altCode = str_starts_with($code, '#') ? ltrim($code, '#') : '#' . $code;
+            $stmt->execute([$altCode]);
+            $found = $stmt->fetchColumn();
+            if ($found !== false) return (string)$found;
+
+            // 3. Case-insensitive ILIKE match
+            $stmt = $pdo->prepare("SELECT \"Code\" FROM \"{$table}\" WHERE \"Code\" ILIKE ? LIMIT 1");
+            $stmt->execute([$code]);
+            $found = $stmt->fetchColumn();
+            if ($found !== false) return (string)$found;
+        } catch (Throwable $e) {}
+
+        return null;
+    }
+
+    /**
      * Add a new transaction record to Finances_2026.
      */
     public static function addTransaction(array $data): bool {
@@ -559,13 +594,29 @@ class Finances {
         $type = trim($data['type'] ?? $data['Type'] ?? 'Income');
         $amount = (float)($data['amount'] ?? $data['Amount'] ?? 0);
         $description = trim($data['description'] ?? $data['Description'] ?? '');
-        $clientId = trim($data['client_id'] ?? $data['Client_id'] ?? '');
+        $rawClientId = trim($data['client_id'] ?? $data['Client_id'] ?? '');
 
-        $stmt = $pdo->prepare("
-            INSERT INTO \"Finances_2026\" (\"Date\", \"Type\", \"Amount\", \"Description\", \"Client_id\")
-            VALUES (?, ?, ?, ?, ?)
-        ");
-        $res = $stmt->execute([$date, $type, $amount, $description, $clientId !== '' ? $clientId : null]);
+        $clientId = null;
+        if ($rawClientId !== '') {
+            $resolved = self::resolveClientCode($rawClientId);
+            if ($resolved === null) {
+                throw new Exception("Client code '{$rawClientId}' was not found in the Clients database. Please select a valid code from the dropdown or leave it blank.");
+            }
+            $clientId = $resolved;
+        }
+
+        try {
+            $stmt = $pdo->prepare("
+                INSERT INTO \"Finances_2026\" (\"Date\", \"Type\", \"Amount\", \"Description\", \"Client_id\")
+                VALUES (?, ?, ?, ?, ?)
+            ");
+            $res = $stmt->execute([$date, $type, $amount, $description, $clientId]);
+        } catch (PDOException $e) {
+            if ($e->getCode() === '23503' || str_contains($e->getMessage(), '23503')) {
+                throw new Exception("Client code '{$rawClientId}' violates foreign key constraint (not present in Clients table).");
+            }
+            throw $e;
+        }
 
         try { ExtDB::sync(); } catch (Throwable $e) {}
 
@@ -583,14 +634,30 @@ class Finances {
         $type = trim($data['type'] ?? $data['Type'] ?? 'Income');
         $amount = (float)($data['amount'] ?? $data['Amount'] ?? 0);
         $description = trim($data['description'] ?? $data['Description'] ?? '');
-        $clientId = trim($data['client_id'] ?? $data['Client_id'] ?? '');
+        $rawClientId = trim($data['client_id'] ?? $data['Client_id'] ?? '');
 
-        $stmt = $pdo->prepare("
-            UPDATE \"Finances_2026\"
-            SET \"Date\" = ?, \"Type\" = ?, \"Amount\" = ?, \"Description\" = ?, \"Client_id\" = ?
-            WHERE id = ?
-        ");
-        $res = $stmt->execute([$date, $type, $amount, $description, $clientId !== '' ? $clientId : null, $id]);
+        $clientId = null;
+        if ($rawClientId !== '') {
+            $resolved = self::resolveClientCode($rawClientId);
+            if ($resolved === null) {
+                throw new Exception("Client code '{$rawClientId}' was not found in the Clients database. Please select a valid code from the dropdown or leave it blank.");
+            }
+            $clientId = $resolved;
+        }
+
+        try {
+            $stmt = $pdo->prepare("
+                UPDATE \"Finances_2026\"
+                SET \"Date\" = ?, \"Type\" = ?, \"Amount\" = ?, \"Description\" = ?, \"Client_id\" = ?
+                WHERE id = ?
+            ");
+            $res = $stmt->execute([$date, $type, $amount, $description, $clientId, $id]);
+        } catch (PDOException $e) {
+            if ($e->getCode() === '23503' || str_contains($e->getMessage(), '23503')) {
+                throw new Exception("Client code '{$rawClientId}' violates foreign key constraint (not present in Clients table).");
+            }
+            throw $e;
+        }
 
         try { ExtDB::sync(); } catch (Throwable $e) {}
 
