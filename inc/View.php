@@ -63,6 +63,11 @@ class View {
     }, ['is_safe' => ['html']]);
     self::$twig->addFunction($csrfFunc);
 
+    $csrfTokenFunc = new TwigFunction('csrf_token', function () {
+      return Csrf::getToken();
+    });
+    self::$twig->addFunction($csrfTokenFunc);
+
     // Add globals
     self::$twig->addGlobal('csrf_token', Csrf::getToken());
     foreach ($globals as $k => $v) self::$twig->addGlobal($k, $v);
