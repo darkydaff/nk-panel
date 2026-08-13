@@ -23,7 +23,7 @@ services:
       retries: 10
 
   pgdb:
-    image: postgres:17-alpine
+    image: postgres:16-alpine
     container_name: nk-panel-pgdb
     restart: unless-stopped
     env_file:
