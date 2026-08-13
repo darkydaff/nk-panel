@@ -4,21 +4,24 @@
  * Handles creation and management of VPN client configurations
  * Based on amnezia_client_config_v2.php
  */
-class VpnClient {
+class VpnClient
+{
     private $clientId;
     private $data;
-    
-    public function __construct(?int $clientId = null) {
+
+    public function __construct(?int $clientId = null)
+    {
         $this->clientId = $clientId;
         if ($clientId) {
             $this->load();
         }
     }
-    
+
     /**
      * Load client data from database
      */
-    private function load(): void {
+    private function load(): void
+    {
         $pdo = DB::conn();
         $stmt = $pdo->prepare('SELECT * FROM vpn_clients WHERE id = ?');
         $stmt->execute([$this->clientId]);
@@ -27,7 +30,7 @@ class VpnClient {
             throw new Exception('Client not found');
         }
     }
-    
+
     /**
      * Create new VPN client
      * 
@@ -37,38 +40,40 @@ class VpnClient {
      * @param int|null $expiresInDays Days until expiration (null = never expires)
      * @return int Client ID
      */
-    public static function create(int $serverId, int $userId, string $name, ?int $expiresInDays = null): int {
+    public static function create(int $serverId, int $userId, string $name, ?int $expiresInDays = null): int
+    {
         $pdo = DB::conn();
-        
+
         // Sanitize and validate client name
         $name = trim($name);
         if (!preg_match('/^[a-zA-Z0-9._-]+$/', $name)) {
             // If it contains "forbidden" chars, fallback to a safe version but keep it recognizable
             $name = preg_replace('/[^a-zA-Z0-9._-]/', '_', $name);
         }
-        if (empty($name)) $name = 'client_' . time();
-        
+        if (empty($name))
+            $name = 'client_' . time();
+
         // Get server data
         $server = new VpnServer($serverId);
         $serverData = $server->getData();
-        
+
         if (!$serverData || $serverData['status'] !== 'active') {
             throw new Exception('Server is not active');
         }
-        
+
         // Generate client keys
         $containerName = $serverData['container_name'];
         $keys = self::generateClientKeys($serverData, $name);
-        
+
         // Get next available IP
         $clientIP = self::getNextClientIP($serverData);
-        
+
         // Get AWG parameters from server
         $awgParams = $serverData['awg_params'] ?? [];
         if (is_string($awgParams)) {
             $awgParams = json_decode($awgParams, true) ?: [];
         }
-        
+
         // Build client configuration
         $config = self::buildClientConfig(
             $keys['private'],
@@ -81,20 +86,20 @@ class VpnClient {
             $serverData['name'],
             $name
         );
-        
+
         // Add client to server
         self::addClientToServer($serverData, $keys['public'], $clientIP);
-        
+
         // Calculate expiration date
         $expiresAt = $expiresInDays ? date('Y-m-d H:i:s', strtotime("+{$expiresInDays} days")) : null;
-        
+
         // Insert into database
         $stmt = $pdo->prepare('
             INSERT INTO vpn_clients 
             (server_id, user_id, name, client_ip, public_key, private_key, preshared_key, config, status, expires_at, last_handshake, last_sync_at) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
         ');
-        
+
         $stmt->execute([
             $serverId,
             $userId,
@@ -107,23 +112,29 @@ class VpnClient {
             'active',
             $expiresAt
         ]);
-        
-        return (int)$pdo->lastInsertId();
+
+        return (int) $pdo->lastInsertId();
     }
-    
+
     /**
      * Generate client keys on remote server
      */
-    private static function generateClientKeys(array $serverData, string $clientName): array {
+    private static function generateClientKeys(array $serverData, string $clientName): array
+    {
         $containerName = $serverData['container_name'];
         $safeTag = 'client_' . bin2hex(random_bytes(8));
-        
+
         $cmd = sprintf(
             "docker exec -i %s sh -c \"umask 077; /usr/local/bin/awg genkey | tee /tmp/%s_priv.key | /usr/local/bin/awg pubkey > /tmp/%s_pub.key; cat /tmp/%s_priv.key; echo '---'; cat /tmp/%s_pub.key; rm -f /tmp/%s_priv.key /tmp/%s_pub.key\"",
             $containerName,
-            $safeTag, $safeTag, $safeTag, $safeTag, $safeTag, $safeTag
+            $safeTag,
+            $safeTag,
+            $safeTag,
+            $safeTag,
+            $safeTag,
+            $safeTag
         );
-        
+
         $escaped = escapeshellarg($cmd);
         $sshCmd = sprintf(
             "SSHPASS='%s' sshpass -e ssh -p %d -q -o LogLevel=ERROR -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=5 -o ServerAliveInterval=3 -o ServerAliveCountMax=2 -o BatchMode=yes %s@%s %s 2>&1",
@@ -133,10 +144,10 @@ class VpnClient {
             $serverData['host'],
             $escaped
         );
-        
+
         $out = shell_exec($sshCmd);
         $parts = explode("---", trim($out ?? ''));
-        
+
         if (count($parts) >= 2 && !empty(trim($parts[0])) && !empty(trim($parts[1]))) {
             return [
                 'private' => trim($parts[0]),
@@ -145,43 +156,43 @@ class VpnClient {
         }
 
         // Local Sodium fallback if SSH keygen fails
-        if (function_exists('sodium_crypto_box_keypair')) {
-            $kp = sodium_crypto_box_keypair();
-            $sk = sodium_crypto_box_secretkey($kp);
+        if (function_exists('sodium_crypto_scalarmult_base')) {
+            $sk = random_bytes(32);
             $sk[0] = chr(ord($sk[0]) & 248);
             $sk[31] = chr((ord($sk[31]) & 127) | 64);
-            $pk = sodium_crypto_box_publickey($kp);
+            $pk = sodium_crypto_scalarmult_base($sk);
             return [
                 'private' => base64_encode($sk),
                 'public' => base64_encode($pk)
             ];
         }
-        
+
         throw new Exception("Failed to generate client keys: " . trim($out ?? 'Unknown error'));
     }
-    
+
     /**
      * Get next available client IP
      */
-    private static function getNextClientIP(array $serverData): string {
+    private static function getNextClientIP(array $serverData): string
+    {
         $pdo = DB::conn();
-        
+
         // Get used IPs from database
         $stmt = $pdo->prepare('SELECT client_ip FROM vpn_clients WHERE server_id = ?');
         $stmt->execute([$serverData['id']]);
         $usedIPs = $stmt->fetchAll(PDO::FETCH_COLUMN);
-        
+
         // Parse subnet
         $parts = explode('/', $serverData['vpn_subnet']);
         $networkLong = ip2long($parts[0]);
-        $mask = (int)($parts[1] ?? 24);
-        
+        $mask = (int) ($parts[1] ?? 24);
+
         // Reserve network and gateway address
         $used = [long2ip($networkLong) => true, long2ip($networkLong + 1) => true];
         foreach ($usedIPs as $ip) {
             $used[$ip] = true;
         }
-        
+
         // Find next free IP starting from .1
         for ($i = 1; $i <= 253; $i++) {
             $candidate = long2ip($networkLong + $i);
@@ -189,10 +200,10 @@ class VpnClient {
                 return $candidate;
             }
         }
-        
+
         throw new Exception('No free IP addresses in subnet');
     }
-    
+
     /**
      * Build client configuration file
      */
@@ -223,7 +234,7 @@ class VpnClient {
                 $awgParams[$upperKey] = $awgParams[$lowerKey];
             }
         }
-        
+
         // Add AWG parameters (V1 + V2.0)
         $keys = ['Jc', 'Jmin', 'Jmax', 'S1', 'S2', 'S3', 'S4', 'H1', 'H2', 'H3', 'H4', 'I1', 'I2', 'I3', 'I4', 'I5'];
         foreach ($keys as $key) {
@@ -231,7 +242,7 @@ class VpnClient {
                 $config .= "{$key} = {$awgParams[$key]}\n";
             }
         }
-        
+
         $config .= "\n[Peer]\n# Name = {$serverName}\n";
         $config .= "PublicKey = {$serverPublicKey}\n";
         $config .= "PresharedKey = {$presharedKey}\n";
@@ -239,60 +250,62 @@ class VpnClient {
         $config .= "AllowedIPs = 0.0.0.0/0\n";
         $config .= "PersistentKeepalive = 25\n";
         $config .= "MTU = 1280\n";
-        
+
         return $config;
     }
-    
+
     /**
      * Add client to server using official method (append + wg syncconf)
      */
-    public static function addClientToServer(array $serverData, string $publicKey, string $clientIP): void {
+    public static function addClientToServer(array $serverData, string $publicKey, string $clientIP): void
+    {
         $containerName = $serverData['container_name'];
-        
+
         // Build peer block
         $peerBlock = "\n[Peer]\n";
         $peerBlock .= "PublicKey = {$publicKey}\n";
         $peerBlock .= "PresharedKey = {$serverData['preshared_key']}\n";
         $peerBlock .= "AllowedIPs = {$clientIP}/32\n";
-        
+
         $base64 = base64_encode($peerBlock);
         $tempFile = '/tmp/' . bin2hex(random_bytes(8)) . '.tmp';
-        
+
         // Create temp file
         $cmd1 = sprintf("echo \"%s\" | docker exec -i %s sh -c 'base64 -d > %s'", $base64, $containerName, $tempFile);
         self::executeServerCommand($serverData, $cmd1, true);
-        
+
         // Append to wg0.conf
         $cmd2 = sprintf("docker exec -i %s sh -c 'cat %s >> /opt/amnezia/awg/wg0.conf'", $containerName, $tempFile);
         self::executeServerCommand($serverData, $cmd2, true);
-        
+
         // Apply via awg syncconf
         $cmd3 = sprintf("docker exec -i %s sh -c '/usr/local/bin/awg-quick strip /opt/amnezia/awg/wg0.conf > /tmp/wg0_strip.conf && /usr/local/bin/awg syncconf wg0 /tmp/wg0_strip.conf && rm -f /tmp/wg0_strip.conf'", $containerName);
         self::executeServerCommand($serverData, $cmd3, true);
-        
+
         // Remove temp file
         $cmd4 = sprintf("docker exec -i %s rm -f %s", $containerName, $tempFile);
         self::executeServerCommand($serverData, $cmd4, true);
-        
+
         // Update clientsTable
         self::updateClientsTable($serverData, $publicKey, $clientIP);
     }
-    
+
     /**
      * Update clientsTable on server
      */
-    private static function updateClientsTable(array $serverData, string $publicKey, string $name): void {
+    private static function updateClientsTable(array $serverData, string $publicKey, string $name): void
+    {
         $containerName = $serverData['container_name'];
-        
+
         // Read current table
         $cmd = sprintf("docker exec -i %s cat /opt/amnezia/awg/clientsTable 2>/dev/null", $containerName);
         $tableJson = self::executeServerCommand($serverData, $cmd, true);
         $table = json_decode(trim($tableJson), true);
-        
+
         if (!is_array($table)) {
             $table = [];
         }
-        
+
         // Add new client
         $table[] = [
             'clientId' => $publicKey,
@@ -301,25 +314,26 @@ class VpnClient {
                 'creationDate' => date('D M j H:i:s Y')
             ]
         ];
-        
+
         // Save back
         $newTableJson = json_encode($table, JSON_PRETTY_PRINT);
         $escaped = addslashes($newTableJson);
         $updateCmd = sprintf("docker exec -i %s sh -c 'echo \"%s\" > /opt/amnezia/awg/clientsTable'", $containerName, $escaped);
         self::executeServerCommand($serverData, $updateCmd, true);
     }
-    
+
     /**
      * Execute command on server
      */
-    private static function executeServerCommand(array $serverData, string $command, bool $sudo = false): string {
+    private static function executeServerCommand(array $serverData, string $command, bool $sudo = false): string
+    {
         if (getenv('MOCK_SSH_RESPONSE') !== false) {
             return getenv('MOCK_SSH_RESPONSE');
         }
         if ($sudo && strtolower($serverData['username']) !== 'root') {
             $command = "echo '{$serverData['password']}' | sudo -S " . $command;
         }
-        
+
         $escapedCommand = escapeshellarg($command);
         $sshCommand = sprintf(
             "SSHPASS='%s' sshpass -e ssh -p %d -q -o LogLevel=ERROR -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=3 -o ServerAliveInterval=3 -o ServerAliveCountMax=2 -o BatchMode=yes %s@%s %s 2>&1",
@@ -329,26 +343,28 @@ class VpnClient {
             $serverData['host'],
             $escapedCommand
         );
-        
+
         return shell_exec($sshCommand) ?? '';
     }
-    
 
-    
+
+
     /**
      * Get all clients for a server
      */
-    public static function listByServer(int $serverId): array {
+    public static function listByServer(int $serverId): array
+    {
         $pdo = DB::conn();
         $stmt = $pdo->prepare('SELECT * FROM vpn_clients WHERE server_id = ? ORDER BY created_at DESC');
         $stmt->execute([$serverId]);
         return $stmt->fetchAll();
     }
-    
+
     /**
      * Get all clients for a user
      */
-    public static function listByUser(int $userId): array {
+    public static function listByUser(int $userId): array
+    {
         $pdo = DB::conn();
         $stmt = $pdo->prepare('
             SELECT c.*, s.name as server_name, s.host as server_host
@@ -364,7 +380,8 @@ class VpnClient {
     /**
      * Get all clients across all users (admin only)
      */
-    public static function listAll(): array {
+    public static function listAll(): array
+    {
         $pdo = DB::conn();
         $stmt = $pdo->query('
             SELECT c.*, s.name as server_name, s.host as server_host
@@ -378,15 +395,16 @@ class VpnClient {
     /**
      * Revoke client access (disable without deleting)
      */
-    public function revoke(): bool {
+    public function revoke(): bool
+    {
         if (!$this->data) {
             throw new Exception('Client not loaded');
         }
-        
+
         // Remove from server
         $server = new VpnServer($this->data['server_id']);
         $serverData = $server->getData();
-        
+
         if ($serverData && $serverData['status'] === 'active') {
             try {
                 self::removeClientFromServer($serverData, $this->data['public_key']);
@@ -394,25 +412,26 @@ class VpnClient {
                 error_log('Failed to remove client from server: ' . $e->getMessage());
             }
         }
-        
+
         // Mark as disabled in database
         $pdo = DB::conn();
         $stmt = $pdo->prepare('UPDATE vpn_clients SET status = ? WHERE id = ?');
         return $stmt->execute(['disabled', $this->clientId]);
     }
-    
+
     /**
      * Restore client access
      */
-    public function restore(): bool {
+    public function restore(): bool
+    {
         if (!$this->data) {
             throw new Exception('Client not loaded');
         }
-        
+
         // Re-add to server
         $server = new VpnServer($this->data['server_id']);
         $serverData = $server->getData();
-        
+
         if ($serverData && $serverData['status'] === 'active') {
             try {
                 self::addClientToServer($serverData, $this->data['public_key'], $this->data['client_ip']);
@@ -420,93 +439,96 @@ class VpnClient {
                 throw new Exception('Failed to restore client on server: ' . $e->getMessage());
             }
         }
-        
+
         // Mark as active in database
         $pdo = DB::conn();
         $stmt = $pdo->prepare('UPDATE vpn_clients SET status = ? WHERE id = ?');
         return $stmt->execute(['active', $this->clientId]);
     }
-    
+
     /**
      * Delete client permanently
      */
-    public function delete(): bool {
+    public function delete(): bool
+    {
         if (!$this->data) {
             throw new Exception('Client not loaded');
         }
-        
+
         // First revoke to remove from server
         if ($this->data['status'] === 'active') {
             $this->revoke();
         }
-        
+
         // Delete from database
         $pdo = DB::conn();
         $stmt = $pdo->prepare('DELETE FROM vpn_clients WHERE id = ?');
         return $stmt->execute([$this->clientId]);
     }
-    
+
     /**
      * Remove client from server WireGuard configuration
      */
-    private static function removeClientFromServer(array $serverData, string $publicKey): void {
+    private static function removeClientFromServer(array $serverData, string $publicKey): void
+    {
         $containerName = $serverData['container_name'];
-        
+
         // First, remove using awg command (live removal)
         $removeCmd = sprintf(
             "docker exec -i %s /usr/local/bin/awg set wg0 peer %s remove",
             $containerName,
             escapeshellarg($publicKey)
         );
-        
+
         self::executeServerCommand($serverData, $removeCmd, true);
-        
+
         // Then remove from wg0.conf file to make it persistent
         // Use a more reliable method: read, filter, write
         $readCmd = sprintf("docker exec -i %s cat /opt/amnezia/awg/wg0.conf", $containerName);
         $config = self::executeServerCommand($serverData, $readCmd, true);
-        
+
         // Parse and remove the peer section
         $newConfig = self::removePeerFromConfig($config, $publicKey);
-        
+
         // Write back to file using base64 to avoid escaping issues
-    $base64Config = base64_encode($newConfig);
-    $writeCmd = sprintf(
-        "echo '%s' | base64 -d | docker exec -i %s sh -c 'cat > /opt/amnezia/awg/wg0.conf'",
-        $base64Config,
-        $containerName
-    );
-    self::executeServerCommand($serverData, $writeCmd, true);
-        
+        $base64Config = base64_encode($newConfig);
+        $writeCmd = sprintf(
+            "echo '%s' | base64 -d | docker exec -i %s sh -c 'cat > /opt/amnezia/awg/wg0.conf'",
+            $base64Config,
+            $containerName
+        );
+        self::executeServerCommand($serverData, $writeCmd, true);
+
         // Apply via awg syncconf for surgical synchronization without drops
         $syncCmd = sprintf(
             "docker exec -i %s bash -c '/usr/local/bin/awg syncconf wg0 <(/usr/local/bin/awg-quick strip /opt/amnezia/awg/wg0.conf)'",
             $containerName
         );
         self::executeServerCommand($serverData, $syncCmd, true);
-        
+
         // Remove from clientsTable
         self::removeFromClientsTable($serverData, $publicKey);
     }
-    
+
     /**
      * Remove peer section from WireGuard config
      */
-    private static function removePeerFromConfig(string $config, string $publicKey): string {
+    private static function removePeerFromConfig(string $config, string $publicKey): string
+    {
         $lines = explode("\n", $config);
         $newLines = [];
         $inPeerBlock = false;
         $skipBlock = false;
-        
+
         foreach ($lines as $line) {
             $trimmed = trim($line);
-            
+
             // Start of new section
             if (strpos($trimmed, '[') === 0) {
                 $inPeerBlock = ($trimmed === '[Peer]');
                 $skipBlock = false;
             }
-            
+
             // Check if this peer block should be skipped
             if ($inPeerBlock && strpos($trimmed, 'PublicKey') === 0) {
                 $parts = explode('=', $line, 2);
@@ -517,7 +539,7 @@ class VpnClient {
                     continue;
                 }
             }
-            
+
             // Skip lines in the block to be removed
             if ($skipBlock && $inPeerBlock) {
                 // Empty line ends the peer block
@@ -527,54 +549,57 @@ class VpnClient {
                 }
                 continue;
             }
-            
+
             $newLines[] = $line;
         }
-        
+
         return implode("\n", $newLines);
     }
-    
+
     /**
      * Remove client from clientsTable
      */
-    private static function removeFromClientsTable(array $serverData, string $publicKey): void {
+    private static function removeFromClientsTable(array $serverData, string $publicKey): void
+    {
         $containerName = $serverData['container_name'];
-        
+
         // Read current table
         $cmd = sprintf("docker exec -i %s cat /opt/amnezia/awg/clientsTable 2>/dev/null", $containerName);
         $tableJson = self::executeServerCommand($serverData, $cmd, true);
         $table = json_decode(trim($tableJson), true);
-        
+
         if (!is_array($table)) {
             return;
         }
-        
+
         // Filter out the client
-        $table = array_filter($table, function($client) use ($publicKey) {
+        $table = array_filter($table, function ($client) use ($publicKey) {
             return ($client['clientId'] ?? '') !== $publicKey;
         });
-        
+
         // Re-index array
         $table = array_values($table);
-        
+
         // Save back
         $newTableJson = json_encode($table, JSON_PRETTY_PRINT);
         $escaped = addslashes($newTableJson);
         $updateCmd = sprintf("docker exec -i %s sh -c 'echo \"%s\" > /opt/amnezia/awg/clientsTable'", $containerName, $escaped);
         self::executeServerCommand($serverData, $updateCmd, true);
     }
-    
+
     /**
      * Get client data
      */
-    public function getData(): ?array {
+    public function getData(): ?array
+    {
         return $this->data;
     }
-    
+
     /**
      * Get configuration file content
      */
-    public function getConfig(): string {
+    public function getConfig(): string
+    {
         $config = $this->data['config'] ?? '';
         // If config is old or doesn't have the new naming metadata, regenerate it once
         if ($config && strpos($config, '# Remark:') === false) {
@@ -587,28 +612,29 @@ class VpnClient {
         }
         return $config;
     }
-    
+
     /**
      * Regenerate and save client configuration
      */
-    public function regenerateConfig(): void {
+    public function regenerateConfig(): void
+    {
         if (!$this->data) {
             throw new Exception('Client not loaded');
         }
-        
+
         $server = new VpnServer($this->data['server_id']);
         $serverData = $server->getData();
-        
+
         if (!$serverData) {
             throw new Exception('Server not found');
         }
-        
+
         // Parse AWG params
         $awgParams = $serverData['awg_params'] ?? [];
         if (is_string($awgParams)) {
             $awgParams = json_decode($awgParams, true) ?: [];
         }
-        
+
         $config = self::buildClientConfig(
             $this->data['private_key'],
             $this->data['client_ip'],
@@ -620,43 +646,44 @@ class VpnClient {
             $serverData['name'],
             $this->data['name']
         );
-        
+
         $pdo = DB::conn();
         $stmt = $pdo->prepare('UPDATE vpn_clients SET config = ? WHERE id = ?');
         $stmt->execute([$config, $this->clientId]);
-        
+
         $this->data['config'] = $config;
     }
-    
 
-    
+
+
     /**
      * Sync traffic statistics from server
      */
-    public function syncStats(): bool {
+    public function syncStats(): bool
+    {
         if (!$this->data) {
             throw new Exception('Client not loaded');
         }
-        
+
         $server = new VpnServer($this->data['server_id']);
         $serverData = $server->getData();
-        
+
         if (!$serverData || $serverData['status'] !== 'active') {
             return false;
         }
-        
+
         try {
             $stats = self::getClientStatsFromServer($serverData, $this->data['public_key']);
-            
+
             // Update GeoIP information if endpoint IP has changed
             self::updateGeoIpForClient($this->clientId, $stats['endpoint'] ?? null, $this->data['last_endpoint_ip'] ?? null);
-            
+
             $pdo = DB::conn();
-            
-            $oldSent = (int)($this->data['bytes_sent'] ?? 0);
-            $oldReceived = (int)($this->data['bytes_received'] ?? 0);
-            $newSent = (int)$stats['bytes_sent'];
-            $newReceived = (int)$stats['bytes_received'];
+
+            $oldSent = (int) ($this->data['bytes_sent'] ?? 0);
+            $oldReceived = (int) ($this->data['bytes_received'] ?? 0);
+            $newSent = (int) $stats['bytes_sent'];
+            $newReceived = (int) $stats['bytes_received'];
 
             // Fetch latest recorded raw metrics from client_metrics to determine baseline
             $stmtPrev = $pdo->prepare('
@@ -674,8 +701,8 @@ class VpnClient {
             $timeDiff = 0;
 
             if ($prev) {
-                $prevSent = (int)$prev['bytes_sent'];
-                $prevReceived = (int)$prev['bytes_received'];
+                $prevSent = (int) $prev['bytes_sent'];
+                $prevReceived = (int) $prev['bytes_received'];
                 $timeDiff = time() - strtotime($prev['collected_at']);
             } else {
                 // Fallback for transition phase:
@@ -740,11 +767,11 @@ class VpnClient {
                     last_sync_at = NOW()
                 WHERE id = ?
             ');
-            
-            $lastHandshake = $stats['last_handshake'] > 0 
-                ? date('Y-m-d H:i:s', $stats['last_handshake']) 
+
+            $lastHandshake = $stats['last_handshake'] > 0
+                ? date('Y-m-d H:i:s', $stats['last_handshake'])
                 : null;
-            
+
             $success = $stmt->execute([
                 $newTotalSent,
                 $newTotalReceived,
@@ -767,11 +794,12 @@ class VpnClient {
             return false;
         }
     }
-    
+
     /**
      * Update client GeoIP data based on its endpoint if the endpoint changed
      */
-    public static function updateGeoIpForClient(int $clientId, ?string $endpoint, ?string $currentEndpointIp): void {
+    public static function updateGeoIpForClient(int $clientId, ?string $endpoint, ?string $currentEndpointIp): void
+    {
         if (empty($endpoint) || $endpoint === '(none)') {
             return;
         }
@@ -832,24 +860,25 @@ class VpnClient {
             ]);
         }
     }
-    
+
     /**
      * Get client statistics from server
      */
-    private static function getClientStatsFromServer(array $serverData, string $publicKey): array {
+    private static function getClientStatsFromServer(array $serverData, string $publicKey): array
+    {
         $containerName = $serverData['container_name'];
-        
+
         // Get WireGuard interface stats
         $cmd = sprintf("docker exec -i %s /usr/local/bin/awg show wg0 dump", $containerName);
         $output = self::executeServerCommand($serverData, $cmd, true);
-        
+
         $stats = [
             'bytes_sent' => 0,
             'bytes_received' => 0,
             'last_handshake' => 0,
             'endpoint' => null
         ];
-        
+
         // Parse awg dump output
         // Format: public_key preshared_key endpoint allowed_ips latest_handshake transfer_rx transfer_tx persistent_keepalive
         // First line is server (private key), skip it
@@ -857,35 +886,38 @@ class VpnClient {
         //              transfer_tx = bytes sent by server (received by client)
         $lines = explode("\n", trim($output));
         foreach ($lines as $line) {
-            if (empty($line)) continue;
-            
+            if (empty($line))
+                continue;
+
             $parts = preg_split('/\s+/', trim($line));
-            
+
             // Skip first line (server) - it has different format
-            if (count($parts) < 7) continue;
-            
+            if (count($parts) < 7)
+                continue;
+
             // Match by public key
             if ($parts[0] === $publicKey) {
-                $stats['last_handshake'] = (int)$parts[4];
+                $stats['last_handshake'] = (int) $parts[4];
                 $stats['endpoint'] = $parts[2];
-                $stats['bytes_sent'] = (int)$parts[5];      // transfer_rx - client sent
-                $stats['bytes_received'] = (int)$parts[6];  // transfer_tx - client received
+                $stats['bytes_sent'] = (int) $parts[5];      // transfer_rx - client sent
+                $stats['bytes_received'] = (int) $parts[6];  // transfer_tx - client received
                 break;
             }
         }
-        
+
         return $stats;
     }
-    
+
     /**
      * Sync stats for all active clients on a server
      */
-    public static function syncAllStatsForServer(int $serverId): int {
+    public static function syncAllStatsForServer(int $serverId): int
+    {
         $pdo = DB::conn();
         $stmt = $pdo->prepare('SELECT id FROM vpn_clients WHERE server_id = ? AND status = ?');
         $stmt->execute([$serverId, 'active']);
         $clientIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
-        
+
         $synced = 0;
         foreach ($clientIds as $clientId) {
             try {
@@ -897,27 +929,28 @@ class VpnClient {
                 error_log('Failed to sync stats for client ' . $clientId . ': ' . $e->getMessage());
             }
         }
-        
+
         return $synced;
     }
-    
+
     /**
      * Get human-readable traffic statistics
      */
-    public function getFormattedStats(): array {
+    public function getFormattedStats(): array
+    {
         if (!$this->data) {
             return ['sent' => 'N/A', 'received' => 'N/A', 'total' => 'N/A', 'last_seen' => 'Never'];
         }
-        
+
         $sent = $this->formatBytes($this->data['bytes_sent'] ?? 0);
         $received = $this->formatBytes($this->data['bytes_received'] ?? 0);
         $total = $this->formatBytes(($this->data['bytes_sent'] ?? 0) + ($this->data['bytes_received'] ?? 0));
-        
+
         $lastSeen = 'Never';
         if (!empty($this->data['last_handshake'])) {
             $lastHandshake = strtotime($this->data['last_handshake']);
             $diff = time() - $lastHandshake;
-            
+
             if ($diff < 300) {
                 $lastSeen = 'Online';
             } elseif ($diff < 3600) {
@@ -928,10 +961,10 @@ class VpnClient {
                 $lastSeen = floor($diff / 86400) . ' days ago';
             }
         }
-        
-        $speedUp = $this->formatSpeed((float)($this->data['speed_up_kbps'] ?? 0));
-        $speedDown = $this->formatSpeed((float)($this->data['speed_down_kbps'] ?? 0));
-        
+
+        $speedUp = $this->formatSpeed((float) ($this->data['speed_up_kbps'] ?? 0));
+        $speedDown = $this->formatSpeed((float) ($this->data['speed_down_kbps'] ?? 0));
+
         return [
             'sent' => $sent,
             'received' => $received,
@@ -940,36 +973,38 @@ class VpnClient {
             'is_online' => !empty($this->data['last_handshake']) && (time() - strtotime($this->data['last_handshake'])) < 300,
             'speed_up' => $speedUp,
             'speed_down' => $speedDown,
-            'speed_up_raw' => (float)($this->data['speed_up_kbps'] ?? 0),
-            'speed_down_raw' => (float)($this->data['speed_down_kbps'] ?? 0),
+            'speed_up_raw' => (float) ($this->data['speed_up_kbps'] ?? 0),
+            'speed_down_raw' => (float) ($this->data['speed_down_kbps'] ?? 0),
         ];
     }
-    
+
     /**
      * Format speed in Kbps to human-readable string (Kbps or Mbps)
      */
-    private function formatSpeed(float $kbps): string {
+    private function formatSpeed(float $kbps): string
+    {
         if ($kbps >= 1000) {
             return number_format($kbps / 1000, 1) . ' Mbps';
         }
         return number_format($kbps, 0) . ' Kbps';
     }
-    
+
     /**
      * Format bytes to human-readable string (KB, MB, GB, TB depending on value)
      */
-    private function formatBytes(int $bytes): string {
+    private function formatBytes(int $bytes): string
+    {
         if ($bytes <= 0) {
             return '0 MB';
         }
         $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
-        $i = (int)floor(log($bytes, 1024));
+        $i = (int) floor(log($bytes, 1024));
         $i = max(0, min($i, count($units) - 1));
         $val = $bytes / pow(1024, $i);
         $decimals = $i === 0 ? 0 : ($i === 1 ? 1 : 2); // 0 dec for B, 1 dec for KB, 2 dec for MB/GB/TB
         return number_format($val, $decimals) . ' ' . $units[$i];
     }
-    
+
     /**
      * Set client expiration date
      * 
@@ -977,12 +1012,13 @@ class VpnClient {
      * @param string|null $expiresAt Expiration date (Y-m-d H:i:s) or null for never expires
      * @return bool Success
      */
-    public static function setExpiration(int $clientId, ?string $expiresAt): bool {
+    public static function setExpiration(int $clientId, ?string $expiresAt): bool
+    {
         $pdo = DB::conn();
         $stmt = $pdo->prepare('UPDATE vpn_clients SET expires_at = ? WHERE id = ?');
         return $stmt->execute([$expiresAt, $clientId]);
     }
-    
+
     /**
      * Extend client expiration by days
      * 
@@ -990,32 +1026,34 @@ class VpnClient {
      * @param int $days Days to extend
      * @return bool Success
      */
-    public static function extendExpiration(int $clientId, int $days): bool {
+    public static function extendExpiration(int $clientId, int $days): bool
+    {
         $pdo = DB::conn();
-        
+
         // Get current expiration
         $stmt = $pdo->prepare('SELECT expires_at FROM vpn_clients WHERE id = ?');
         $stmt->execute([$clientId]);
         $client = $stmt->fetch();
-        
+
         if (!$client) {
             return false;
         }
-        
+
         // Calculate new expiration from current or now
         $baseDate = $client['expires_at'] ? strtotime($client['expires_at']) : time();
         $newExpiration = date('Y-m-d H:i:s', strtotime("+{$days} days", $baseDate));
-        
+
         return self::setExpiration($clientId, $newExpiration);
     }
-    
+
     /**
      * Get clients expiring soon
      * 
      * @param int $days Check for clients expiring within N days
      * @return array List of expiring clients
      */
-    public static function getExpiringClients(int $days = 7): array {
+    public static function getExpiringClients(int $days = 7): array
+    {
         $pdo = DB::conn();
         $stmt = $pdo->prepare('
             SELECT c.*, s.name as server_name, s.host, u.name as user_name, u.email
@@ -1031,13 +1069,14 @@ class VpnClient {
         $stmt->execute([$days]);
         return $stmt->fetchAll();
     }
-    
+
     /**
      * Get expired clients
      * 
      * @return array List of expired clients
      */
-    public static function getExpiredClients(): array {
+    public static function getExpiredClients(): array
+    {
         $pdo = DB::conn();
         $stmt = $pdo->query('
             SELECT c.*, s.name as server_name, s.host
@@ -1050,101 +1089,108 @@ class VpnClient {
         ');
         return $stmt->fetchAll();
     }
-    
+
     /**
      * Disable expired clients automatically
      * 
      * @return int Number of clients disabled
      */
-    public static function disableExpiredClients(): int {
+    public static function disableExpiredClients(): int
+    {
         return 0; // Functionality disabled per user request
     }
-    
+
     /**
      * Check if client is expired
      * 
      * @return bool True if expired
      */
-    public function isExpired(): bool {
+    public function isExpired(): bool
+    {
         if (!$this->data) {
             return false;
         }
-        
+
         return $this->data['expires_at'] !== null && strtotime($this->data['expires_at']) <= time();
     }
-    
+
     /**
      * Get days until expiration
      * 
      * @return int|null Days until expiration (negative if expired, null if never expires)
      */
-    public function getDaysUntilExpiration(): ?int {
+    public function getDaysUntilExpiration(): ?int
+    {
         if (!$this->data || $this->data['expires_at'] === null) {
             return null;
         }
-        
+
         $diff = strtotime($this->data['expires_at']) - time();
-        return (int)floor($diff / 86400);
+        return (int) floor($diff / 86400);
     }
-    
+
     /**
      * Set traffic limit for client
      * 
      * @param int|null $limitBytes Traffic limit in bytes (NULL = unlimited)
      * @return bool Success
      */
-    public function setTrafficLimit(?int $limitBytes): bool {
+    public function setTrafficLimit(?int $limitBytes): bool
+    {
         if (!$this->data) {
             throw new Exception('Client not loaded');
         }
-        
+
         $pdo = DB::conn();
         $stmt = $pdo->prepare('UPDATE vpn_clients SET traffic_limit = ? WHERE id = ?');
         $result = $stmt->execute([$limitBytes, $this->clientId]);
-        
+
         if ($result) {
             $this->data['traffic_limit'] = $limitBytes;
         }
-        
+
         return $result;
     }
-    
+
     /**
      * Get total traffic used (sent + received)
      * 
      * @return int Total traffic in bytes
      */
-    public function getTotalTraffic(): int {
+    public function getTotalTraffic(): int
+    {
         if (!$this->data) {
             return 0;
         }
-        
-        return (int)($this->data['bytes_sent'] ?? 0) + (int)($this->data['bytes_received'] ?? 0);
+
+        return (int) ($this->data['bytes_sent'] ?? 0) + (int) ($this->data['bytes_received'] ?? 0);
     }
-    
+
     /**
      * Check if client has exceeded traffic limit
      * 
      * @return bool True if over limit
      */
-    public function isOverLimit(): bool {
+    public function isOverLimit(): bool
+    {
         if (!$this->data || $this->data['traffic_limit'] === null) {
             return false; // No limit set
         }
-        
+
         $totalTraffic = $this->getTotalTraffic();
-        return $totalTraffic >= (int)$this->data['traffic_limit'];
+        return $totalTraffic >= (int) $this->data['traffic_limit'];
     }
-    
+
     /**
      * Get traffic limit status
      * 
      * @return array Status info
      */
-    public function getTrafficLimitStatus(): array {
+    public function getTrafficLimitStatus(): array
+    {
         $totalTraffic = $this->getTotalTraffic();
         $limit = $this->data['traffic_limit'] ?? null;
-        
+
         return [
             'total_traffic' => $totalTraffic,
             'traffic_limit' => $limit,
@@ -1154,15 +1200,16 @@ class VpnClient {
             'remaining' => $limit ? max(0, $limit - $totalTraffic) : null
         ];
     }
-    
+
     /**
- * Get all clients that exceeded their traffic limit
- * 
- * @return array List of client IDs over limit
- */
-public static function getClientsOverLimit(): array {
-    $pdo = DB::conn();
-    $stmt = $pdo->query('
+     * Get all clients that exceeded their traffic limit
+     * 
+     * @return array List of client IDs over limit
+     */
+    public static function getClientsOverLimit(): array
+    {
+        $pdo = DB::conn();
+        $stmt = $pdo->query('
         SELECT id, name, bytes_sent, bytes_received, traffic_limit 
         FROM vpn_clients 
         WHERE traffic_limit IS NOT NULL 
@@ -1170,16 +1217,17 @@ public static function getClientsOverLimit(): array {
         AND status = "active"
         ORDER BY id
     ');
-    
-    return $stmt->fetchAll();
-}
-    
+
+        return $stmt->fetchAll();
+    }
+
     /**
      * Disable all clients that exceeded their traffic limit
      * 
      * @return int Number of clients disabled
      */
-    public static function disableClientsOverLimit(): int {
+    public static function disableClientsOverLimit(): int
+    {
         return 0; // Functionality disabled per user request
     }
 
@@ -1187,68 +1235,73 @@ public static function getClientsOverLimit(): array {
      * Find a matching external client code for a given configuration name
      * by resolving substring matches and preventing prefix collisions.
      */
-    public static function findMatchingCode(string $clientName): ?string {
+    public static function findMatchingCode(string $clientName): ?string
+    {
         $clientName = trim($clientName);
-        if ($clientName === '') return null;
-        
+        if ($clientName === '')
+            return null;
+
         $pdo = DB::conn();
         $stmtExt = $pdo->query('SELECT code FROM ext_clients');
         $extClients = $stmtExt->fetchAll(PDO::FETCH_COLUMN);
         if (empty($extClients)) {
             return null;
         }
-        
+
         // Sort codes by length descending to match longer ones first (e.g., #0000nk before #0000)
-        usort($extClients, function($a, $b) {
+        usort($extClients, function ($a, $b) {
             return strlen($b) <=> strlen($a);
         });
-        
+
         $cleanName = strtolower(str_replace(['#', '_', '-'], '', $clientName));
-        if ($cleanName === '') return null;
-        
+        if ($cleanName === '')
+            return null;
+
         foreach ($extClients as $code) {
             $cleanCode = strtolower(str_replace(['#', '_', '-'], '', $code));
-            if ($cleanCode === '') continue;
-            
+            if ($cleanCode === '')
+                continue;
+
             if (strpos($cleanName, $cleanCode) !== false) {
                 return $code;
             }
         }
-        
+
         return null;
     }
 
     /**
      * Link configuration to an external client code and manage traffic totals
      */
-    public function linkToExtClient(?string $code): bool {
+    public function linkToExtClient(?string $code): bool
+    {
         if (!$this->data) {
             throw new Exception('Client not loaded');
         }
         $pdo = DB::conn();
-        $clientId = (int)$this->data['id'];
+        $clientId = (int) $this->data['id'];
         $oldCode = $this->data['ext_client_code'] ?? null;
-        
+
         $code = ($code !== null) ? trim($code) : null;
         if ($code === '') {
             $code = null;
         }
-        
+
         if ($oldCode === $code) {
             return true; // No change
         }
-        
+
         // Update database
         $stmt = $pdo->prepare('UPDATE vpn_clients SET ext_client_code = ? WHERE id = ?');
         $stmt->execute([$code, $clientId]);
-        
+
         // Refresh this instance's local data array
         $this->data['ext_client_code'] = $code;
-        
+
         // Traffic adjustment
-        $bytesSent = (int)($this->data['bytes_sent'] ?? 0);
-        $bytesReceived = (int)($this->data['bytes_received'] ?? 0);
-        
+        $bytesSent = (int) ($this->data['bytes_sent'] ?? 0);
+        $bytesReceived = (int) ($this->data['bytes_received'] ?? 0);
+
         if ($bytesSent > 0 || $bytesReceived > 0) {
             // Subtract traffic from old external client code
             if (!empty($oldCode)) {
@@ -1260,7 +1313,7 @@ public static function getClientsOverLimit(): array {
                 ');
                 $stmtSub->execute([$bytesSent, $bytesReceived, $oldCode]);
             }
-            
+
             // Add traffic to new external client code
             if (!empty($code)) {
                 $stmtAdd = $pdo->prepare('
@@ -1272,12 +1325,12 @@ public static function getClientsOverLimit(): array {
                 $stmtAdd->execute([$bytesSent, $bytesReceived, $code]);
             }
         }
-        
+
         // Sync stats immediately to pull fresh values and add latest delta if active
         if ($code !== null) {
             $this->syncStats();
         }
-        
+
         return true;
     }
 
@@ -1285,18 +1338,19 @@ public static function getClientsOverLimit(): array {
      * Automatically link all unlinked configurations (where ext_client_code IS NULL)
      * to external clients in the cache table using fuzzy code/name matching.
      */
-    public static function autoLinkAll(): int {
+    public static function autoLinkAll(): int
+    {
         $pdo = DB::conn();
-        
+
         // Fetch all unlinked configurations
         $stmtClients = $pdo->query('SELECT id, name FROM vpn_clients WHERE ext_client_code IS NULL');
         $unlinkedClients = $stmtClients->fetchAll(PDO::FETCH_ASSOC);
         if (empty($unlinkedClients)) {
             return 0;
         }
-        
+
         $linkedCount = 0;
-        
+
         foreach ($unlinkedClients as $client) {
             $matchingCode = self::findMatchingCode($client['name']);
             if ($matchingCode !== null) {
@@ -1309,7 +1363,7 @@ public static function getClientsOverLimit(): array {
                 }
             }
         }
-        
+
         return $linkedCount;
     }
 }
