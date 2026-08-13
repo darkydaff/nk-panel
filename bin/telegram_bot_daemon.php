@@ -44,16 +44,30 @@ while (true) {
     $res = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $curlErr = curl_error($ch);
-
-    // If configured proxy failed, auto-fallback to direct connection
-    if ($httpCode !== 200 && !empty($curlErr) && (str_contains(strtolower($curlErr), 'proxy') || str_contains(strtolower($curlErr), 'tunnel') || str_contains($curlErr, '502'))) {
-        curl_setopt($ch, CURLOPT_PROXY, null);
-        $res = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlErr = curl_error($ch);
-    }
-
     curl_close($ch);
+
+    // If proxy/TLS connection failed, retry clean direct connection without any proxy
+    if ($httpCode !== 200) {
+        $ch2 = curl_init($pollUrl);
+        curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch2, CURLOPT_CONNECTTIMEOUT, 15);
+        curl_setopt($ch2, CURLOPT_TIMEOUT, 35);
+        curl_setopt($ch2, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch2, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch2, CURLOPT_PROXY, '');
+        $res2 = curl_exec($ch2);
+        $httpCode2 = curl_getinfo($ch2, CURLINFO_HTTP_CODE);
+        $curlErr2 = curl_error($ch2);
+        curl_close($ch2);
+
+        if ($httpCode2 === 200) {
+            $res = $res2;
+            $httpCode = 200;
+            $curlErr = '';
+        } else {
+            $curlErr = "Proxy: '{$curlErr}', Direct: '{$curlErr2}'";
+        }
+    }
 
     if ($httpCode !== 200) {
         echo "[" . date('Y-m-d H:i:s') . "] Error fetching updates (HTTP Code: {$httpCode}, Error: '{$curlErr}'). Sleeping 5s...\n";
