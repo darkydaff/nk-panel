@@ -1413,7 +1413,7 @@ BASH;
         $this->executeCommand("echo \"{$base64Table}\" | docker exec -i {$containerName} sh -c 'base64 -d > /opt/amnezia/awg/clientsTable'", true);
 
         // Apply rules and syncconf
-        $this->executeCommand("docker exec -i {$containerName} bash -c '/usr/local/bin/awg syncconf wg0 <(/usr/local/bin/awg-quick strip /opt/amnezia/awg/wg0.conf)'", true);
+        $this->executeCommand("docker exec -i {$containerName} sh -c '/usr/local/bin/awg-quick strip /opt/amnezia/awg/wg0.conf > /tmp/wg0_strip.conf && /usr/local/bin/awg syncconf wg0 /tmp/wg0_strip.conf && rm -f /tmp/wg0_strip.conf'", true);
         return true;
     }
 }

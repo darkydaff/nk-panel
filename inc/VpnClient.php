@@ -267,7 +267,7 @@ class VpnClient {
         self::executeServerCommand($serverData, $cmd2, true);
         
         // Apply via awg syncconf
-        $cmd3 = sprintf("docker exec -i %s bash -c '/usr/local/bin/awg syncconf wg0 <(/usr/local/bin/awg-quick strip /opt/amnezia/awg/wg0.conf)'", $containerName);
+        $cmd3 = sprintf("docker exec -i %s sh -c '/usr/local/bin/awg-quick strip /opt/amnezia/awg/wg0.conf > /tmp/wg0_strip.conf && /usr/local/bin/awg syncconf wg0 /tmp/wg0_strip.conf && rm -f /tmp/wg0_strip.conf'", $containerName);
         self::executeServerCommand($serverData, $cmd3, true);
         
         // Remove temp file
