@@ -55,6 +55,7 @@ while (true) {
         curl_setopt($ch2, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch2, CURLOPT_SSL_VERIFYHOST, false);
         curl_setopt($ch2, CURLOPT_PROXY, '');
+        curl_setopt($ch2, CURLOPT_NOPROXY, '*');
         $res2 = curl_exec($ch2);
         $httpCode2 = curl_getinfo($ch2, CURLINFO_HTTP_CODE);
         $curlErr2 = curl_error($ch2);
