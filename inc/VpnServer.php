@@ -206,7 +206,7 @@ class VpnServer
     private function testConnection(): bool
     {
         $testCommand = sprintf(
-            "SSHPASS='%s' sshpass -e ssh -p %d -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=3 -o BatchMode=yes %s@%s 'echo test' 2>/dev/null",
+            "SSHPASS='%s' sshpass -e ssh -p %d -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=10 %s@%s 'echo test' 2>/dev/null",
             str_replace("'", "'\\''", $this->data['password']),
             $this->data['port'],
             $this->data['username'],
@@ -231,7 +231,7 @@ class VpnServer
         $wrappedCommand = $command . '; echo "__EXIT_CODE__:$?"';
         $escapedCommand = escapeshellarg($wrappedCommand);
         $sshCommand = sprintf(
-            "SSHPASS='%s' sshpass -e ssh -p %d -q -o LogLevel=ERROR -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=3 -o ServerAliveInterval=3 -o ServerAliveCountMax=2 -o BatchMode=yes %s@%s %s 2>&1",
+            "SSHPASS='%s' sshpass -e ssh -p %d -q -o LogLevel=ERROR -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=20 %s@%s %s 2>&1",
             str_replace("'", "'\\''", $this->data['password']),
             $this->data['port'],
             $this->data['username'],

@@ -250,7 +250,7 @@ class ServerMonitoring
         $password = $this->serverData['password'];
         
         $sshCmd = sprintf(
-            'SSHPASS=%s sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=3 -o ServerAliveInterval=3 -o ServerAliveCountMax=2 -o BatchMode=yes -p %d %s@%s %s 2>/dev/null',
+            'SSHPASS=%s sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -p %d %s@%s %s 2>/dev/null',
             escapeshellarg($password),
             $port,
             escapeshellarg($username),

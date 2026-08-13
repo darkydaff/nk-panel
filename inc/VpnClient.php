@@ -137,7 +137,7 @@ class VpnClient
 
         $escaped = escapeshellarg($cmd);
         $sshCmd = sprintf(
-            "SSHPASS='%s' sshpass -e ssh -p %d -q -o LogLevel=ERROR -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=5 -o ServerAliveInterval=3 -o ServerAliveCountMax=2 -o BatchMode=yes %s@%s %s 2>&1",
+            "SSHPASS='%s' sshpass -e ssh -p %d -q -o LogLevel=ERROR -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=20 %s@%s %s 2>&1",
             str_replace("'", "'\\''", $serverData['password']),
             $serverData['port'],
             $serverData['username'],
@@ -336,7 +336,7 @@ class VpnClient
 
         $escapedCommand = escapeshellarg($command);
         $sshCommand = sprintf(
-            "SSHPASS='%s' sshpass -e ssh -p %d -q -o LogLevel=ERROR -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=3 -o ServerAliveInterval=3 -o ServerAliveCountMax=2 -o BatchMode=yes %s@%s %s 2>&1",
+            "SSHPASS='%s' sshpass -e ssh -p %d -q -o LogLevel=ERROR -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=20 %s@%s %s 2>&1",
             str_replace("'", "'\\''", $serverData['password']),
             $serverData['port'],
             $serverData['username'],
