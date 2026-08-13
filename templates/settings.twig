@@ -38,6 +38,9 @@
         <button role="tab" onclick="showTab('backups')" id="tab-backups" class="tab gap-2">
             <i class="fas fa-database"></i>Backups
         </button>
+        <button role="tab" onclick="showTab('pgdb')" id="tab-pgdb" class="tab gap-2">
+            <i class="fas fa-server text-blue-400"></i>Internal DB
+        </button>
         <button role="tab" onclick="showTab('monitoring')" id="tab-monitoring" class="tab gap-2">
             <i class="fas fa-chart-line"></i>Monitoring
         </button>
@@ -317,6 +320,51 @@
                         {% endfor %}
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Internal PostgreSQL DB Tab -->
+    <div id="content-pgdb" class="hidden space-y-6">
+        <div class="card bg-base-200 border border-base-300 shadow overflow-hidden">
+            <div class="px-5 py-4 border-b border-base-300 bg-base-300/30 flex items-center justify-between">
+                <h2 class="font-semibold flex items-center gap-2">
+                    <i class="fas fa-database text-blue-400"></i>Internal PostgreSQL Database Service
+                </h2>
+                <a href="/db-manager" class="btn btn-xs btn-primary gap-1">
+                    <i class="fas fa-external-link-alt text-[10px]"></i> Open DB Manager
+                </a>
+            </div>
+            <div class="card-body p-5 space-y-6">
+                <p class="text-xs text-base-content/60">
+                    Manage the internal containerized PostgreSQL database service (<code class="font-mono text-primary">pgdb:5432</code>). Upload or import your <code class="font-mono bg-base-300 px-1 py-0.5 rounded text-primary">postgres_db.sql</code> file to initialize or restore schema &amp; data.
+                </p>
+
+                <!-- One-click SQL Import Form -->
+                <form method="POST" action="/api/settings/pg-import" enctype="multipart/form-data" class="bg-base-100 p-4 border border-base-300 rounded-xl space-y-4">
+                    {{ csrf_field() }}
+                    <h3 class="font-bold text-sm flex items-center gap-2">
+                        <i class="fas fa-file-import text-primary"></i> One-Click postgres_db.sql Import
+                    </h3>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="label py-1"><span class="label-text text-xs font-medium">Upload .sql file from computer</span></label>
+                            <input type="file" name="dump_file" accept=".sql" class="file-input file-input-bordered file-input-sm w-full font-mono text-xs">
+                        </div>
+                        <div>
+                            <label class="label py-1"><span class="label-text text-xs font-medium">OR specify path on server</span></label>
+                            <input type="text" name="file_path" placeholder="/var/www/html/postgres_db.sql" class="input input-bordered input-sm font-mono w-full text-xs">
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between pt-2 border-t border-base-300">
+                        <span class="text-[11px] text-base-content/50">Auto-detects default <code class="font-mono">postgres_db.sql</code> if left blank</span>
+                        <button type="submit" class="btn btn-primary btn-sm gap-2" onclick="return confirm('Import postgres_db.sql into internal PostgreSQL database?')">
+                            <i class="fas fa-upload"></i> Import Dump into PostgreSQL
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>

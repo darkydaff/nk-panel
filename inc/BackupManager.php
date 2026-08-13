@@ -64,12 +64,12 @@ class BackupManager {
         exec($cmdSchema, $outputSchema, $returnVarSchema);
 
         // 2. PostgreSQL Dump
-        $pgHost = Config::get('EXT_PG_HOST');
+        $pgHost = Config::get('EXT_PG_HOST', 'pgdb');
         if (!empty($pgHost)) {
             $pgPort = Config::get('EXT_PG_PORT', '5432');
-            $pgDb = Config::get('EXT_PG_DB');
-            $pgUser = Config::get('EXT_PG_USER');
-            $pgPass = Config::get('EXT_PG_PASSWORD');
+            $pgDb = Config::get('EXT_PG_DB', 'nocodb');
+            $pgUser = Config::get('EXT_PG_USER', 'nocodb');
+            $pgPass = Config::get('EXT_PG_PASSWORD', 'nocodb');
             $postgresDumpPath = "{$tempDir}/postgres_db.sql";
 
             $pgHostEsc = escapeshellarg($pgHost);
@@ -319,12 +319,12 @@ class BackupManager {
               }
 
               // 2. PostgreSQL Restore
-              $pgHost = Config::get('EXT_PG_HOST');
+              $pgHost = Config::get('EXT_PG_HOST', 'pgdb');
               if (isset($options['restore_postgres']) && $options['restore_postgres'] && !empty($pgHost) && file_exists("{$tempDir}/postgres_db.sql")) {
                   $pgPort = Config::get('EXT_PG_PORT', '5432');
-                  $pgDb = Config::get('EXT_PG_DB');
-                  $pgUser = Config::get('EXT_PG_USER');
-                  $pgPass = Config::get('EXT_PG_PASSWORD');
+                  $pgDb = Config::get('EXT_PG_DB', 'nocodb');
+                  $pgUser = Config::get('EXT_PG_USER', 'nocodb');
+                  $pgPass = Config::get('EXT_PG_PASSWORD', 'nocodb');
                   
                   $pgHostEsc = escapeshellarg($pgHost);
                   $pgPortEsc = escapeshellarg($pgPort);

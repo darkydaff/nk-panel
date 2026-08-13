@@ -15,8 +15,8 @@ class ExtDB
         if (self::$pdo)
             return self::$pdo;
 
-        $host = Config::get('EXT_PG_HOST', '157.22.175.250');
-        $port = Config::get('EXT_PG_PORT', '5434');
+        $host = Config::get('EXT_PG_HOST', 'pgdb');
+        $port = Config::get('EXT_PG_PORT', '5432');
         $db = Config::get('EXT_PG_DB', 'nocodb');
         $user = Config::get('EXT_PG_USER', 'nocodb');
         $pass = Config::get('EXT_PG_PASSWORD', 'nocodb');
@@ -642,8 +642,8 @@ class ExtDB
             throw new Exception("External PostgreSQL database is unreachable.");
         }
 
-        $pgHost = Config::get('EXT_PG_HOST', '157.22.175.250');
-        $pgPort = Config::get('EXT_PG_PORT', '5434');
+        $pgHost = Config::get('EXT_PG_HOST', 'pgdb');
+        $pgPort = Config::get('EXT_PG_PORT', '5432');
         $pgDb = Config::get('EXT_PG_DB', 'nocodb');
         $pgUser = Config::get('EXT_PG_USER', 'nocodb');
         $pgPass = Config::get('EXT_PG_PASSWORD', 'nocodb');
@@ -679,6 +679,339 @@ class ExtDB
         if (file_exists($errPath))
             @unlink($errPath);
         return true;
+    }
+
+    /**
+     * Get single client record by Code from PostgreSQL Clients table.
+     */
+    public static function getClientByCode(string $code): ?array
+    {
+        if (!self::isAvailable()) return null;
+        $pdo = self::conn();
+        $table = Config::get('EXT_PG_CLIENTS_TABLE', 'Clients');
+        $stmt = $pdo->prepare("SELECT * FROM \"{$table}\" WHERE \"Code\" = ? LIMIT 1");
+        $stmt->execute([$code]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
+     * Create a new client record in PostgreSQL Clients table and sync locally.
+     */
+    public static function createClient(array $data): bool
+    {
+        if (!self::isAvailable()) throw new Exception("PostgreSQL database is unreachable.");
+        $pdo = self::conn();
+        $table = Config::get('EXT_PG_CLIENTS_TABLE', 'Clients');
+
+        $code = trim($data['Code'] ?? '');
+        if (empty($code)) throw new Exception("Client Code is required.");
+
+        $cols = ['Code'];
+        $vals = [$code];
+        $placeholders = ['?'];
+
+        $allowedCols = ['Name', 'Start_Date', 'Sub', 'Func', 'Router', 'Domain', 'Pass', 'tgid', 'Servers_id'];
+        foreach ($allowedCols as $col) {
+            if (array_key_exists($col, $data)) {
+                $cols[] = "\"{$col}\"";
+                $placeholders[] = '?';
+                $val = $data[$col];
+                if ($val === '') $val = null;
+                if ($col === 'Sub' || $col === 'Servers_id') {
+                    $val = ($val !== null && $val !== '') ? (int)$val : null;
+                }
+                $vals[] = $val;
+            }
+        }
+
+        $colList = implode(', ', $cols);
+        $phList = implode(', ', $placeholders);
+
+        $stmt = $pdo->prepare("INSERT INTO \"{$table}\" ({$colList}) VALUES ({$phList})");
+        $res = $stmt->execute($vals);
+
+        try {
+            self::sync();
+        } catch (Throwable $e) {
+            error_log("Failed to sync client after creation: " . $e->getMessage());
+        }
+
+        return $res;
+    }
+
+    /**
+     * Update an existing client record in PostgreSQL Clients table and sync locally.
+     */
+    public static function updateClient(string $originalCode, array $data): bool
+    {
+        if (!self::isAvailable()) throw new Exception("PostgreSQL database is unreachable.");
+        $pdo = self::conn();
+        $table = Config::get('EXT_PG_CLIENTS_TABLE', 'Clients');
+
+        $set = [];
+        $params = [];
+
+        $allowedCols = ['Code', 'Name', 'Start_Date', 'Sub', 'Func', 'Router', 'Domain', 'Pass', 'tgid', 'Servers_id'];
+        foreach ($allowedCols as $col) {
+            if (array_key_exists($col, $data)) {
+                $set[] = "\"{$col}\" = ?";
+                $val = $data[$col];
+                if ($val === '') $val = null;
+                if ($col === 'Sub' || $col === 'Servers_id') {
+                    $val = ($val !== null && $val !== '') ? (int)$val : null;
+                }
+                $params[] = $val;
+            }
+        }
+
+        if (empty($set)) return false;
+
+        $params[] = $originalCode;
+        $setList = implode(', ', $set);
+
+        $stmt = $pdo->prepare("UPDATE \"{$table}\" SET {$setList} WHERE \"Code\" = ?");
+        $res = $stmt->execute($params);
+
+        try {
+            self::sync();
+        } catch (Throwable $e) {
+            error_log("Failed to sync client after update: " . $e->getMessage());
+        }
+
+        return $res;
+    }
+
+    /**
+     * Delete a client record from PostgreSQL Clients table and sync locally.
+     */
+    public static function deleteClient(string $code): bool
+    {
+        if (!self::isAvailable()) throw new Exception("PostgreSQL database is unreachable.");
+        $pdo = self::conn();
+        $table = Config::get('EXT_PG_CLIENTS_TABLE', 'Clients');
+
+        $stmt = $pdo->prepare("DELETE FROM \"{$table}\" WHERE \"Code\" = ?");
+        $res = $stmt->execute([$code]);
+
+        try {
+            self::sync();
+        } catch (Throwable $e) {
+            error_log("Failed to sync after client deletion: " . $e->getMessage());
+        }
+
+        return $res;
+    }
+
+    /**
+     * List user tables in the PostgreSQL database.
+     */
+    public static function listTables(): array
+    {
+        if (!self::isAvailable()) return [];
+        $pdo = self::conn();
+        $schema = Config::get('EXT_PG_SCHEMA', 'public');
+        $stmt = $pdo->prepare("
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = ? AND table_type = 'BASE TABLE'
+            ORDER BY table_name ASC
+        ");
+        $stmt->execute([$schema]);
+        return $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+    }
+
+    /**
+     * Get column schema definitions for a given PostgreSQL table.
+     */
+    public static function getTableColumns(string $tableName): array
+    {
+        if (!self::isAvailable()) return [];
+        $pdo = self::conn();
+        $schema = Config::get('EXT_PG_SCHEMA', 'public');
+        $stmt = $pdo->prepare("
+            SELECT column_name, data_type, is_nullable, column_default
+            FROM information_schema.columns
+            WHERE table_schema = ? AND table_name = ?
+            ORDER BY ordinal_position ASC
+        ");
+        $stmt->execute([$schema, $tableName]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    /**
+     * Get row data and total count for a given PostgreSQL table with search, sorting and pagination.
+     */
+    public static function getTableData(string $tableName, string $search = '', int $limit = 50, int $offset = 0, string $sortCol = '', string $sortDir = 'ASC'): array
+    {
+        if (!self::isAvailable()) return ['rows' => [], 'total' => 0, 'columns' => []];
+        $pdo = self::conn();
+
+        $columns = self::getTableColumns($tableName);
+        if (empty($columns)) return ['rows' => [], 'total' => 0, 'columns' => []];
+
+        $colNames = array_column($columns, 'column_name');
+
+        $whereSql = '';
+        $params = [];
+        if ($search !== '') {
+            $whereParts = [];
+            foreach ($colNames as $col) {
+                $whereParts[] = "\"{$col}\"::text ILIKE ?";
+                $params[] = '%' . $search . '%';
+            }
+            $whereSql = 'WHERE ' . implode(' OR ', $whereParts);
+        }
+
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM \"{$tableName}\" {$whereSql}");
+        $countStmt->execute($params);
+        $total = (int)$countStmt->fetchColumn();
+
+        $orderSql = '';
+        if ($sortCol !== '' && in_array($sortCol, $colNames, true)) {
+            $dir = strtoupper($sortDir) === 'DESC' ? 'DESC' : 'ASC';
+            $orderSql = "ORDER BY \"{$sortCol}\" {$dir}";
+        } elseif (in_array('id', $colNames, true)) {
+            $orderSql = 'ORDER BY "id" ASC';
+        } elseif (in_array('Code', $colNames, true)) {
+            $orderSql = 'ORDER BY "Code" ASC';
+        }
+
+        $dataParams = array_merge($params, [$limit, $offset]);
+        $dataStmt = $pdo->prepare("SELECT * FROM \"{$tableName}\" {$whereSql} {$orderSql} LIMIT ? OFFSET ?");
+        $dataStmt->execute($dataParams);
+        $rows = $dataStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'rows' => $rows,
+            'total' => $total,
+            'columns' => $columns
+        ];
+    }
+
+    /**
+     * Dynamic row update for any PostgreSQL table.
+     */
+    public static function updateTableRow(string $tableName, array $pkWhere, array $fieldUpdates): bool
+    {
+        if (!self::isAvailable()) throw new Exception("PostgreSQL database is unreachable.");
+        if (empty($pkWhere) || empty($fieldUpdates)) return false;
+
+        $pdo = self::conn();
+
+        $set = [];
+        $params = [];
+        foreach ($fieldUpdates as $col => $val) {
+            $set[] = "\"{$col}\" = ?";
+            $params[] = ($val === '' ? null : $val);
+        }
+
+        $where = [];
+        foreach ($pkWhere as $col => $val) {
+            $where[] = "\"{$col}\" = ?";
+            $params[] = $val;
+        }
+
+        $setSql = implode(', ', $set);
+        $whereSql = implode(' AND ', $where);
+
+        $stmt = $pdo->prepare("UPDATE \"{$tableName}\" SET {$setSql} WHERE {$whereSql}");
+        $res = $stmt->execute($params);
+
+        if (strtolower($tableName) === 'clients' || strtolower($tableName) === 'finances_2026') {
+            try { self::sync(); } catch (Throwable $e) {}
+        }
+
+        return $res;
+    }
+
+    /**
+     * Dynamic row insertion into any PostgreSQL table.
+     */
+    public static function insertTableRow(string $tableName, array $data): bool
+    {
+        if (!self::isAvailable()) throw new Exception("PostgreSQL database is unreachable.");
+        if (empty($data)) return false;
+
+        $pdo = self::conn();
+
+        $cols = [];
+        $phs = [];
+        $params = [];
+        foreach ($data as $col => $val) {
+            $cols[] = "\"{$col}\"";
+            $phs[] = '?';
+            $params[] = ($val === '' ? null : $val);
+        }
+
+        $colList = implode(', ', $cols);
+        $phList = implode(', ', $phs);
+
+        $stmt = $pdo->prepare("INSERT INTO \"{$tableName}\" ({$colList}) VALUES ({$phList})");
+        $res = $stmt->execute($params);
+
+        if (strtolower($tableName) === 'clients' || strtolower($tableName) === 'finances_2026') {
+            try { self::sync(); } catch (Throwable $e) {}
+        }
+
+        return $res;
+    }
+
+    /**
+     * Dynamic row deletion from any PostgreSQL table.
+     */
+    public static function deleteTableRow(string $tableName, array $pkWhere): bool
+    {
+        if (!self::isAvailable()) throw new Exception("PostgreSQL database is unreachable.");
+        if (empty($pkWhere)) return false;
+
+        $pdo = self::conn();
+
+        $where = [];
+        $params = [];
+        foreach ($pkWhere as $col => $val) {
+            $where[] = "\"{$col}\" = ?";
+            $params[] = $val;
+        }
+
+        $whereSql = implode(' AND ', $where);
+        $stmt = $pdo->prepare("DELETE FROM \"{$tableName}\" WHERE {$whereSql}");
+        $res = $stmt->execute($params);
+
+        if (strtolower($tableName) === 'clients' || strtolower($tableName) === 'finances_2026') {
+            try { self::sync(); } catch (Throwable $e) {}
+        }
+
+        return $res;
+    }
+
+    /**
+     * Import a SQL dump file into the internal PostgreSQL database.
+     */
+    public static function importSqlDump(string $filePath): array
+    {
+        if (!file_exists($filePath)) {
+            throw new Exception("SQL dump file not found at: {$filePath}");
+        }
+
+        if (!self::isAvailable()) {
+            throw new Exception("PostgreSQL database is unreachable. Please ensure the pgdb container is running.");
+        }
+
+        $res = self::restoreBackup($filePath);
+        if ($res) {
+            try {
+                $pdo = self::conn();
+                $pdo->exec("SELECT setval('\"Finances_2026_id_seq\"', COALESCE((SELECT MAX(id) FROM \"Finances_2026\"), 1));");
+                $pdo->exec("SELECT setval('\"Servers_id_seq\"', COALESCE((SELECT MAX(id) FROM \"Servers\"), 1));");
+            } catch (Throwable $e) {}
+            try { self::sync(); } catch (Throwable $e) {}
+        }
+
+        return [
+            'success' => $res,
+            'message' => 'SQL dump imported successfully into PostgreSQL.'
+        ];
     }
 }
 

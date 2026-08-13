@@ -22,6 +22,27 @@ services:
       timeout: 5s
       retries: 10
 
+  pgdb:
+    image: postgres:16-alpine
+    container_name: nk-panel-pgdb
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${EXT_PG_DB:-nocodb}
+      POSTGRES_USER: ${EXT_PG_USER:-nocodb}
+      POSTGRES_PASSWORD: ${EXT_PG_PASSWORD:-nocodb}
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./postgres_db.sql:/docker-entrypoint-initdb.d/01_postgres_db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${EXT_PG_USER:-nocodb} -d $${EXT_PG_DB:-nocodb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   web:
     build:
       context: .
@@ -33,6 +54,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      pgdb:
+        condition: service_healthy
     env_file:
       - .env
     environment:
@@ -43,6 +66,11 @@ services:
       DB_DATABASE: ${DB_DATABASE:-amnezia_panel}
       DB_USERNAME: ${DB_USERNAME:-amnezia}
       DB_PASSWORD: ${DB_PASSWORD:-amnezia}
+      EXT_PG_HOST: pgdb
+      EXT_PG_PORT: 5432
+      EXT_PG_DB: ${EXT_PG_DB:-nocodb}
+      EXT_PG_USER: ${EXT_PG_USER:-nocodb}
+      EXT_PG_PASSWORD: ${EXT_PG_PASSWORD:-nocodb}
     volumes:
       - ./:/var/www/html
       - /var/www/html/vendor
@@ -65,5 +93,7 @@ services:
 
 volumes:
   db_data:
+  pg_data:
   caddy_data:
   caddy_config:
+

@@ -531,4 +531,116 @@ class Finances {
         $stmt->execute($params);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
+
+    /**
+     * Get a single transaction by ID from Finances_2026.
+     */
+    public static function getTransactionById(int $id): ?array {
+        if (!self::isAvailable()) return null;
+        $pdo = ExtDB::conn();
+        $stmt = $pdo->prepare("SELECT * FROM \"Finances_2026\" WHERE id = ? LIMIT 1");
+        $stmt->execute([$id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
+     * Add a new transaction record to Finances_2026.
+     */
+    public static function addTransaction(array $data): bool {
+        if (!self::isAvailable()) throw new Exception("PostgreSQL database is unreachable.");
+        $pdo = ExtDB::conn();
+
+        try {
+            $pdo->exec("SELECT setval('\"Finances_2026_id_seq\"', COALESCE((SELECT MAX(id) FROM \"Finances_2026\"), 1));");
+        } catch (Throwable $e) {}
+
+        $date = trim($data['date'] ?? $data['Date'] ?? date('Y-m-d'));
+        $type = trim($data['type'] ?? $data['Type'] ?? 'Income');
+        $amount = (float)($data['amount'] ?? $data['Amount'] ?? 0);
+        $description = trim($data['description'] ?? $data['Description'] ?? '');
+        $clientId = trim($data['client_id'] ?? $data['Client_id'] ?? '');
+
+        $stmt = $pdo->prepare("
+            INSERT INTO \"Finances_2026\" (\"Date\", \"Type\", \"Amount\", \"Description\", \"Client_id\")
+            VALUES (?, ?, ?, ?, ?)
+        ");
+        $res = $stmt->execute([$date, $type, $amount, $description, $clientId !== '' ? $clientId : null]);
+
+        try { ExtDB::sync(); } catch (Throwable $e) {}
+
+        return $res;
+    }
+
+    /**
+     * Update an existing transaction record in Finances_2026.
+     */
+    public static function updateTransaction(int $id, array $data): bool {
+        if (!self::isAvailable()) throw new Exception("PostgreSQL database is unreachable.");
+        $pdo = ExtDB::conn();
+
+        $date = trim($data['date'] ?? $data['Date'] ?? date('Y-m-d'));
+        $type = trim($data['type'] ?? $data['Type'] ?? 'Income');
+        $amount = (float)($data['amount'] ?? $data['Amount'] ?? 0);
+        $description = trim($data['description'] ?? $data['Description'] ?? '');
+        $clientId = trim($data['client_id'] ?? $data['Client_id'] ?? '');
+
+        $stmt = $pdo->prepare("
+            UPDATE \"Finances_2026\"
+            SET \"Date\" = ?, \"Type\" = ?, \"Amount\" = ?, \"Description\" = ?, \"Client_id\" = ?
+            WHERE id = ?
+        ");
+        $res = $stmt->execute([$date, $type, $amount, $description, $clientId !== '' ? $clientId : null, $id]);
+
+        try { ExtDB::sync(); } catch (Throwable $e) {}
+
+        return $res;
+    }
+
+    /**
+     * Delete a transaction record from Finances_2026.
+     */
+    public static function deleteTransaction(int $id): bool {
+        if (!self::isAvailable()) throw new Exception("PostgreSQL database is unreachable.");
+        $pdo = ExtDB::conn();
+        $stmt = $pdo->prepare("DELETE FROM \"Finances_2026\" WHERE id = ?");
+        $res = $stmt->execute([$id]);
+
+        try { ExtDB::sync(); } catch (Throwable $e) {}
+
+        return $res;
+    }
+
+    /**
+     * Get all transactions linked to a specific client code from Finances_2026.
+     */
+    public static function getClientTransactions(string $clientCode): array {
+        if (!self::isAvailable()) return [];
+        $clientCode = trim($clientCode);
+        if ($clientCode === '') return [];
+
+        $pdo = ExtDB::conn();
+        $stmt = $pdo->prepare("
+            SELECT *
+            FROM \"Finances_2026\"
+            WHERE \"Client_id\"::text ILIKE ? OR \"Client_id\"::text ILIKE ?
+            ORDER BY \"Date\"::text DESC, id DESC
+        ");
+        $rawCode = ltrim($clientCode, '#');
+        $hashCode = '#' . $rawCode;
+        $stmt->execute([$rawCode, $hashCode]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        return array_map(function($r) {
+            return [
+                'id' => (int)$r['id'],
+                'date' => $r['Date'] ?? $r['date'] ?? '',
+                'type' => strtolower($r['Type'] ?? $r['type'] ?? 'income'),
+                'amount' => (float)($r['Amount'] ?? $r['amount'] ?? 0),
+                'description' => $r['Description'] ?? $r['description'] ?? '',
+                'client_id' => $r['Client_id'] ?? $r['client_id'] ?? '',
+                'vless_id' => $r['VLESS_id'] ?? $r['vless_id'] ?? ''
+            ];
+        }, $rows);
+    }
 }

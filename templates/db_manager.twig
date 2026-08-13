@@ -1,0 +1,442 @@
+{% extends "layout.twig" %}
+{% block title %}Database Manager{% endblock %}
+
+{% block breadcrumbs %}
+    <li><a href="/dashboard" class="hover:text-base-content transition-colors">Home</a></li>
+    <li><span class="text-base-content/70">DB Manager</span></li>
+{% endblock %}
+
+{% block content %}
+<div class="w-full space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                    <i class="fas fa-database text-lg"></i>
+                </div>
+                Internal Database Manager
+            </h1>
+            <p class="mt-1 text-sm text-base-content/60">
+                Direct read &amp; write access to PostgreSQL tables &mdash; full field editing (NocoDB replacement)
+            </p>
+        </div>
+
+        <div class="flex items-center gap-2">
+            {% if is_available %}
+                <span class="badge badge-success gap-1.5 py-3 px-3">
+                    <span class="w-2 h-2 rounded-full bg-success-content animate-pulse"></span>
+                    PostgreSQL Online
+                </span>
+            {% else %}
+                <span class="badge badge-error gap-1.5 py-3 px-3">
+                    <i class="fas fa-exclamation-triangle text-xs"></i>
+                    PostgreSQL Offline
+                </span>
+            {% if user.role == 'admin' %}
+            <button type="button" onclick="toggleDbEditLock()" id="btnDbEditLock" class="btn btn-warning btn-outline btn-sm gap-2 whitespace-nowrap">
+                <i class="fas fa-lock" id="dbEditLockIcon"></i><span id="dbEditLockText">Unlock Editing</span>
+            </button>
+            <button onclick="openAddRowModal()" id="btnAddRowHeader" class="btn btn-primary btn-sm gap-2 hidden" {% if not is_available %}disabled{% endif %}>
+                <i class="fas fa-plus"></i> Add New Record
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if not is_available %}
+    <div class="alert alert-error shadow-lg">
+        <i class="fas fa-exclamation-circle text-lg"></i>
+        <div>
+            <h3 class="font-bold">PostgreSQL Unreachable</h3>
+            <div class="text-xs opacity-90 mt-0.5">Please make sure the internal `pgdb` container is running and initialized via Settings > Import postgres_db.sql.</div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Controls Bar: Table Selector, Search, Pagination -->
+    <div class="bg-base-200 p-4 border border-base-300 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <!-- Table Selector Tabs -->
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Table:</span>
+            <div class="flex flex-wrap gap-1">
+                {% for tbl in tables %}
+                    <a href="/db-manager?table={{ tbl|url_encode }}&search={{ search|url_encode }}" 
+                       class="btn btn-sm {% if tbl == selected_table %}btn-primary{% else %}btn-ghost{% endif %} font-mono text-xs">
+                        <i class="fas fa-table text-xs opacity-60"></i>
+                        {{ tbl }}
+                    </a>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Search & Filter Form -->
+        <form method="GET" action="/db-manager" class="flex items-center gap-2 w-full md:w-auto">
+            <input type="hidden" name="table" value="{{ selected_table }}">
+            <div class="relative flex-1 md:w-64">
+                <input type="text" name="search" value="{{ search }}" placeholder="Search rows..." class="input input-bordered input-sm w-full pl-8 font-mono text-xs">
+                <i class="fas fa-search absolute left-2.5 top-2.5 text-xs text-base-content/40"></i>
+            </div>
+            <button type="submit" class="btn btn-sm btn-ghost gap-1"><i class="fas fa-filter text-xs"></i> Filter</button>
+            {% if search %}
+                <a href="/db-manager?table={{ selected_table|url_encode }}" class="btn btn-sm btn-circle btn-ghost text-xs"><i class="fas fa-times"></i></a>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- Data Table Card -->
+    <div class="bg-base-100 border border-base-300 rounded-2xl overflow-hidden shadow-sm">
+        <div class="p-4 border-b border-base-300 flex items-center justify-between bg-base-200/50">
+            <div class="flex items-center gap-2">
+                <i class="fas fa-layer-group text-primary text-sm"></i>
+                <span class="font-mono font-bold text-sm">{{ selected_table }}</span>
+                <span class="badge badge-neutral text-xs font-mono">{{ table_data.total|default(0) }} rows</span>
+            </div>
+            <span class="text-xs text-base-content/50">Double-click or use Edit action to modify any field</span>
+        </div>
+
+        <div class="overflow-x-auto max-h-[650px] overflow-y-auto">
+            <table class="table table-xs table-pin-rows table-zebra w-full font-mono text-xs">
+                <thead>
+                    <tr class="bg-base-200 text-base-content/70">
+                        <th class="w-12 text-center">#</th>
+                        {% for col in table_data.columns %}
+                            <th class="whitespace-nowrap">
+                                <a href="/db-manager?table={{ selected_table|url_encode }}&search={{ search|url_encode }}&sort_col={{ col.column_name }}&sort_dir={% if sort_col == col.column_name and sort_dir == 'ASC' %}DESC{% else %}ASC{% endif %}"
+                                   class="hover:text-primary transition-colors inline-flex items-center gap-1">
+                                    {{ col.column_name }}
+                                    {% if sort_col == col.column_name %}
+                                        <i class="fas fa-sort-{{ sort_dir|lower }} text-primary"></i>
+                                    {% endif %}
+                                </a>
+                                <span class="block text-[10px] text-base-content/40 font-normal font-sans">{{ col.data_type }}</span>
+                            </th>
+                        {% endfor %}
+                        <th class="text-right w-24">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if table_data.rows is empty %}
+                    <tr>
+                        <td colspan="{{ (table_data.columns|length) + 2 }}" class="text-center py-12 text-base-content/40 font-sans">
+                            <i class="fas fa-inbox text-3xl mb-2 block"></i>
+                            No records found in table <span class="font-mono font-bold">{{ selected_table }}</span>
+                        </td>
+                    </tr>
+                    {% else %}
+                        {% for row in table_data.rows %}
+                        {% set rowIdx = loop.index %}
+                        <tr class="hover group">
+                            <td class="text-center text-base-content/40 font-sans">{{ (page - 1) * limit + rowIdx }}</td>
+                            {% for col in table_data.columns %}
+                                {% set colName = col.column_name %}
+                                {% set val = row[colName] %}
+                                <td class="whitespace-nowrap max-w-xs truncate font-mono" title="{{ val }}">
+                                    {% if val is null %}
+                                        <span class="text-base-content/30 italic">NULL</span>
+                                    {% elseif val is same as(true) or val == 't' or val == 'true' %}
+                                        <span class="badge badge-xs badge-success">TRUE</span>
+                                    {% elseif val is same as(false) or val == 'f' or val == 'false' %}
+                                        <span class="badge badge-xs badge-ghost">FALSE</span>
+                                    {% else %}
+                                        {{ val }}
+                                    {% endif %}
+                                </td>
+                            {% endfor %}
+                            <td class="text-right whitespace-nowrap">
+                                <div class="flex justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                                    <button onclick='openEditRowModal({{ row|json_encode|e("html_attr") }})' 
+                                            class="btn btn-ghost btn-xs text-info hover:bg-info/10 db-edit-btn hidden" title="Edit row">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button onclick='confirmDeleteRow({{ row|json_encode|e("html_attr") }})' 
+                                            class="btn btn-ghost btn-xs text-error hover:bg-error/10 db-edit-btn hidden" title="Delete row">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% set totalPages = ((table_data.total|default(0)) / limit)|round(0, 'ceil') %}
+        {% if totalPages > 1 %}
+        <div class="p-4 border-t border-base-300 flex flex-col sm:flex-row items-center justify-between gap-3 bg-base-200/30">
+            <span class="text-xs text-base-content/60">
+                Page <span class="font-bold font-mono">{{ page }}</span> of <span class="font-bold font-mono">{{ totalPages }}</span>
+            </span>
+
+            <div class="join">
+                {% if page > 1 %}
+                    <a href="/db-manager?table={{ selected_table|url_encode }}&search={{ search|url_encode }}&page={{ page - 1 }}" class="join-item btn btn-xs btn-ghost">« Prev</a>
+                {% endif %}
+                <span class="join-item btn btn-xs btn-active font-mono">{{ page }}</span>
+                {% if page < totalPages %}
+                    <a href="/db-manager?table={{ selected_table|url_encode }}&search={{ search|url_encode }}&page={{ page + 1 }}" class="join-item btn btn-xs btn-ghost">Next »</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Add Row Modal -->
+<dialog id="addRowModal" class="modal">
+    <div class="modal-box max-w-2xl bg-base-100 border border-base-300 rounded-2xl shadow-2xl">
+        <h3 class="font-bold text-lg flex items-center gap-2 border-b border-base-300 pb-3">
+            <i class="fas fa-plus-circle text-primary"></i> Add Row to <span class="font-mono text-primary">{{ selected_table }}</span>
+        </h3>
+        
+        <form id="addRowForm" onsubmit="submitAddRow(event)" class="space-y-4 mt-4 max-h-[60vh] overflow-y-auto pr-1">
+            <input type="hidden" name="table" value="{{ selected_table }}">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {% for col in table_data.columns %}
+                    <div>
+                        <label class="label py-1">
+                            <span class="label-text text-xs font-mono font-bold">{{ col.column_name }}</span>
+                            <span class="label-text-alt text-[10px] text-base-content/40">{{ col.data_type }}</span>
+                        </label>
+                        <input type="text" name="data[{{ col.column_name }}]" placeholder="{{ col.column_default|default('NULL') }}" class="input input-bordered input-sm w-full font-mono text-xs">
+                    </div>
+                {% endfor %}
+            </div>
+
+            <div class="modal-action border-t border-base-300 pt-3">
+                <button type="button" onclick="document.getElementById('addRowModal').close()" class="btn btn-ghost btn-sm">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm gap-2" id="saveAddRowBtn">
+                    <i class="fas fa-save"></i> Save Record
+                </button>
+            </div>
+        </form>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- Edit Row Modal -->
+<dialog id="editRowModal" class="modal">
+    <div class="modal-box max-w-2xl bg-base-100 border border-base-300 rounded-2xl shadow-2xl">
+        <h3 class="font-bold text-lg flex items-center gap-2 border-b border-base-300 pb-3">
+            <i class="fas fa-edit text-info"></i> Edit Row in <span class="font-mono text-info">{{ selected_table }}</span>
+        </h3>
+        
+        <form id="editRowForm" onsubmit="submitEditRow(event)" class="space-y-4 mt-4 max-h-[60vh] overflow-y-auto pr-1">
+            <input type="hidden" name="table" value="{{ selected_table }}">
+            <div id="editFieldsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <!-- Dynamically populated -->
+            </div>
+
+            <div class="modal-action border-t border-base-300 pt-3">
+                <button type="button" onclick="document.getElementById('editRowModal').close()" class="btn btn-ghost btn-sm">Cancel</button>
+                <button type="submit" class="btn btn-info btn-sm gap-2" id="saveEditRowBtn">
+                    <i class="fas fa-check"></i> Update Record
+                </button>
+            </div>
+        </form>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<script>
+let currentColumns = {{ table_data.columns|json_encode|raw }};
+let selectedTable = "{{ selected_table }}";
+
+function openAddRowModal() {
+    document.getElementById('addRowForm').reset();
+    document.getElementById('addRowModal').showModal();
+}
+
+let activeEditPk = {};
+
+function openEditRowModal(rowData) {
+    const container = document.getElementById('editFieldsContainer');
+    container.innerHTML = '';
+    activeEditPk = {};
+
+    if (rowData.hasOwnProperty('id') && rowData.id !== null) {
+        activeEditPk = { id: rowData.id };
+    } else if (rowData.hasOwnProperty('Code') && rowData.Code !== null) {
+        activeEditPk = { Code: rowData.Code };
+    } else if (currentColumns.length > 0) {
+        const firstCol = currentColumns[0].column_name;
+        activeEditPk[firstCol] = rowData[firstCol];
+    }
+
+    currentColumns.forEach(col => {
+        const colName = col.column_name;
+        const val = rowData[colName] !== null ? rowData[colName] : '';
+        const isPk = activeEditPk.hasOwnProperty(colName);
+
+        const div = document.createElement('div');
+        div.innerHTML = `
+            <label class="label py-1">
+                <span class="label-text text-xs font-mono font-bold ${isPk ? 'text-primary' : ''}">
+                    ${colName} ${isPk ? '(PK)' : ''}
+                </span>
+                <span class="label-text-alt text-[10px] text-base-content/40">${col.data_type}</span>
+            </label>
+            <input type="text" name="updates[${colName}]" value="${escapeHtml(String(val))}" 
+                   class="input input-bordered input-sm w-full font-mono text-xs ${isPk ? 'bg-base-200' : ''}">
+        `;
+        container.appendChild(div);
+    });
+
+    document.getElementById('editRowModal').showModal();
+}
+
+function escapeHtml(str) {
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
+async function submitAddRow(e) {
+    e.preventDefault();
+    const btn = document.getElementById('saveAddRowBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+    const form = e.target;
+    const formData = new FormData(form);
+    const dataObj = {};
+    for (let [key, val] of formData.entries()) {
+        const match = key.match(/data\[(.*?)\]/);
+        if (match) {
+            dataObj[match[1]] = val;
+        }
+    }
+
+    try {
+        const res = await fetch('/api/db-manager/row-insert', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({
+                table: selectedTable,
+                data: dataObj
+            })
+        });
+        const json = await res.json();
+        if (json.success) {
+            window.location.reload();
+        } else {
+            alert('Error: ' + (json.error || 'Failed to insert row'));
+        }
+    } catch (err) {
+        alert('Network Error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save"></i> Save Record';
+    }
+}
+
+async function submitEditRow(e) {
+    e.preventDefault();
+    const btn = document.getElementById('saveEditRowBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+
+    const form = e.target;
+    const formData = new FormData(form);
+    const updatesObj = {};
+    for (let [key, val] of formData.entries()) {
+        const match = key.match(/updates\[(.*?)\]/);
+        if (match) {
+            updatesObj[match[1]] = val;
+        }
+    }
+
+    try {
+        const res = await fetch('/api/db-manager/row-update', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({
+                table: selectedTable,
+                pk: activeEditPk,
+                updates: updatesObj
+            })
+        });
+        const json = await res.json();
+        if (json.success) {
+            window.location.reload();
+        } else {
+            alert('Error: ' + (json.error || 'Failed to update row'));
+        }
+    } catch (err) {
+        alert('Network Error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check"></i> Update Record';
+    }
+}
+
+async function confirmDeleteRow(rowData) {
+    let pk = {};
+    if (rowData.hasOwnProperty('id') && rowData.id !== null) {
+        pk = { id: rowData.id };
+    } else if (rowData.hasOwnProperty('Code') && rowData.Code !== null) {
+        pk = { Code: rowData.Code };
+    } else if (currentColumns.length > 0) {
+        const firstCol = currentColumns[0].column_name;
+        pk[firstCol] = rowData[firstCol];
+    }
+
+    if (!confirm(`Are you sure you want to delete this row from ${selectedTable}?`)) {
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/db-manager/row-delete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({
+                table: selectedTable,
+                pk: pk
+            })
+        });
+        const json = await res.json();
+        if (json.success) {
+            window.location.reload();
+        } else {
+            alert('Error: ' + (json.error || 'Failed to delete row'));
+        }
+    } catch (err) {
+        alert('Network Error: ' + err.message);
+    }
+}
+
+let isDbEditingUnlocked = false;
+
+function toggleDbEditLock() {
+    isDbEditingUnlocked = !isDbEditingUnlocked;
+    const btn = document.getElementById('btnDbEditLock');
+    const icon = document.getElementById('dbEditLockIcon');
+    const text = document.getElementById('dbEditLockText');
+    const addBtn = document.getElementById('btnAddRowHeader');
+    const editBtns = document.querySelectorAll('.db-edit-btn');
+
+    if (isDbEditingUnlocked) {
+        btn.className = 'btn btn-warning btn-sm gap-2 whitespace-nowrap shadow-md';
+        icon.className = 'fas fa-lock-open text-warning-content';
+        text.textContent = 'Editing Unlocked';
+        if (addBtn) addBtn.classList.remove('hidden');
+        editBtns.forEach(b => b.classList.remove('hidden'));
+    } else {
+        btn.className = 'btn btn-warning btn-outline btn-sm gap-2 whitespace-nowrap';
+        icon.className = 'fas fa-lock';
+        text.textContent = 'Unlock Editing';
+        if (addBtn) addBtn.classList.add('hidden');
+        editBtns.forEach(b => b.classList.add('hidden'));
+    }
+}
+</script>
+{% endblock %}

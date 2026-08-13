@@ -2784,12 +2784,16 @@ Router::get('/api/servers/{id}/clients', function ($params) {
             $agentOnline = (time() - strtotime($serverData['last_check_at'])) < 120;
         }
 
-        // Only run SSH-pull sync if the push agent is offline
-        if (!$agentOnline) {
-            try {
-                VpnClient::syncAllStatsForServer($serverId);
-            } catch (Throwable $e) {
-                // Ignore sync errors to prevent API crashes
+        // Only run SSH-pull sync if the push agent is offline and server status is active
+        if (!$agentOnline && ($serverData['status'] ?? '') === 'active') {
+            $failCacheKey = 'ssh_fail_server_' . $serverId;
+            if (empty($_SESSION[$failCacheKey]) || (time() - $_SESSION[$failCacheKey]) > 120) {
+                try {
+                    VpnClient::syncAllStatsForServer($serverId);
+                    unset($_SESSION[$failCacheKey]);
+                } catch (Throwable $e) {
+                    $_SESSION[$failCacheKey] = time();
+                }
             }
         }
 
@@ -4328,5 +4332,307 @@ Router::get('/api/finances/export', function () {
     }
 });
 
+/**
+ * CLIENTS FULL FIELD CRUD API ROUTES
+ */
+Router::get('/api/clients/get', function () {
+    header('Content-Type: application/json');
+    $user = requireApiAuth();
+    if (!$user) return;
+    $code = trim($_GET['code'] ?? '');
+    $client = ExtDB::getClientByCode($code);
+    if ($client) {
+        echo json_encode(['success' => true, 'client' => $client]);
+    } else {
+        http_response_code(404);
+        echo json_encode(['success' => false, 'error' => 'Client not found']);
+    }
+});
+
+Router::get('/api/clients/payments', function () {
+    header('Content-Type: application/json');
+    $user = requireApiAuth();
+    if (!$user) return;
+    $code = trim($_GET['code'] ?? '');
+    if (empty($code)) {
+        echo json_encode(['success' => false, 'error' => 'Client code required']);
+        return;
+    }
+    $client = ExtDB::getClientByCode($code);
+    $payments = Finances::getClientTransactions($code);
+    echo json_encode([
+        'success' => true,
+        'client' => $client,
+        'payments' => $payments
+    ]);
+});
+
+Router::get('/api/clients/list', function () {
+    header('Content-Type: application/json');
+    $user = requireApiAuth();
+    if (!$user) return;
+    $search = trim($_GET['search'] ?? '');
+    $clients = ExtDB::searchClients($search, 100, 0);
+    $codes = array_column($clients, 'Code');
+    echo json_encode(['success' => true, 'codes' => $codes]);
+});
+
+Router::post('/api/clients/create', function () {
+    header('Content-Type: application/json');
+    requireAdmin();
+    try {
+        $res = ExtDB::createClient($_POST);
+        echo json_encode(['success' => $res, 'message' => 'Client created successfully']);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+});
+
+Router::post('/api/clients/update', function () {
+    header('Content-Type: application/json');
+    requireAdmin();
+    try {
+        $origCode = trim($_POST['original_code'] ?? $_POST['Code'] ?? '');
+        if (empty($origCode)) throw new Exception("Original client code is required.");
+        $res = ExtDB::updateClient($origCode, $_POST);
+        echo json_encode(['success' => $res, 'message' => 'Client updated successfully']);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+});
+
+Router::post('/api/clients/delete', function () {
+    header('Content-Type: application/json');
+    requireAdmin();
+    try {
+        $code = trim($_POST['code'] ?? $_POST['Code'] ?? '');
+        if (empty($code)) throw new Exception("Client code is required.");
+        $res = ExtDB::deleteClient($code);
+        echo json_encode(['success' => $res, 'message' => 'Client deleted successfully']);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+});
+
+/**
+ * FINANCES FULL FIELD CRUD API ROUTES
+ */
+Router::get('/api/finances/get', function () {
+    header('Content-Type: application/json');
+    $user = requireApiAuth();
+    if (!$user) return;
+    $id = (int)($_GET['id'] ?? 0);
+    $tx = Finances::getTransactionById($id);
+    if ($tx) {
+        echo json_encode(['success' => true, 'transaction' => $tx]);
+    } else {
+        http_response_code(404);
+        echo json_encode(['success' => false, 'error' => 'Transaction not found']);
+    }
+});
+
+Router::post('/api/finances/create', function () {
+    header('Content-Type: application/json');
+    requireAdmin();
+    try {
+        $res = Finances::addTransaction($_POST);
+        echo json_encode(['success' => $res, 'message' => 'Transaction created successfully']);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+});
+
+Router::post('/api/finances/update', function () {
+    header('Content-Type: application/json');
+    requireAdmin();
+    try {
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id <= 0) throw new Exception("Valid transaction ID is required.");
+        $res = Finances::updateTransaction($id, $_POST);
+        echo json_encode(['success' => $res, 'message' => 'Transaction updated successfully']);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+});
+
+Router::post('/api/finances/delete', function () {
+    header('Content-Type: application/json');
+    requireAdmin();
+    try {
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id <= 0) throw new Exception("Valid transaction ID is required.");
+        $res = Finances::deleteTransaction($id);
+        echo json_encode(['success' => $res, 'message' => 'Transaction deleted successfully']);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+});
+
+/**
+ * UNIVERSAL DATABASE EXPLORER & FIELD MANAGER (NOCODB REPLACEMENT)
+ */
+Router::get('/db-manager', function () {
+    requireAdmin();
+    $tables = ExtDB::listTables();
+    $selectedTable = trim($_GET['table'] ?? ($tables[0] ?? 'Clients'));
+    $search = trim($_GET['search'] ?? '');
+    $page = max(1, (int)($_GET['page'] ?? 1));
+    $limit = max(10, min(100, (int)($_GET['limit'] ?? 50)));
+    $offset = ($page - 1) * $limit;
+    $sortCol = trim($_GET['sort_col'] ?? '');
+    $sortDir = trim($_GET['sort_dir'] ?? 'ASC');
+
+    $tableData = [];
+    $isAvailable = ExtDB::isAvailable();
+    if ($isAvailable && !empty($selectedTable)) {
+        $tableData = ExtDB::getTableData($selectedTable, $search, $limit, $offset, $sortCol, $sortDir);
+    }
+
+    View::render('db_manager.twig', [
+        'is_available' => $isAvailable,
+        'tables' => $tables,
+        'selected_table' => $selectedTable,
+        'table_data' => $tableData,
+        'search' => $search,
+        'page' => $page,
+        'limit' => $limit,
+        'sort_col' => $sortCol,
+        'sort_dir' => $sortDir,
+        'title' => 'Database Manager'
+    ]);
+});
+
+Router::get('/api/db-manager/table-data', function () {
+    header('Content-Type: application/json');
+    $user = requireApiAuth();
+    if (!$user) return;
+    try {
+        $table = trim($_GET['table'] ?? '');
+        $search = trim($_GET['search'] ?? '');
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $limit = max(10, min(100, (int)($_GET['limit'] ?? 50)));
+        $offset = ($page - 1) * $limit;
+        $sortCol = trim($_GET['sort_col'] ?? '');
+        $sortDir = trim($_GET['sort_dir'] ?? 'ASC');
+
+        $data = ExtDB::getTableData($table, $search, $limit, $offset, $sortCol, $sortDir);
+        echo json_encode(array_merge(['success' => true], $data));
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+});
+
+Router::post('/api/db-manager/row-insert', function () {
+    header('Content-Type: application/json');
+    requireAdmin();
+    try {
+        $input = json_decode(file_get_contents('php://input'), true) ?: $_POST;
+        $table = trim($input['table'] ?? '');
+        $data = $input['data'] ?? [];
+        if (empty($table) || empty($data)) throw new Exception("Table and row data are required.");
+        $res = ExtDB::insertTableRow($table, $data);
+        echo json_encode(['success' => $res, 'message' => 'Row inserted successfully']);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+});
+
+Router::post('/api/db-manager/row-update', function () {
+    header('Content-Type: application/json');
+    requireAdmin();
+    try {
+        $input = json_decode(file_get_contents('php://input'), true) ?: $_POST;
+        $table = trim($input['table'] ?? '');
+        $pkWhere = $input['pk'] ?? [];
+        $updates = $input['updates'] ?? [];
+        if (empty($table) || empty($pkWhere) || empty($updates)) throw new Exception("Table, primary key, and field updates are required.");
+        $res = ExtDB::updateTableRow($table, $pkWhere, $updates);
+        echo json_encode(['success' => $res, 'message' => 'Row updated successfully']);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+});
+
+Router::post('/api/db-manager/row-delete', function () {
+    header('Content-Type: application/json');
+    requireAdmin();
+    try {
+        $input = json_decode(file_get_contents('php://input'), true) ?: $_POST;
+        $table = trim($input['table'] ?? '');
+        $pkWhere = $input['pk'] ?? [];
+        if (empty($table) || empty($pkWhere)) throw new Exception("Table and primary key are required.");
+        $res = ExtDB::deleteTableRow($table, $pkWhere);
+        echo json_encode(['success' => $res, 'message' => 'Row deleted successfully']);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+});
+
+/**
+ * ONE-CLICK POSTGRES DUMP IMPORT
+ */
+Router::post('/api/settings/pg-import', function () {
+    requireAdmin();
+    $isJson = isJsonRequest();
+
+    try {
+        $dumpPath = null;
+        if (isset($_FILES['dump_file']) && $_FILES['dump_file']['error'] === UPLOAD_ERR_OK) {
+            $dumpPath = $_FILES['dump_file']['tmp_name'];
+        } elseif (!empty($_POST['file_path'])) {
+            $dumpPath = trim($_POST['file_path']);
+        } else {
+            $possiblePaths = [
+                '/var/www/html/backups/ext_db/postgres_db.sql',
+                '/var/www/html/postgres_db.sql',
+                __DIR__ . '/../backups/ext_db/postgres_db.sql',
+                __DIR__ . '/../postgres_db.sql'
+            ];
+            foreach ($possiblePaths as $p) {
+                if (file_exists($p)) {
+                    $dumpPath = $p;
+                    break;
+                }
+            }
+        }
+
+        if (!$dumpPath || !file_exists($dumpPath)) {
+            throw new Exception("No valid postgres_db.sql dump file found or specified.");
+        }
+
+        $res = ExtDB::importSqlDump($dumpPath);
+
+        if ($isJson) {
+            header('Content-Type: application/json');
+            echo json_encode($res);
+            return;
+        }
+
+        $_SESSION['success_message'] = "PostgreSQL dump imported successfully into local database.";
+    } catch (Throwable $e) {
+        if ($isJson) {
+            http_response_code(500);
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+            return;
+        }
+        $_SESSION['error_message'] = "PostgreSQL dump import failed: " . $e->getMessage();
+    }
+
+    $redirectUrl = $_SERVER['HTTP_REFERER'] ?? '/settings';
+    redirect($redirectUrl);
+});
+
 // Dispatch router
 Router::dispatch($_SERVER['REQUEST_METHOD'], $_SERVER['REQUEST_URI']);
+

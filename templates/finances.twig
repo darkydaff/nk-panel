@@ -42,6 +42,15 @@
                 <i class="fas fa-sync-alt"></i>
                 Refresh
             </button>
+            {% if user.role == 'admin' %}
+            <button type="button" onclick="toggleFinancesEditLock()" id="btnFinancesEditLock" class="btn btn-warning btn-outline btn-sm gap-2 whitespace-nowrap">
+                <i class="fas fa-lock" id="financesEditLockIcon"></i><span id="financesEditLockText">Unlock Editing</span>
+            </button>
+            <button onclick="openAddTxModal()" id="btnAddTxHeader" class="btn btn-sm gap-2 text-white bg-emerald-600 hover:bg-emerald-700 border-none hidden">
+                <i class="fas fa-plus"></i>
+                Add Transaction
+            </button>
+            {% endif %}
         </div>
     </div>
 
@@ -370,6 +379,111 @@
             </form>
         </div>
     </div>
+</dialog>
+
+<!-- Add Transaction Modal -->
+<dialog id="modalAddTx" class="modal">
+    <div class="modal-box bg-base-200 border border-base-300 max-w-md">
+        <h3 class="font-bold text-lg flex items-center gap-2 border-b border-base-300 pb-3">
+            <i class="fas fa-plus-circle text-emerald-400"></i> Add New Transaction
+        </h3>
+        <form id="formAddTx" onsubmit="submitAddTx(event)" class="space-y-4 py-4 font-sans text-xs">
+            <div class="form-control">
+                <label class="label py-1"><span class="label-text font-bold">Date *</span></label>
+                <input type="date" name="date" required class="input input-bordered input-sm font-mono w-full">
+            </div>
+            <div class="form-control">
+                <label class="label py-1"><span class="label-text font-bold">Type *</span></label>
+                <select name="type" required class="select select-bordered select-sm w-full font-mono">
+                    <option value="Income">Income (+)</option>
+                    <option value="Expense">Expense (-)</option>
+                </select>
+            </div>
+            <div class="form-control">
+                <label class="label py-1"><span class="label-text font-bold">Amount (₽) *</span></label>
+                <input type="number" step="0.01" name="amount" required placeholder="1000.00" class="input input-bordered input-sm font-mono w-full">
+            </div>
+            <div class="form-control">
+                <label class="label py-1"><span class="label-text font-bold">Client ID / Code</span></label>
+                <input type="text" name="client_id" list="clientCodesDatalist" placeholder="NK-12345" class="input input-bordered input-sm font-mono w-full">
+            </div>
+            <div class="form-control">
+                <label class="label py-1"><span class="label-text font-bold">Description</span></label>
+                <textarea name="description" rows="2" placeholder="Subscription payment" class="textarea textarea-bordered textarea-sm w-full font-mono"></textarea>
+            </div>
+            <div class="modal-action border-t border-base-300 pt-3">
+                <button type="button" onclick="document.getElementById('modalAddTx').close()" class="btn btn-ghost btn-sm">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm gap-2" id="btnSaveAddTx">
+                    <i class="fas fa-save"></i> Save Transaction
+                </button>
+            </div>
+        </form>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- Edit Transaction Modal -->
+<dialog id="modalEditTx" class="modal">
+    <div class="modal-box bg-base-200 border border-base-300 max-w-md">
+        <h3 class="font-bold text-lg flex items-center gap-2 border-b border-base-300 pb-3">
+            <i class="fas fa-edit text-info"></i> Edit Transaction <span id="editTxIdHeader" class="font-mono text-info"></span>
+        </h3>
+        <form id="formEditTx" onsubmit="submitEditTx(event)" class="space-y-4 py-4 font-sans text-xs">
+            <input type="hidden" name="id" id="editTxId">
+            <div class="form-control">
+                <label class="label py-1"><span class="label-text font-bold">Date *</span></label>
+                <input type="date" name="date" id="editTxDate" required class="input input-bordered input-sm font-mono w-full">
+            </div>
+            <div class="form-control">
+                <label class="label py-1"><span class="label-text font-bold">Type *</span></label>
+                <select name="type" id="editTxType" required class="select select-bordered select-sm w-full font-mono">
+                    <option value="Income">Income (+)</option>
+                    <option value="Expense">Expense (-)</option>
+                </select>
+            </div>
+            <div class="form-control">
+                <label class="label py-1"><span class="label-text font-bold">Amount (₽) *</span></label>
+                <input type="number" step="0.01" name="amount" id="editTxAmount" required class="input input-bordered input-sm font-mono w-full">
+            </div>
+            <div class="form-control">
+                <label class="label py-1"><span class="label-text font-bold">Client ID / Code</span></label>
+                <input type="text" name="client_id" id="editTxClientId" list="clientCodesDatalist" class="input input-bordered input-sm font-mono w-full">
+            </div>
+            <div class="form-control">
+                <label class="label py-1"><span class="label-text font-bold">Description</span></label>
+                <textarea name="description" id="editTxDescription" rows="2" class="textarea textarea-bordered textarea-sm w-full font-mono"></textarea>
+            </div>
+            <div class="modal-action border-t border-base-300 pt-3">
+                <button type="button" onclick="document.getElementById('modalEditTx').close()" class="btn btn-ghost btn-sm">Cancel</button>
+                <button type="submit" class="btn btn-info btn-sm gap-2" id="btnSaveEditTx">
+                    <i class="fas fa-check"></i> Update Transaction
+                </button>
+            </div>
+        </form>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<datalist id="clientCodesDatalist"></datalist>
+
+<!-- Client Quick Info Modal inside Finances -->
+<dialog id="modalClientQuick" class="modal">
+    <div class="modal-box bg-base-200 border border-base-300 max-w-lg">
+        <div class="flex items-center justify-between border-b border-base-300 pb-3">
+            <h3 class="font-bold text-lg flex items-center gap-2">
+                <i class="fas fa-user-circle text-primary"></i> Client Overview: <span id="quickClientCodeHeader" class="font-mono text-primary"></span>
+            </h3>
+            <button onclick="goToClientPage()" class="btn btn-xs btn-outline btn-primary gap-1">
+                <i class="fas fa-external-link-alt"></i> Open Client Page
+            </button>
+        </div>
+        <div class="py-4 space-y-3 font-mono text-sm" id="quickClientContent">
+        </div>
+        <div class="modal-action border-t border-base-300 pt-3">
+            <form method="dialog"><button class="btn btn-sm">Close</button></form>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
 </dialog>
 
 <script>
@@ -772,16 +886,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td class="max-w-xs truncate text-xs text-base-content/80 font-medium" title="${escapeHtml(tx.description)}">
                     ${escapeHtml(tx.description || '-')}
                 </td>
-                <td class="font-mono text-xs font-semibold ${tx.client_id ? 'text-primary' : 'text-amber-400'}">
-                    ${escapeHtml(tx.client_id || 'Unmatched')}
+                <td class="font-mono text-xs font-semibold">
+                    ${tx.client_id ? `<button onclick="openClientQuickModal('${escapeHtml(tx.client_id)}')" class="btn btn-ghost btn-xs font-mono font-bold text-primary hover:underline p-0.5">${escapeHtml(tx.client_id)}</button>` : '<span class="text-amber-400">Unmatched</span>'}
                 </td>
                 <td class="font-mono text-xs text-base-content/50">
                     ${escapeHtml(tx.vless_id || '-')}
                 </td>
-                <td class="text-right">
-                    <button class="btn btn-ghost btn-xs text-info btn-detail" data-tx='${JSON.stringify(tx)}'>
+                <td class="text-right whitespace-nowrap space-x-1">
+                    <button class="btn btn-ghost btn-xs text-info btn-detail" data-tx='${JSON.stringify(tx)}' title="View details">
                         <i class="fas fa-eye"></i>
                     </button>
+                    {% if user.role == 'admin' %}
+                    <button class="btn btn-ghost btn-xs text-warning btn-edit-tx tx-edit-btn hidden" data-tx='${JSON.stringify(tx)}' title="Edit transaction">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-ghost btn-xs text-error btn-delete-tx tx-edit-btn hidden" data-id="${tx.id}" title="Delete transaction">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                    {% endif %}
                 </td>
             </tr>
         `).join('');
@@ -790,6 +912,20 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.addEventListener('click', () => {
                 const tx = JSON.parse(btn.dataset.tx);
                 openTxModal(tx);
+            });
+        });
+
+        document.querySelectorAll('.btn-edit-tx').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tx = JSON.parse(btn.dataset.tx);
+                openEditTxModal(tx);
+            });
+        });
+
+        document.querySelectorAll('.btn-delete-tx').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.dataset.id;
+                deleteTransactionRecord(id);
             });
         });
     }
@@ -856,6 +992,208 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initial Load
     loadDashboardData();
+});
+
+function openAddTxModal() {
+    document.getElementById('formAddTx').reset();
+    const today = new Date().toISOString().split('T')[0];
+    document.querySelector('#formAddTx input[name="date"]').value = today;
+    document.getElementById('modalAddTx').showModal();
+}
+
+async function submitAddTx(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btnSaveAddTx');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+    const formData = new FormData(e.target);
+    try {
+        const res = await fetch('/api/finances/create', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': '{{ csrf_token() }}' },
+            body: formData
+        });
+        const json = await res.json();
+        if (json.success) {
+            document.getElementById('modalAddTx').close();
+            window.location.reload();
+        } else {
+            alert('Error: ' + (json.error || 'Failed to add transaction'));
+        }
+    } catch (err) {
+        alert('Network Error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save"></i> Save Transaction';
+    }
+}
+
+function openEditTxModal(tx) {
+    document.getElementById('editTxIdHeader').textContent = '#' + tx.id;
+    document.getElementById('editTxId').value = tx.id;
+    document.getElementById('editTxDate').value = tx.date ? String(tx.date).split(' ')[0] : '';
+    document.getElementById('editTxType').value = (tx.type && tx.type.toLowerCase() === 'income') ? 'Income' : 'Expense';
+    document.getElementById('editTxAmount').value = tx.amount;
+    document.getElementById('editTxClientId').value = tx.client_id || '';
+    document.getElementById('editTxDescription').value = tx.description || '';
+    document.getElementById('modalEditTx').showModal();
+}
+
+async function submitEditTx(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btnSaveEditTx');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+
+    const formData = new FormData(e.target);
+    try {
+        const res = await fetch('/api/finances/update', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': '{{ csrf_token() }}' },
+            body: formData
+        });
+        const json = await res.json();
+        if (json.success) {
+            document.getElementById('modalEditTx').close();
+            window.location.reload();
+        } else {
+            alert('Error: ' + (json.error || 'Failed to update transaction'));
+        }
+    } catch (err) {
+        alert('Network Error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check"></i> Update Transaction';
+    }
+}
+
+async function deleteTransactionRecord(id) {
+    if (!confirm('Are you sure you want to delete transaction #' + id + '?')) return;
+
+    try {
+        const formData = new FormData();
+        formData.append('id', id);
+        const res = await fetch('/api/finances/delete', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': '{{ csrf_token() }}' },
+            body: formData
+        });
+        const json = await res.json();
+        if (json.success) {
+            window.location.reload();
+        } else {
+            alert('Error: ' + (json.error || 'Failed to delete transaction'));
+        }
+    } catch (err) {
+        alert('Network Error: ' + err.message);
+    }
+}
+
+let isFinancesEditingUnlocked = false;
+
+function toggleFinancesEditLock() {
+    isFinancesEditingUnlocked = !isFinancesEditingUnlocked;
+    const btn = document.getElementById('btnFinancesEditLock');
+    const icon = document.getElementById('financesEditLockIcon');
+    const text = document.getElementById('financesEditLockText');
+    const addBtn = document.getElementById('btnAddTxHeader');
+    const editBtns = document.querySelectorAll('.tx-edit-btn');
+
+    if (isFinancesEditingUnlocked) {
+        btn.className = 'btn btn-warning btn-sm gap-2 whitespace-nowrap shadow-md';
+        icon.className = 'fas fa-lock-open text-warning-content';
+        text.textContent = 'Editing Unlocked';
+        if (addBtn) addBtn.classList.remove('hidden');
+        editBtns.forEach(b => b.classList.remove('hidden'));
+    } else {
+        btn.className = 'btn btn-warning btn-outline btn-sm gap-2 whitespace-nowrap';
+        icon.className = 'fas fa-lock';
+        text.textContent = 'Unlock Editing';
+        if (addBtn) addBtn.classList.add('hidden');
+        editBtns.forEach(b => b.classList.add('hidden'));
+    }
+}
+
+let activeQuickClientCode = '';
+
+async function openClientQuickModal(code) {
+    activeQuickClientCode = code;
+    document.getElementById('quickClientCodeHeader').textContent = code;
+    const content = document.getElementById('quickClientContent');
+    content.innerHTML = '<div><i class="fas fa-spinner fa-spin mr-2"></i>Loading client information...</div>';
+    document.getElementById('modalClientQuick').showModal();
+
+    try {
+        const res = await fetch('/api/clients/payments?code=' + encodeURIComponent(code));
+        const json = await res.json();
+
+        if (!json.success || !json.client) {
+            content.innerHTML = '<div class="text-error">Client record not found in Clients table.</div>';
+            return;
+        }
+
+        const c = json.client;
+        const payments = json.payments || [];
+
+        content.innerHTML = `
+            <div class="flex justify-between border-b border-base-300 pb-2">
+                <span class="text-base-content/50">Code:</span>
+                <span class="font-bold text-primary">${escapeHtml(c.Code)}</span>
+            </div>
+            <div class="flex justify-between border-b border-base-300 pb-2">
+                <span class="text-base-content/50">Name:</span>
+                <span class="font-bold">${escapeHtml(c.Name || '-')}</span>
+            </div>
+            <div class="flex justify-between border-b border-base-300 pb-2">
+                <span class="text-base-content/50">Status (Func):</span>
+                <span class="badge ${c.Func === 'WORK' ? 'badge-success' : 'badge-warning'} text-xs">${escapeHtml(c.Func || 'UNKNOWN')}</span>
+            </div>
+            <div class="flex justify-between border-b border-base-300 pb-2">
+                <span class="text-base-content/50">Subscription (Sub):</span>
+                <span class="font-bold">${c.Sub || 0} months</span>
+            </div>
+            <div class="flex justify-between border-b border-base-300 pb-2">
+                <span class="text-base-content/50">Start Date:</span>
+                <span>${escapeHtml(c.Start_Date || '-')}</span>
+            </div>
+            <div class="flex justify-between border-b border-base-300 pb-2">
+                <span class="text-base-content/50">Router:</span>
+                <span>${escapeHtml(c.Router || '-')}</span>
+            </div>
+            <div class="flex justify-between border-b border-base-300 pb-2">
+                <span class="text-base-content/50">Telegram ID (tgid):</span>
+                <span>${escapeHtml(c.tgid || '-')}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-base-content/50">Total Recorded Payments:</span>
+                <span class="font-bold text-emerald-400">${payments.length} transactions</span>
+            </div>
+        `;
+    } catch (err) {
+        content.innerHTML = '<div class="text-error">Error loading client details</div>';
+    }
+}
+
+function goToClientPage() {
+    if (activeQuickClientCode) {
+        window.location.href = '/clients?search=' + encodeURIComponent(activeQuickClientCode);
+    }
+}
+
+async function loadClientCodesDatalist() {
+    try {
+        const res = await fetch('/api/clients/list');
+        const json = await res.json();
+        if (json.success && json.codes) {
+            const dl = document.getElementById('clientCodesDatalist');
+            dl.innerHTML = json.codes.map(code => `<option value="${escapeHtml(code)}">`).join('');
+        }
+    } catch (e) {}
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadClientCodesDatalist();
 });
 </script>
 {% endblock %}

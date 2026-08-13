@@ -43,6 +43,14 @@
             <button type="button" onclick="triggerClientSync()" id="syncClientBtn" class="btn btn-ghost btn-sm gap-2 whitespace-nowrap">
                 <i class="fas fa-sync-alt" id="syncClientIcon"></i>Sync DB
             </button>
+            {% if user.role == 'admin' %}
+            <button type="button" onclick="toggleClientEditLock()" id="btnClientEditLock" class="btn btn-warning btn-outline btn-sm gap-2 whitespace-nowrap">
+                <i class="fas fa-lock" id="clientEditLockIcon"></i><span id="clientEditLockText">Unlock Editing</span>
+            </button>
+            <button type="button" onclick="openAddClientModal()" id="btnAddClientHeader" class="btn btn-primary btn-sm gap-2 whitespace-nowrap hidden">
+                <i class="fas fa-user-plus"></i>Add Client
+            </button>
+            {% endif %}
         </div>
     </div>
 
@@ -255,6 +263,14 @@
                     <button onclick="openCreateForClient('{{ client.Code|e('js') }}')" class="btn btn-outline btn-primary btn-sm flex-1 gap-1.5">
                         <i class="fas fa-plus text-xs"></i>New Config
                     </button>
+                    <button onclick="openClientPaymentsModal('{{ client.Code|e('js') }}')" class="btn btn-ghost btn-sm btn-square text-emerald-400 hover:bg-emerald-500/10" title="View linked Finances transactions">
+                        <i class="fas fa-receipt text-xs"></i>
+                    </button>
+                    {% if user.role == 'admin' %}
+                    <button onclick="openEditClientModal('{{ client.Code|e('js') }}')" class="btn btn-ghost btn-sm btn-square text-info hover:bg-info/10 client-edit-btn hidden" title="Edit Client Record">
+                        <i class="fas fa-edit text-xs"></i>
+                    </button>
+                    {% endif %}
                     
                     {% if client.router_id %}
                     <div class="dropdown dropdown-top dropdown-end">
@@ -357,6 +373,10 @@
                         <div class="flex items-center justify-end gap-1">
                             <a href="/clients?code={{ client.Code|url_encode }}" class="btn btn-ghost btn-xs gap-1" title="View configs"><i class="fas fa-eye"></i></a>
                             <button onclick="openCreateForClient('{{ client.Code|e('js') }}')" class="btn btn-ghost btn-xs text-primary gap-1" title="New config"><i class="fas fa-plus"></i></button>
+                            <button onclick="openClientPaymentsModal('{{ client.Code|e('js') }}')" class="btn btn-ghost btn-xs text-emerald-400 hover:bg-emerald-500/10" title="View linked Payments"><i class="fas fa-receipt"></i></button>
+                            {% if user.role == 'admin' %}
+                            <button onclick="openEditClientModal('{{ client.Code|e('js') }}')" class="btn btn-ghost btn-xs text-info hover:bg-info/10 client-edit-btn hidden" title="Edit Client Record"><i class="fas fa-edit"></i></button>
+                            {% endif %}
                             {% if client.router_id %}
                             <button onclick="openPushDomainsModal({{ client.router_id }}, '{{ client.Router|default('Router')|escape('js') }}')" class="btn btn-ghost btn-xs text-secondary gap-1" title="Push domains"><i class="fas fa-route"></i></button>
                             {% endif %}
@@ -609,7 +629,383 @@ function triggerRouterPush(routerId, vpnClientId) {
         })
         .catch(err => { alert('Error: ' + err.message); icon.className = oldClass; btn.disabled = false; });
 }
+
+function openAddClientModal() {
+    document.getElementById('addClientForm').reset();
+    document.getElementById('addClientModal').showModal();
+}
+
+async function submitAddClient(e) {
+    e.preventDefault();
+    const btn = document.getElementById('saveAddClientBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+    const form = e.target;
+    const formData = new FormData(form);
+
+    try {
+        const res = await fetch('/api/clients/create', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': '{{ csrf_token() }}' },
+            body: formData
+        });
+        const json = await res.json();
+        if (json.success) {
+            window.location.reload();
+        } else {
+            alert('Error: ' + (json.error || 'Failed to create client'));
+        }
+    } catch (err) {
+        alert('Network Error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save"></i> Save Client';
+    }
+}
+
+async function openEditClientModal(code) {
+    try {
+        const res = await fetch('/api/clients/get?code=' + encodeURIComponent(code));
+        const json = await res.json();
+        if (!json.success || !json.client) {
+            alert('Could not fetch client record.');
+            return;
+        }
+        const c = json.client;
+        document.getElementById('editOriginalCode').value = c.Code || code;
+        document.getElementById('editClientCodeHeading').textContent = c.Code || code;
+        document.getElementById('editCode').value = c.Code || '';
+        document.getElementById('editName').value = c.Name || '';
+        document.getElementById('editStartDate').value = c.Start_Date || '';
+        document.getElementById('editSub').value = c.Sub !== null ? c.Sub : '';
+        document.getElementById('editFunc').value = c.Func || 'WORK';
+        document.getElementById('editRouter').value = c.Router || '';
+        document.getElementById('editDomain').value = c.Domain || '';
+        document.getElementById('editPass').value = c.Pass || '';
+        document.getElementById('editTgid').value = c.tgid || '';
+        document.getElementById('editServersId').value = c.Servers_id !== null ? c.Servers_id : '';
+
+        document.getElementById('editClientModal').showModal();
+    } catch (err) {
+        alert('Error loading client: ' + err.message);
+    }
+}
+
+async function submitEditClient(e) {
+    e.preventDefault();
+    const btn = document.getElementById('saveEditClientBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+
+    const form = e.target;
+    const formData = new FormData(form);
+
+    try {
+        const res = await fetch('/api/clients/update', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': '{{ csrf_token() }}' },
+            body: formData
+        });
+        const json = await res.json();
+        if (json.success) {
+            window.location.reload();
+        } else {
+            alert('Error: ' + (json.error || 'Failed to update client'));
+        }
+    } catch (err) {
+        alert('Network Error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check"></i> Update Record';
+    }
+}
+
+async function deleteClientFromModal() {
+    const code = document.getElementById('editOriginalCode').value;
+    if (!code) return;
+    if (!confirm('Are you sure you want to delete client ' + code + ' from PostgreSQL?')) return;
+
+    try {
+        const formData = new FormData();
+        formData.append('code', code);
+        const res = await fetch('/api/clients/delete', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': '{{ csrf_token() }}' },
+            body: formData
+        });
+        const json = await res.json();
+        if (json.success) {
+            window.location.reload();
+        } else {
+            alert('Error: ' + (json.error || 'Failed to delete client'));
+        }
+    } catch (err) {
+        alert('Network Error: ' + err.message);
+    }
+}
 </script>
+
+<!-- Add Client Modal -->
+<dialog id="addClientModal" class="modal">
+    <div class="modal-box max-w-xl bg-base-100 border border-base-300 rounded-2xl shadow-2xl">
+        <h3 class="font-bold text-lg flex items-center gap-2 border-b border-base-300 pb-3">
+            <i class="fas fa-user-plus text-primary"></i> Add New Client Record
+        </h3>
+        
+        <form id="addClientForm" onsubmit="submitAddClient(event)" class="space-y-4 mt-4 max-h-[65vh] overflow-y-auto pr-1">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div>
+                    <label class="label py-1"><span class="label-text font-bold">Client Code *</span></label>
+                    <input type="text" name="Code" required placeholder="NK-12345" class="input input-bordered input-sm w-full font-mono">
+                </div>
+                <div>
+                    <label class="label py-1"><span class="label-text font-bold">Client Name</span></label>
+                    <input type="text" name="Name" placeholder="John Doe" class="input input-bordered input-sm w-full">
+                </div>
+                <div>
+                    <label class="label py-1"><span class="label-text font-bold">Start Date</span></label>
+                    <input type="date" name="Start_Date" class="input input-bordered input-sm w-full font-mono">
+                </div>
+                <div>
+                    <label class="label py-1"><span class="label-text font-bold">Subscription (Months)</span></label>
+                    <input type="number" name="Sub" min="0" value="1" class="input input-bordered input-sm w-full font-mono">
+                </div>
+                <div>
+                    <label class="label py-1"><span class="label-text font-bold">Status (Func)</span></label>
+                    <select name="Func" class="select select-bordered select-sm w-full font-mono">
+                        <option value="WORK">WORK (Active)</option>
+                        <option value="PAUSE">PAUSE (Suspended)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="label py-1"><span class="label-text font-bold">Router Name</span></label>
+                    <input type="text" name="Router" placeholder="Keenetic-Giga" class="input input-bordered input-sm w-full">
+                </div>
+                <div>
+                    <label class="label py-1"><span class="label-text font-bold">Domain / Host</span></label>
+                    <input type="text" name="Domain" placeholder="router.keenetic.pro" class="input input-bordered input-sm w-full">
+                </div>
+                <div>
+                    <label class="label py-1"><span class="label-text font-bold">Router Password (Pass)</span></label>
+                    <input type="text" name="Pass" class="input input-bordered input-sm w-full font-mono">
+                </div>
+                <div>
+                    <label class="label py-1"><span class="label-text font-bold">Telegram ID (tgid)</span></label>
+                    <input type="text" name="tgid" placeholder="123456789" class="input input-bordered input-sm w-full font-mono">
+                </div>
+                <div>
+                    <label class="label py-1"><span class="label-text font-bold">Server ID (Servers_id)</span></label>
+                    <input type="number" name="Servers_id" placeholder="1" class="input input-bordered input-sm w-full font-mono">
+                </div>
+            </div>
+
+            <div class="modal-action border-t border-base-300 pt-3">
+                <button type="button" onclick="document.getElementById('addClientModal').close()" class="btn btn-ghost btn-sm">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm gap-2" id="saveAddClientBtn">
+                    <i class="fas fa-save"></i> Save Client
+                </button>
+            </div>
+        </form>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- Edit Client Modal -->
+<dialog id="editClientModal" class="modal">
+    <div class="modal-box max-w-xl bg-base-100 border border-base-300 rounded-2xl shadow-2xl">
+        <h3 class="font-bold text-lg flex items-center gap-2 border-b border-base-300 pb-3">
+            <i class="fas fa-edit text-info"></i> Edit Client Record: <span id="editClientCodeHeading" class="font-mono text-info"></span>
+        </h3>
+        
+        <form id="editClientForm" onsubmit="submitEditClient(event)" class="space-y-4 mt-4 max-h-[65vh] overflow-y-auto pr-1">
+            <input type="hidden" name="original_code" id="editOriginalCode">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div>
+                    <label class="label py-1"><span class="label-text font-bold">Client Code *</span></label>
+                    <input type="text" name="Code" id="editCode" required class="input input-bordered input-sm w-full font-mono">
+                </div>
+                <div>
+                    <label class="label py-1"><span class="label-text font-bold">Client Name</span></label>
+                    <input type="text" name="Name" id="editName" class="input input-bordered input-sm w-full">
+                </div>
+                <div>
+                    <label class="label py-1"><span class="label-text font-bold">Start Date</span></label>
+                    <input type="date" name="Start_Date" id="editStartDate" class="input input-bordered input-sm w-full font-mono">
+                </div>
+                <div>
+                    <label class="label py-1"><span class="label-text font-bold">Subscription (Months)</span></label>
+                    <input type="number" name="Sub" id="editSub" min="0" class="input input-bordered input-sm w-full font-mono">
+                </div>
+                <div>
+                    <label class="label py-1"><span class="label-text font-bold">Status (Func)</span></label>
+                    <select name="Func" id="editFunc" class="select select-bordered select-sm w-full font-mono">
+                        <option value="WORK">WORK (Active)</option>
+                        <option value="PAUSE">PAUSE (Suspended)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="label py-1"><span class="label-text font-bold">Router Name</span></label>
+                    <input type="text" name="Router" id="editRouter" class="input input-bordered input-sm w-full">
+                </div>
+                <div>
+                    <label class="label py-1"><span class="label-text font-bold">Domain / Host</span></label>
+                    <input type="text" name="Domain" id="editDomain" class="input input-bordered input-sm w-full">
+                </div>
+                <div>
+                    <label class="label py-1"><span class="label-text font-bold">Router Password (Pass)</span></label>
+                    <input type="text" name="Pass" id="editPass" class="input input-bordered input-sm w-full font-mono">
+                </div>
+                <div>
+                    <label class="label py-1"><span class="label-text font-bold">Telegram ID (tgid)</span></label>
+                    <input type="text" name="tgid" id="editTgid" class="input input-bordered input-sm w-full font-mono">
+                </div>
+                <div>
+                    <label class="label py-1"><span class="label-text font-bold">Server ID (Servers_id)</span></label>
+                    <input type="number" name="Servers_id" id="editServersId" class="input input-bordered input-sm w-full font-mono">
+                </div>
+            </div>
+
+            <div class="modal-action border-t border-base-300 pt-3 flex items-center justify-between">
+                <button type="button" onclick="deleteClientFromModal()" class="btn btn-error btn-outline btn-sm gap-1 text-xs">
+                    <i class="fas fa-trash"></i> Delete Client
+                </button>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="document.getElementById('editClientModal').close()" class="btn btn-ghost btn-sm">Cancel</button>
+                    <button type="submit" class="btn btn-info btn-sm gap-2" id="saveEditClientBtn">
+                        <i class="fas fa-check"></i> Update Record
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+let isClientEditingUnlocked = false;
+
+function toggleClientEditLock() {
+    isClientEditingUnlocked = !isClientEditingUnlocked;
+    const btn = document.getElementById('btnClientEditLock');
+    const icon = document.getElementById('clientEditLockIcon');
+    const text = document.getElementById('clientEditLockText');
+    const addBtn = document.getElementById('btnAddClientHeader');
+    const editBtns = document.querySelectorAll('.client-edit-btn');
+
+    if (isClientEditingUnlocked) {
+        btn.className = 'btn btn-warning btn-sm gap-2 whitespace-nowrap shadow-md';
+        icon.className = 'fas fa-lock-open text-warning-content';
+        text.textContent = 'Editing Unlocked';
+        if (addBtn) addBtn.classList.remove('hidden');
+        editBtns.forEach(b => b.classList.remove('hidden'));
+    } else {
+        btn.className = 'btn btn-warning btn-outline btn-sm gap-2 whitespace-nowrap';
+        icon.className = 'fas fa-lock';
+        text.textContent = 'Unlock Editing';
+        if (addBtn) addBtn.classList.add('hidden');
+        editBtns.forEach(b => b.classList.add('hidden'));
+    }
+}
+
+let activePaymentClientCode = '';
+
+async function openClientPaymentsModal(code) {
+    activePaymentClientCode = code;
+    document.getElementById('paymentModalClientCode').textContent = code;
+    const banner = document.getElementById('paymentModalClientBanner');
+    const tbody = document.getElementById('paymentModalTableBody');
+
+    banner.innerHTML = '<span>Loading client details...</span>';
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center py-6 text-base-content/40"><i class="fas fa-spinner fa-spin mr-2"></i>Loading payments...</td></tr>';
+
+    document.getElementById('clientPaymentsModal').showModal();
+
+    try {
+        const res = await fetch('/api/clients/payments?code=' + encodeURIComponent(code));
+        const data = await res.json();
+
+        if (!data.success) {
+            banner.innerHTML = `<span class="text-error">${escapeHtml(data.error || 'Failed to load client')}</span>`;
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-6 text-error">Failed to load payments</td></tr>';
+            return;
+        }
+
+        const c = data.client || {};
+        const payments = data.payments || [];
+
+        const funcClass = (c.Func === 'WORK') ? 'badge-success' : 'badge-warning';
+        banner.innerHTML = `
+            <div>Name: <b>${escapeHtml(c.Name || '-')}</b></div>
+            <div>Status: <span class="badge ${funcClass} badge-xs">${escapeHtml(c.Func || 'UNKNOWN')}</span></div>
+            <div>Sub: <b>${c.Sub || 0} months</b></div>
+            <div>Start: <b>${c.Start_Date || '-'}</b></div>
+            <div>Total Payments: <b>${payments.length}</b></div>
+        `;
+
+        if (payments.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-6 text-base-content/40">No linked payments in Finances 2026.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = payments.map(p => `
+            <tr class="hover:bg-base-200">
+                <td>${p.date}</td>
+                <td><span class="badge badge-xs ${p.type === 'income' ? 'badge-success' : 'badge-error'}">${p.type}</span></td>
+                <td class="font-bold ${p.type === 'income' ? 'text-emerald-400' : 'text-rose-400'}">${p.amount} ₽</td>
+                <td class="max-w-xs truncate" title="${escapeHtml(p.description)}">${escapeHtml(p.description || '-')}</td>
+            </tr>
+        `).join('');
+
+    } catch (err) {
+        banner.innerHTML = `<span class="text-error">Network error</span>`;
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-6 text-error">Network error loading payments</td></tr>';
+    }
+}
+
+function openAddTxForClient() {
+    if (!activePaymentClientCode) return;
+    window.location.href = '/finances?client=' + encodeURIComponent(activePaymentClientCode);
+}
+</script>
+
+<!-- Client Payments Modal -->
+<dialog id="clientPaymentsModal" class="modal">
+    <div class="modal-box max-w-2xl bg-base-100 border border-base-300 rounded-2xl shadow-2xl">
+        <div class="flex items-center justify-between border-b border-base-300 pb-3">
+            <h3 class="font-bold text-lg flex items-center gap-2">
+                <i class="fas fa-receipt text-emerald-400"></i> Linked Payments: <span id="paymentModalClientCode" class="font-mono text-primary"></span>
+            </h3>
+            <button onclick="openAddTxForClient()" class="btn btn-xs text-white bg-emerald-600 hover:bg-emerald-700 border-none gap-1">
+                <i class="fas fa-plus"></i> Open in Finances
+            </button>
+        </div>
+
+        <div class="py-4 space-y-4">
+            <div id="paymentModalClientBanner" class="p-3 bg-base-200 rounded-xl flex flex-wrap items-center justify-between text-xs font-mono gap-2">
+            </div>
+
+            <div class="overflow-x-auto max-h-60 overflow-y-auto">
+                <table class="table table-xs table-zebra w-full font-mono">
+                    <thead>
+                        <tr class="bg-base-200">
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Amount</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody id="paymentModalTableBody">
+                        <tr><td colspan="4" class="text-center py-6 text-base-content/40">Loading payments...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="modal-action border-t border-base-300 pt-3">
+            <form method="dialog"><button class="btn btn-sm">Close</button></form>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
 
 {% include 'push_domains_modal.twig' %}
 {% endblock %}

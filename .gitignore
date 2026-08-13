@@ -9,3 +9,6 @@
 .claude/
 OVERVIEW.md
 *.log
+postgres_db.sql
+*.sql
+/backups/
