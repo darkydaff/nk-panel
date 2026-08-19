@@ -1018,11 +1018,112 @@ document.addEventListener('DOMContentLoaded', () => {
     loadDashboardData();
 });
 
+// Global escapeHtml for modals and dropdowns
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function openAddTxModal() {
     document.getElementById('formAddTx').reset();
     const today = new Date().toISOString().split('T')[0];
     document.querySelector('#formAddTx input[name="date"]').value = today;
+    const clientInfo = document.getElementById('addTxClientInfo');
+    if (clientInfo) {
+        clientInfo.classList.add('hidden');
+        clientInfo.innerHTML = '';
+    }
+    const dd = document.getElementById('addTxClientDropdown');
+    if (dd) dd.classList.add('hidden');
+    currentSelectedClient = null;
+    updateAddTxExtendPreview();
     document.getElementById('modalAddTx').showModal();
+}
+
+let financesClientSearchTimer = null;
+let currentSelectedClient = null;
+
+function onFinancesClientInput(inputEl, dropdownId) {
+    clearTimeout(financesClientSearchTimer);
+    const q = inputEl.value.trim();
+    financesClientSearchTimer = setTimeout(() => fetchFinancesClientCodes(inputEl, dropdownId, q), 80);
+}
+
+async function fetchFinancesClientCodes(inputEl, dropdownId, q) {
+    const dropdown = document.getElementById(dropdownId);
+    if (!dropdown) return;
+    try {
+        const res = await fetch('/api/ext-clients/search?q=' + encodeURIComponent(q) + '&limit=30');
+        const data = await res.json();
+        let clients = data.clients || [];
+        const codes = data.codes || [];
+
+        if (clients.length === 0 && codes.length > 0) {
+            clients = codes.map(code => ({ code, name: '', status: 'active', func: 'WORK' }));
+        }
+
+        if (clients.length === 0) {
+            dropdown.innerHTML = '<div class="px-3 py-2 text-base-content/40 text-center text-xs">No matching clients found</div>';
+            dropdown.classList.remove('hidden');
+            return;
+        }
+
+        dropdown.innerHTML = clients.map((c, idx) => {
+            const statusBadge = c.status === 'active' 
+                ? '<span class="badge badge-success badge-xs font-mono">active</span>'
+                : c.status === 'expiring'
+                ? '<span class="badge badge-warning badge-xs font-mono">expiring</span>'
+                : c.status === 'expired'
+                ? '<span class="badge badge-error badge-xs font-mono">expired</span>'
+                : '<span class="badge badge-ghost badge-xs font-mono">' + escapeHtml(c.func || 'WORK') + '</span>';
+
+            const daysText = (c.days_left !== null && c.days_left !== undefined)
+                ? (c.days_left > 0 ? `${c.days_left}d left` : `${Math.abs(c.days_left)}d ago`)
+                : '';
+
+            return `
+            <div class="px-3 py-2 hover:bg-primary/20 hover:text-primary cursor-pointer border-b border-base-content/10 last:border-0 flex items-center justify-between gap-2 transition-colors" data-index="${idx}">
+                <div class="min-w-0 flex-1">
+                    <div class="font-mono font-bold text-xs flex items-center gap-1.5 truncate">
+                        <i class="fas fa-user-circle text-primary/70"></i>
+                        <span>${escapeHtml(c.code)}</span>
+                        ${c.name ? `<span class="font-sans font-normal text-base-content/70 truncate">(${escapeHtml(c.name)})</span>` : ''}
+                    </div>
+                    <div class="text-[10px] text-base-content/60 mt-0.5 flex items-center gap-2">
+                        ${c.expiry_date && c.expiry_date !== '-' ? `<span>Expires: <strong class="font-mono">${escapeHtml(c.expiry_date)}</strong></span>` : '<span>Start: ' + escapeHtml(c.start_date || '-') + '</span>'}
+                        ${daysText ? `<span class="opacity-75">(${escapeHtml(daysText)})</span>` : ''}
+                        ${c.sub ? `<span class="opacity-75">Sub: ${escapeHtml(c.sub)}mo</span>` : ''}
+                    </div>
+                </div>
+                <div>
+                    ${statusBadge}
+                </div>
+            </div>
+            `;
+        }).join('');
+
+        dropdown.classList.remove('hidden');
+        dropdown.querySelectorAll('[data-index]').forEach((item) => {
+            item.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                const idx = parseInt(item.getAttribute('data-index'), 10);
+                const c = clients[idx];
+                if (!c) return;
+
+                inputEl.value = c.code;
+                dropdown.classList.add('hidden');
+                currentSelectedClient = c;
+
+                // If this is the add transaction modal, display info chip and update preview
+                if (inputEl.id === 'addTxClientId') {
+                    showAddTxClientInfo(c);
+                }
+            });
+        });
+    } catch (e) {
+        console.error('Error fetching client autosuggestions:', e);
+        dropdown.classList.add('hidden');
+    }
 }
 
 async function submitAddTx(e) {
@@ -1259,134 +1360,6 @@ async function loadClientCodesDatalist() {
             if (dl) dl.innerHTML = json.codes.map(code => `<option value="${escapeHtml(code)}">`).join('');
         }
     } catch (e) {}
-}
-
-let financesClientSearchTimer = null;
-let currentSelectedClient = null;
-
-function onFinancesClientInput(inputEl, dropdownId) {
-    clearTimeout(financesClientSearchTimer);
-    const q = inputEl.value.trim();
-    financesClientSearchTimer = setTimeout(() => fetchFinancesClientCodes(inputEl, dropdownId, q), 150);
-}
-
-async function fetchFinancesClientCodes(inputEl, dropdownId, q) {
-    const dropdown = document.getElementById(dropdownId);
-    if (!dropdown) return;
-    try {
-        const res = await fetch('/api/ext-clients/search?q=' + encodeURIComponent(q));
-        const data = await res.json();
-        const clients = data.clients || [];
-        const codes = data.codes || [];
-
-        if (codes.length === 0 && clients.length === 0) {
-            dropdown.classList.add('hidden');
-            return;
-        }
-
-        dropdown.innerHTML = clients.map((c, idx) => {
-            const statusBadge = c.status === 'active' 
-                ? '<span class="badge badge-success badge-xs font-mono">active</span>'
-                : c.status === 'expiring'
-                ? '<span class="badge badge-warning badge-xs font-mono">expiring</span>'
-                : c.status === 'expired'
-                ? '<span class="badge badge-error badge-xs font-mono">expired</span>'
-                : '<span class="badge badge-ghost badge-xs font-mono">' + escapeHtml(c.func || 'WORK') + '</span>';
-
-            const daysText = c.days_left !== null 
-                ? (c.days_left > 0 ? `${c.days_left}d left` : `${Math.abs(c.days_left)}d ago`)
-                : '';
-
-            return `
-            <div class="px-3 py-2 hover:bg-primary/20 hover:text-primary cursor-pointer border-b border-base-content/5 last:border-0 flex items-center justify-between gap-2 transition-colors" data-index="${idx}">
-                <div class="min-w-0 flex-1">
-                    <div class="font-mono font-bold text-xs flex items-center gap-1.5 truncate">
-                        <i class="fas fa-user-circle text-primary/70"></i>
-                        <span>${escapeHtml(c.code)}</span>
-                        ${c.name ? `<span class="font-sans font-normal text-base-content/70 truncate">(${escapeHtml(c.name)})</span>` : ''}
-                    </div>
-                    <div class="text-[10px] text-base-content/60 mt-0.5 flex items-center gap-2">
-                        ${c.expiry_date && c.expiry_date !== '-' ? `<span>Expires: <strong class="font-mono">${c.expiry_date}</strong></span>` : '<span>Start: ' + (c.start_date || '-') + '</span>'}
-                        ${daysText ? `<span class="opacity-75">(${daysText})</span>` : ''}
-                        ${c.sub ? `<span class="opacity-75">Sub: ${c.sub}mo</span>` : ''}
-                    </div>
-                </div>
-                <div>
-                    ${statusBadge}
-                </div>
-            </div>
-            `;
-        }).join('');
-
-        dropdown.classList.remove('hidden');
-        dropdown.querySelectorAll('[data-index]').forEach((item) => {
-            item.addEventListener('mousedown', (e) => {
-                e.preventDefault();
-                const idx = parseInt(item.getAttribute('data-index'), 10);
-                const c = clients[idx];
-                if (!c) return;
-
-                inputEl.value = c.code;
-                dropdown.classList.add('hidden');
-                currentSelectedClient = c;
-
-                // If this is the add transaction modal, display info chip and update preview
-                if (inputEl.id === 'addTxClientId') {
-                    showAddTxClientInfo(c);
-                }
-            });
-        });
-    } catch (e) {
-        dropdown.classList.add('hidden');
-    }
-}
-
-function showAddTxClientInfo(c) {
-    const infoEl = document.getElementById('addTxClientInfo');
-    if (!infoEl) return;
-    
-    const daysText = c.days_left !== null 
-        ? (c.days_left > 0 ? `${c.days_left} days left` : `Expired ${Math.abs(c.days_left)} days ago`)
-        : '';
-
-    infoEl.innerHTML = `
-        <div class="flex items-center justify-between text-xs">
-            <span class="font-bold font-mono text-primary flex items-center gap-1.5">
-                <i class="fas fa-user-check text-success"></i> ${escapeHtml(c.code)} ${c.name ? `(${escapeHtml(c.name)})` : ''}
-            </span>
-            <span class="badge ${c.status === 'active' ? 'badge-success' : c.status === 'expiring' ? 'badge-warning' : c.status === 'expired' ? 'badge-error' : 'badge-ghost'} badge-xs">
-                ${c.status || 'WORK'}
-            </span>
-        </div>
-        <div class="text-[11px] text-base-content/70 flex flex-wrap gap-x-3 gap-y-0.5 font-mono">
-            <span>Start: ${c.start_date || '-'}</span>
-            <span>Sub: ${c.sub || 0} mo</span>
-            <span>Expires: <strong>${c.expiry_date || '-'}</strong></span>
-            ${daysText ? `<span class="${c.days_left <= 0 ? 'text-error font-semibold' : 'text-warning font-semibold'}">${daysText}</span>` : ''}
-        </div>
-    `;
-    infoEl.classList.remove('hidden');
-    updateAddTxExtendPreview();
-}
-
-function updateAddTxExtendPreview() {
-    const select = document.getElementById('addTxExtendSub');
-    const preview = document.getElementById('addTxExtendPreview');
-    if (!select || !preview) return;
-
-    const months = parseInt(select.value, 10);
-    if (months === 0) {
-        preview.textContent = 'Will not change client subscription in external database.';
-        return;
-    }
-
-    if (currentSelectedClient) {
-        const curSub = parseInt(currentSelectedClient.sub, 10) || 0;
-        const newSub = curSub + months;
-        preview.innerHTML = `Increments <code class="font-mono text-primary font-bold">Sub: ${curSub} &rarr; ${newSub}</code> (+${months * 30} days) without altering start date.`;
-    } else {
-        preview.textContent = `Increments client's Sub (+${months} mo) without altering start date.`;
-    }
 }
 
 document.addEventListener('click', (e) => {
