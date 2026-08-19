@@ -148,11 +148,16 @@ if (in_array(strtoupper($requestMethod), ['POST', 'PUT', 'DELETE', 'PATCH'], tru
     // Webhook, agent push, and stateless authentication routes exempt from CSRF checks
     $exemptRoutes = [
         '/api/telegram-bot/webhook',
+        '/api/telegram/webhook',
+        '/api/bot/webhook',
+        '/telegram-bot/webhook',
+        '/telegram/webhook',
         '/api/servers/report-metrics',
         '/api/auth/token',
     ];
 
     $isExemptRoute = in_array($requestUri, $exemptRoutes, true)
+        || str_starts_with($requestUri, '/api/telegram-bot/webhook')
         || str_starts_with($requestUri, '/api/webhook/')
         || str_starts_with($requestUri, '/webhook/');
 
@@ -2101,7 +2106,7 @@ Router::post('/api/servers/report-metrics', function () {
 });
 
 // API: Telegram Client Bot Webhook
-Router::post('/api/telegram-bot/webhook', function () {
+$clientBotWebhookHandler = function () {
     header('Content-Type: application/json');
 
     require_once __DIR__ . '/../inc/TelegramClientBot.php';
@@ -2123,7 +2128,13 @@ Router::post('/api/telegram-bot/webhook', function () {
     }
 
     echo json_encode(['success' => true]);
-});
+};
+
+Router::post('/api/telegram-bot/webhook', $clientBotWebhookHandler);
+Router::post('/api/telegram/webhook', $clientBotWebhookHandler);
+Router::post('/api/bot/webhook', $clientBotWebhookHandler);
+Router::post('/telegram-bot/webhook', $clientBotWebhookHandler);
+Router::post('/telegram/webhook', $clientBotWebhookHandler);
 
 /**
  * API ROUTES (for Telegram bot integration)
@@ -3402,12 +3413,20 @@ Router::post('/settings/client-bot-config', function () {
     $enabled = isset($_POST['enabled']) ? true : false;
     $botToken = trim($_POST['bot_token'] ?? '');
     $webhookUrl = trim($_POST['webhook_url'] ?? '');
+    $saveToEnv = isset($_POST['save_to_env']) ? true : false;
 
     saveGlobalSetting('client_bot', 'enabled', $enabled);
     saveGlobalSetting('client_bot', 'bot_token', $botToken);
     saveGlobalSetting('client_bot', 'webhook_url', $webhookUrl);
 
-    $_SESSION['settings_success'] = 'Telegram bot settings saved successfully';
+    if ($saveToEnv || !empty($botToken)) {
+        Config::saveEnv([
+            'TELEGRAM_BOT_TOKEN' => $botToken,
+            'TELEGRAM_BOT_ENABLED' => $enabled ? 'true' : 'false'
+        ]);
+    }
+
+    $_SESSION['settings_success'] = 'Telegram bot settings saved successfully' . ($saveToEnv ? ' (and written to .env)' : '');
     redirect('/settings#telegram-bot');
 });
 
@@ -3416,13 +3435,10 @@ Router::post('/settings/client-bot-webhook-set', function () {
     requireAdmin();
     header('Content-Type: application/json');
 
+    require_once __DIR__ . '/../inc/TelegramClientBot.php';
+    $botToken = TelegramClientBot::getBotToken();
+
     $pdo = DB::conn();
-
-    // Get Bot Token
-    $stmt = $pdo->prepare("SELECT value FROM settings WHERE namespace = 'client_bot' AND `key` = 'bot_token'");
-    $stmt->execute();
-    $botToken = json_decode($stmt->fetchColumn() ?: '""', true);
-
     // Get Webhook URL
     $stmt = $pdo->prepare("SELECT value FROM settings WHERE namespace = 'client_bot' AND `key` = 'webhook_url'");
     $stmt->execute();
@@ -3437,10 +3453,25 @@ Router::post('/settings/client-bot-webhook-set', function () {
 
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
     Config::applyCurlProxy($ch);
     $res = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
+
+    if ($httpCode !== 200) {
+        $ch2 = curl_init($url);
+        curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch2, CURLOPT_TIMEOUT, 15);
+        curl_setopt($ch2, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch2, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch2, CURLOPT_PROXY, '');
+        curl_setopt($ch2, CURLOPT_NOPROXY, '*');
+        $res = curl_exec($ch2);
+        curl_close($ch2);
+    }
 
     $data = json_decode($res, true);
     if ($data && isset($data['ok']) && $data['ok'] === true) {
@@ -3455,12 +3486,8 @@ Router::post('/settings/client-bot-webhook-delete', function () {
     requireAdmin();
     header('Content-Type: application/json');
 
-    $pdo = DB::conn();
-
-    // Get Bot Token
-    $stmt = $pdo->prepare("SELECT value FROM settings WHERE namespace = 'client_bot' AND `key` = 'bot_token'");
-    $stmt->execute();
-    $botToken = json_decode($stmt->fetchColumn() ?: '""', true);
+    require_once __DIR__ . '/../inc/TelegramClientBot.php';
+    $botToken = TelegramClientBot::getBotToken();
 
     if (empty($botToken)) {
         echo json_encode(['error' => 'Bot Token is required to delete a webhook.']);
@@ -3471,10 +3498,25 @@ Router::post('/settings/client-bot-webhook-delete', function () {
 
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
     Config::applyCurlProxy($ch);
     $res = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
+
+    if ($httpCode !== 200) {
+        $ch2 = curl_init($url);
+        curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch2, CURLOPT_TIMEOUT, 15);
+        curl_setopt($ch2, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch2, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch2, CURLOPT_PROXY, '');
+        curl_setopt($ch2, CURLOPT_NOPROXY, '*');
+        $res = curl_exec($ch2);
+        curl_close($ch2);
+    }
 
     $data = json_decode($res, true);
     if ($data && isset($data['ok']) && $data['ok'] === true) {

@@ -409,16 +409,29 @@
                         <div class="form-control">
                             <label class="label cursor-pointer justify-start gap-3">
                                 <input type="checkbox" name="enabled" value="1" {% if client_bot_settings.enabled %}checked{% endif %} class="toggle toggle-primary toggle-sm">
-                                <span class="label-text font-medium">Enable Client Bot</span>
+                                <div>
+                                    <span class="label-text font-medium block">Enable Client Bot</span>
+                                    {% if client_bot_settings.bot_token %}
+                                        <span class="text-[10px] text-success flex items-center gap-1 mt-0.5"><i class="fas fa-check-circle text-[9px]"></i>Token configured {% if client_bot_settings.in_env %}(in .env){% endif %}</span>
+                                    {% else %}
+                                        <span class="text-[10px] text-base-content/40 mt-0.5 block">No token set yet</span>
+                                    {% endif %}
+                                </div>
                             </label>
                         </div>
                         <div class="form-control">
                             <label class="label py-1"><span class="label-text text-xs font-medium">Bot Token (Separate Token)</span></label>
-                            <input type="password" name="bot_token" id="client-bot-token" value="{{ client_bot_settings.bot_token }}" class="input input-bordered input-sm">
+                            <input type="password" name="bot_token" id="client-bot-token" value="{{ client_bot_settings.bot_token }}" placeholder="123456789:ABCdefGHIjklMNOpqrs..." class="input input-bordered input-sm font-mono text-xs">
+                        </div>
+                        <div class="form-control">
+                            <label class="label cursor-pointer justify-start gap-2 py-0">
+                                <input type="checkbox" name="save_to_env" value="1" checked class="checkbox checkbox-primary checkbox-xs">
+                                <span class="label-text text-xs text-base-content/70">Save to <code class="text-primary font-mono text-[11px]">.env</code> file (TELEGRAM_BOT_TOKEN)</span>
+                            </label>
                         </div>
                         <div class="form-control">
                             <label class="label py-1"><span class="label-text text-xs font-medium">Webhook URL</span></label>
-                            <input type="text" name="webhook_url" id="client-bot-webhook-url" value="{{ client_bot_settings.webhook_url }}" class="input input-bordered input-sm">
+                            <input type="text" name="webhook_url" id="client-bot-webhook-url" value="{{ client_bot_settings.webhook_url }}" class="input input-bordered input-sm font-mono text-xs">
                             <label class="label py-0.5"><span class="label-text-alt text-base-content/40">Suggested: <span class="cursor-pointer underline text-primary" onclick="document.getElementById('client-bot-webhook-url').value = window.location.origin + '/api/telegram-bot/webhook'">click to auto-fill</span></span></label>
                         </div>
                         <div class="flex flex-col gap-2 pt-2">

@@ -47,16 +47,22 @@ class SettingsController {
         $stmtClientBot = $this->pdo->prepare("SELECT `key`, value FROM settings WHERE namespace = 'client_bot'");
         $stmtClientBot->execute();
         $clientBotRows = $stmtClientBot->fetchAll(PDO::FETCH_ASSOC);
-        $clientBotSettings = ['enabled' => false, 'bot_token' => '', 'webhook_url' => ''];
+        $clientBotSettings = [
+            'enabled' => TelegramClientBot::isEnabled(),
+            'bot_token' => TelegramClientBot::getBotToken() ?: '',
+            'webhook_url' => '',
+            'in_env' => !empty(Config::get('TELEGRAM_BOT_TOKEN')) || !empty(Config::get('CLIENT_BOT_TOKEN')) || !empty(Config::get('TELEGRAM_TOKEN')) || !empty(Config::get('BOT_TOKEN'))
+        ];
         foreach ($clientBotRows as $r) {
             if ($r['key'] === 'enabled') {
                 $clientBotSettings['enabled'] = (bool)json_decode($r['value'], true);
             }
             if ($r['key'] === 'bot_token') {
-                $clientBotSettings['bot_token'] = json_decode($r['value'], true);
+                $tok = json_decode($r['value'], true);
+                if (!empty($tok)) $clientBotSettings['bot_token'] = $tok;
             }
             if ($r['key'] === 'webhook_url') {
-                $clientBotSettings['webhook_url'] = json_decode($r['value'], true);
+                $clientBotSettings['webhook_url'] = json_decode($r['value'], true) ?: '';
             }
         }
 
@@ -80,6 +86,7 @@ class SettingsController {
             'servers' => $serversList,
             'metrics_interval' => $metricsInterval,
             'client_bot' => $clientBotSettings,
+            'client_bot_settings' => $clientBotSettings,
             'outgoing_proxy' => $outgoingProxy
         ];
         

@@ -50,4 +50,42 @@ class Config {
       curl_setopt($ch, CURLOPT_PROXY, $proxy);
     }
   }
+
+  /**
+   * Save or update key-value pairs in the .env file
+   */
+  public static function saveEnv(array $pairs, ?string $path = null): bool {
+    $path = $path ?: (dirname(__DIR__) . '/.env');
+    $lines = file_exists($path) ? file($path, FILE_IGNORE_NEW_LINES) : [];
+    $updatedKeys = [];
+
+    foreach ($lines as $i => $line) {
+      $trimmed = trim($line);
+      if (str_starts_with($trimmed, '#') || empty($trimmed)) continue;
+      $parts = explode('=', $line, 2);
+      if (count($parts) === 2) {
+        $key = trim($parts[0]);
+        if (array_key_exists($key, $pairs)) {
+          $val = (string)$pairs[$key];
+          $escapedVal = (strpos($val, ' ') !== false || strpos($val, '#') !== false) ? '"' . addcslashes($val, '"\\') . '"' : $val;
+          $lines[$i] = $key . '=' . $escapedVal;
+          $updatedKeys[$key] = true;
+          self::$env[$key] = $val;
+          @putenv($key . '=' . $val);
+        }
+      }
+    }
+
+    foreach ($pairs as $k => $v) {
+      if (!isset($updatedKeys[$k])) {
+        $val = (string)$v;
+        $escapedVal = (strpos($val, ' ') !== false || strpos($val, '#') !== false) ? '"' . addcslashes($val, '"\\') . '"' : $val;
+        $lines[] = $k . '=' . $escapedVal;
+        self::$env[$k] = $val;
+        @putenv($k . '=' . $val);
+      }
+    }
+
+    return (bool)@file_put_contents($path, implode("\n", $lines) . "\n");
+  }
 }

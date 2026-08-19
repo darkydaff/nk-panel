@@ -10,13 +10,36 @@ class TelegramClientBot {
             $val = $stmt->fetchColumn();
             if ($val) {
                 $decoded = json_decode($val, true);
-                if (!empty($decoded)) return $decoded;
+                if (!empty($decoded) && is_string($decoded) && trim($decoded) !== '') {
+                    return trim($decoded);
+                }
+                if (is_string($val) && trim($val, "\"' \t\n\r\0\x0B") !== '') {
+                    return trim($val, "\"' \t\n\r\0\x0B");
+                }
             }
         } catch (Throwable $e) {}
-        return Config::get('TELEGRAM_BOT_TOKEN', null);
+
+        $envKeys = ['TELEGRAM_BOT_TOKEN', 'CLIENT_BOT_TOKEN', 'TELEGRAM_TOKEN', 'BOT_TOKEN'];
+        foreach ($envKeys as $key) {
+            $token = Config::get($key);
+            if (!empty($token) && is_string($token) && trim($token) !== '') {
+                return trim($token);
+            }
+            $envVal = getenv($key);
+            if (!empty($envVal) && is_string($envVal) && trim($envVal) !== '') {
+                return trim($envVal);
+            }
+        }
+
+        return null;
     }
 
     public static function isEnabled(): bool {
+        $token = self::getBotToken();
+        if (empty($token)) {
+            return false;
+        }
+
         try {
             $pdo = DB::conn();
             $stmt = $pdo->prepare("SELECT value FROM settings WHERE namespace = 'client_bot' AND `key` = 'enabled' LIMIT 1");
@@ -24,10 +47,21 @@ class TelegramClientBot {
             $val = $stmt->fetchColumn();
             if ($val !== false && $val !== null) {
                 $decoded = json_decode($val, true);
-                if ($decoded !== null) return (bool)$decoded;
+                if ($decoded !== null) {
+                    if ($decoded === false || $decoded === 0 || $decoded === '0' || $decoded === 'false') return false;
+                    if ($decoded === true || $decoded === 1 || $decoded === '1' || $decoded === 'true') return true;
+                }
             }
         } catch (Throwable $e) {}
-        return !empty(self::getBotToken());
+
+        $envEnabled = Config::get('TELEGRAM_BOT_ENABLED');
+        if ($envEnabled !== null) {
+            $valStr = strtolower(trim((string)$envEnabled));
+            if (in_array($valStr, ['0', 'false', 'no', 'off'], true)) return false;
+            if (in_array($valStr, ['1', 'true', 'yes', 'on'], true)) return true;
+        }
+
+        return true;
     }
 
     public static function handleUpdate(array $update): void {
@@ -39,6 +73,7 @@ class TelegramClientBot {
         $chatId = null;
         $tgId = null;
         $tgName = 'Пользователь';
+        $username = '';
         $callbackQueryId = null;
         $callbackData = null;
         $messageText = null;
@@ -46,12 +81,14 @@ class TelegramClientBot {
         if (isset($update['message'])) {
             $chatId = $update['message']['chat']['id'];
             $tgId = $update['message']['from']['id'];
-            $tgName = $update['message']['from']['first_name'] ?? ($update['message']['from']['username'] ?? 'Пользователь');
+            $username = $update['message']['from']['username'] ?? '';
+            $tgName = $update['message']['from']['first_name'] ?? ($username ?: 'Пользователь');
             $messageText = trim($update['message']['text'] ?? '');
         } elseif (isset($update['callback_query'])) {
             $chatId = $update['callback_query']['message']['chat']['id'];
             $tgId = $update['callback_query']['from']['id'];
-            $tgName = $update['callback_query']['from']['first_name'] ?? ($update['callback_query']['from']['username'] ?? 'Пользователь');
+            $username = $update['callback_query']['from']['username'] ?? '';
+            $tgName = $update['callback_query']['from']['first_name'] ?? ($username ?: 'Пользователь');
             $callbackQueryId = $update['callback_query']['id'];
             $callbackData = $update['callback_query']['data'];
         }
@@ -60,15 +97,50 @@ class TelegramClientBot {
             return;
         }
 
-        // Check authorization
+        $cleanUsername = ltrim($username, '@');
+
+        // 1. Check authorization in local ext_clients cache
         $pdo = DB::conn();
-        $stmt = $pdo->prepare("SELECT * FROM ext_clients WHERE tgid = ?");
-        $stmt->execute([$tgId]);
+        $stmt = $pdo->prepare("
+            SELECT * FROM ext_clients 
+            WHERE tgid = ? 
+               OR tgid = ? 
+               OR tgid = ?
+               OR (tgid IS NOT NULL AND tgid != '' AND (? != '' AND (tgid = ? OR tgid = ?)))
+        ");
+        $stmt->execute([$tgId, (string)$tgId, '@' . $tgId, $cleanUsername, $cleanUsername, '@' . $cleanUsername]);
         $clients = $stmt->fetchAll();
 
+        // 2. If not found in cache, check external Postgres DB directly (auto-syncing if matched)
+        if (empty($clients) && class_exists('ExtDB') && ExtDB::isAvailable()) {
+            try {
+                $pgPdo = ExtDB::getPgConnection();
+                if ($pgPdo) {
+                    $table = ExtDB::getTableName('clients');
+                    $stmtPg = $pgPdo->prepare("
+                        SELECT \"Code\" as code, \"Name\" as name, \"Start_Date\" as start_date, \"Sub\" as sub, \"Func\" as func, \"Router\" as router, \"Domain\" as domain, \"Pass\" as pass, \"tgid\" 
+                        FROM \"{$table}\" 
+                        WHERE \"tgid\"::text = ? 
+                           OR \"tgid\"::text = ? 
+                           OR (\"tgid\"::text IS NOT NULL AND ? != '' AND (\"tgid\"::text ILIKE ? OR \"tgid\"::text ILIKE ?))
+                    ");
+                    $stmtPg->execute([(string)$tgId, '@' . $tgId, $cleanUsername, $cleanUsername, '@' . $cleanUsername]);
+                    $pgClients = $stmtPg->fetchAll(PDO::FETCH_ASSOC);
+                    if (!empty($pgClients)) {
+                        ExtDB::sync();
+                        $stmt->execute([$tgId, (string)$tgId, '@' . $tgId, $cleanUsername, $cleanUsername, '@' . $cleanUsername]);
+                        $clients = $stmt->fetchAll() ?: $pgClients;
+                    }
+                }
+            } catch (Throwable $e) {
+                error_log("Telegram bot DB lookup error: " . $e->getMessage());
+            }
+        }
+
         if (empty($clients)) {
+            $userIdentifier = $username ? "@{$username} (ID: `{$tgId}`)" : "`{$tgId}`";
             self::logActivity($tgId, $tgName, null, 'unauthorized', "Access Denied. Message: '" . ($messageText ?? '') . "' Callback: '" . ($callbackData ?? '') . "'", json_encode($update));
-            self::sendMessage($chatId, "❌ **Доступ запрещен**\n\nВаш Telegram ID: `{$tgId}`\nДанный ID не привязан ни к одному клиенту в биллинге. Пожалуйста, сообщите этот ID администратору для привязки к вашей подписке.", $token);
+            self::sendMessage($chatId, "❌ **Доступ запрещен**\n\nВаш Telegram ID: `{$tgId}`\n" . ($username ? "Ваш логин: @{$username}\n\n" : "\n") . "Данный ID не привязан ни к одному клиенту в биллинге. Пожалуйста, сообщите этот ID администратору для привязки к вашей подписке.", $token);
             if ($callbackQueryId) {
                 self::answerCallbackQuery($callbackQueryId, "Доступ запрещен", false, $token);
             }
@@ -85,7 +157,7 @@ class TelegramClientBot {
         // Handle Command
         $normalizedText = strtolower($messageText);
         $clientCodesStr = implode(',', array_column($clients, 'code'));
-        if (strpos($messageText, '/start') === 0 || strpos($messageText, '/help') === 0) {
+        if (strpos($messageText, '/start') === 0 || strpos($messageText, '/help') === 0 || strpos($messageText, '/menu') === 0) {
             self::logActivity($tgId, $tgName, $clientCodesStr, 'view_menu', 'Opened main menu via start/help command', json_encode($update));
 
             $clientCodes = array_column($clients, 'code');
@@ -116,7 +188,7 @@ class TelegramClientBot {
             self::handleShowVersion($chatId, $clients, $token);
         } else {
             self::logActivity($tgId, $tgName, $clientCodesStr, 'unknown_command', "Sent unknown message: '" . ($messageText ?? '') . "'", json_encode($update));
-            self::sendMessage($chatId, "Пожалуйста, используйте кнопки меню для управления серверами роутеров.", $token);
+            self::showMainMenu($chatId, $tgName, $clients, $token);
         }
     }
 
@@ -619,6 +691,48 @@ class TelegramClientBot {
         self::sendMessage($chatId, rtrim($response), $token);
     }
 
+    private static function callTelegramApi(string $url, array $params): array {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        Config::applyCurlProxy($ch);
+        $res = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err = curl_error($ch);
+        curl_close($ch);
+
+        // Fallback retry direct without proxy if proxy failed
+        if ($httpCode !== 200) {
+            $ch2 = curl_init($url);
+            curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch2, CURLOPT_POST, true);
+            curl_setopt($ch2, CURLOPT_POSTFIELDS, http_build_query($params));
+            curl_setopt($ch2, CURLOPT_CONNECTTIMEOUT, 10);
+            curl_setopt($ch2, CURLOPT_TIMEOUT, 20);
+            curl_setopt($ch2, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch2, CURLOPT_SSL_VERIFYHOST, false);
+            curl_setopt($ch2, CURLOPT_PROXY, '');
+            curl_setopt($ch2, CURLOPT_NOPROXY, '*');
+            $res2 = curl_exec($ch2);
+            $httpCode2 = curl_getinfo($ch2, CURLINFO_HTTP_CODE);
+            $err2 = curl_error($ch2);
+            curl_close($ch2);
+
+            if ($httpCode2 === 200) {
+                $res = $res2;
+            } else {
+                error_log("Telegram API failure ({$url}): code={$httpCode}/{$httpCode2}, err='{$err}'/'{$err2}'");
+            }
+        }
+
+        return json_decode($res ?: '[]', true) ?: [];
+    }
+
     public static function sendMessage(int $chatId, string $text, string $token, ?array $replyMarkup = null): int {
         $url = "https://api.telegram.org/bot{$token}/sendMessage";
         $params = [
@@ -630,16 +744,7 @@ class TelegramClientBot {
             $params['reply_markup'] = json_encode($replyMarkup);
         }
 
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
-        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-        Config::applyCurlProxy($ch);
-        $res = curl_exec($ch);
-        curl_close($ch);
-        
-        $data = json_decode($res, true);
+        $data = self::callTelegramApi($url, $params);
         return $data['result']['message_id'] ?? 0;
     }
 
@@ -655,14 +760,7 @@ class TelegramClientBot {
             $params['reply_markup'] = json_encode($replyMarkup);
         }
 
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
-        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-        Config::applyCurlProxy($ch);
-        curl_exec($ch);
-        curl_close($ch);
+        self::callTelegramApi($url, $params);
     }
 
     private static function answerCallbackQuery(string $callbackQueryId, string $text, bool $showAlert, string $token): void {
@@ -673,14 +771,7 @@ class TelegramClientBot {
             'show_alert' => $showAlert
         ];
 
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
-        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-        Config::applyCurlProxy($ch);
-        curl_exec($ch);
-        $res = curl_close($ch);
+        self::callTelegramApi($url, $params);
     }
 
     public static function logActivity(int $tgId, string $tgName, ?string $clientCode, string $action, ?string $details = null, ?string $rawData = null): void {
