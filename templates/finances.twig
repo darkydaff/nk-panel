@@ -1055,7 +1055,10 @@ async function submitAddTx(e) {
         }
         if (json.success) {
             document.getElementById('modalAddTx').close();
-            window.location.reload();
+            e.target.reset();
+            clearClientSelection();
+            loadTransactions();
+            loadStats();
         } else {
             alert('Error: ' + (json.error || 'Failed to add transaction'));
         }
@@ -1108,7 +1111,8 @@ async function submitEditTx(e) {
         }
         if (json.success) {
             document.getElementById('modalEditTx').close();
-            window.location.reload();
+            loadTransactions();
+            loadStats();
         } else {
             alert('Error: ' + (json.error || 'Failed to update transaction'));
         }
@@ -1145,7 +1149,8 @@ async function deleteTransactionRecord(id) {
             json = { success: false, error: text || (`HTTP ${res.status} ${res.statusText}`) };
         }
         if (json.success) {
-            window.location.reload();
+            loadTransactions();
+            loadStats();
         } else {
             alert('Error: ' + (json.error || 'Failed to delete transaction'));
         }

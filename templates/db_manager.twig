@@ -230,7 +230,7 @@
                         <th class="text-right w-24 py-2.5">Actions</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="dbTableBody">
                     {% if table_data.rows is empty %}
                     <tr>
                         <td colspan="{{ (table_data.columns|length) + 2 }}" class="text-center py-16 text-base-content/40 font-sans">
@@ -673,6 +673,54 @@ function handleCellClick(cellEl, rowData, colName, colType) {
     makeCellEditable(cellEl, rowData, colName, colType);
 }
 
+function formatCellHtml(val, colName, colTypeLower) {
+    if (val === null || val === undefined || val === '') {
+        return '<span class="text-base-content/20 italic font-sans text-[11px]">NULL</span>';
+    }
+    const strVal = String(val);
+    const colLower = (colName || '').toLowerCase();
+    
+    if (val === true || val === 't' || val === 'true') {
+        return '<span class="badge badge-xs badge-success gap-1 font-bold text-[10px]"><i class="fas fa-check text-[9px]"></i> TRUE</span>';
+    }
+    if (val === false || val === 'f' || val === 'false') {
+        return '<span class="badge badge-xs badge-ghost text-[10px]">FALSE</span>';
+    }
+    if (['code', 'client_id', 'client_code', 'ext_client_code'].includes(colLower) && strVal !== '') {
+        return `<a href="/finances?client=${encodeURIComponent(strVal)}" title="Open client in Finances" onclick="event.stopPropagation()" class="inline-flex items-center gap-1 font-mono font-bold text-primary hover:underline bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded transition-colors text-xs"><i class="fas fa-user-circle text-[11px] opacity-70"></i>${escapeHtml(strVal)}</a>`;
+    }
+    if (['tgid', 'telegram_id'].includes(colLower) && strVal !== '') {
+        return `<a href="https://t.me/${encodeURIComponent(strVal.replace('@',''))}" target="_blank" onclick="event.stopPropagation()" class="inline-flex items-center gap-1 font-mono font-medium text-info hover:underline bg-info/10 hover:bg-info/20 px-2 py-0.5 rounded transition-colors text-xs"><i class="fab fa-telegram-plane text-[11px]"></i>${escapeHtml(strVal)}</a>`;
+    }
+    if (['vless_id', 'uuid'].includes(colLower) && strVal !== '') {
+        return `<span onclick="event.stopPropagation(); copyToClipboard('${escapeHtml(strVal)}', 'UUID copied!')" title="Click to copy full UUID" class="cursor-pointer font-mono text-[11px] text-base-content/80 inline-flex items-center gap-1 bg-base-200 hover:bg-base-300 px-1.5 py-0.5 rounded border border-base-300 transition-colors"><span>${escapeHtml(strVal.substring(0, 8))}…</span><i class="far fa-copy text-[10px] opacity-40"></i></span>`;
+    }
+    if (['func', 'status', 'type'].includes(colLower)) {
+        const valUpper = strVal.toUpperCase();
+        if (['WORK', 'INCOME', 'ACTIVE', 'COMPLETED', 'PAID'].includes(valUpper)) {
+            return `<span class="badge badge-xs badge-success gap-1 font-bold text-[10px]"><i class="fas fa-circle text-[6px]"></i>${escapeHtml(strVal)}</span>`;
+        } else if (['PAUSE', 'EXPENSE', 'EXPIRED', 'CANCELLED', 'FAILED'].includes(valUpper)) {
+            return `<span class="badge badge-xs badge-warning gap-1 font-bold text-[10px]"><i class="fas fa-circle text-[6px]"></i>${escapeHtml(strVal)}</span>`;
+        } else {
+            return `<span class="badge badge-xs badge-neutral text-[10px]">${escapeHtml(strVal)}</span>`;
+        }
+    }
+    if (['amount', 'price', 'cost', 'total_income', 'total_expense'].includes(colLower)) {
+        const num = parseFloat(strVal);
+        const formatted = !isNaN(num) ? num.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : strVal;
+        const colorClass = num > 0 ? 'text-emerald-400' : num < 0 ? 'text-amber-400' : '';
+        return `<span class="font-mono font-semibold ${colorClass}">₽${formatted}</span>`;
+    }
+    if (['date', 'start_date', 'created_at', 'updated_at', 'last_login_at', 'last_handshake', 'last_payment_date'].includes(colLower) && strVal !== '') {
+        const formattedDate = formatDateUser(strVal);
+        return `<span class="inline-flex items-center gap-1 font-mono text-[11px] text-base-content/80 bg-base-200 px-1.5 py-0.5 rounded border border-base-300"><i class="far fa-clock text-[10px] opacity-40"></i>${escapeHtml(formattedDate)}</span>`;
+    }
+    if (['domain', 'router', 'server_ip', 'ip'].includes(colLower) && strVal !== '') {
+        return `<span onclick="event.stopPropagation(); copyToClipboard('${escapeHtml(strVal)}', 'Copied!')" title="Click to copy" class="cursor-pointer font-mono text-xs text-info hover:underline inline-flex items-center gap-1 bg-info/5 px-1.5 py-0.5 rounded border border-info/20"><i class="fas fa-globe text-[10px] opacity-60"></i>${escapeHtml(strVal)}</span>`;
+    }
+    return `<span class="text-base-content/90">${escapeHtml(strVal)}</span>`;
+}
+
 function makeCellEditable(cellEl, rowData, colName, colType) {
     if (cellEl.dataset.editing === 'true') return;
     cellEl.dataset.editing = 'true';
@@ -749,7 +797,14 @@ function makeCellEditable(cellEl, rowData, colName, colType) {
             if (json.success) {
                 showToast(`Updated ${colName} successfully!`);
                 rowData[colName] = newVal;
-                setTimeout(() => window.location.reload(), 400);
+                cellEl.innerHTML = formatCellHtml(newVal, colName, colType);
+                cellEl.dataset.val = newVal;
+                cellEl.classList.remove('db-table-cell-editing');
+                delete cellEl.dataset.editing;
+
+                // Live flash animation
+                cellEl.classList.add('bg-success/20', 'transition-colors', 'duration-700');
+                setTimeout(() => cellEl.classList.remove('bg-success/20'), 800);
             } else {
                 showToast('Update failed: ' + (json.error || 'Unknown error'), 'error');
                 cellEl.innerHTML = origContent;
@@ -878,7 +933,33 @@ async function quickExtendClientFromDbManager(code, months) {
         if (json.success) {
             showToast(`Extended ${code} by +${months} month(s)! New Sub: ${json.sub}`);
             document.getElementById('inspectRowModal').close();
-            setTimeout(() => window.location.reload(), 600);
+
+            // Update in-memory and DOM
+            tableRows.forEach(r => {
+                if ((r.Code && r.Code === code) || (r.code && r.code === code)) {
+                    r.Sub = json.sub;
+                    r.Func = 'WORK';
+                }
+            });
+
+            // Update any matching table cells in the grid
+            document.querySelectorAll('#dbTableBody tr').forEach(tr => {
+                const codeCell = tr.querySelector('[data-col="Code"]');
+                if (codeCell && codeCell.dataset.val === code) {
+                    const subCell = tr.querySelector('[data-col="Sub"]');
+                    if (subCell) {
+                        subCell.innerHTML = formatCellHtml(json.sub, 'Sub', 'integer');
+                        subCell.dataset.val = json.sub;
+                        subCell.classList.add('bg-success/30', 'transition-colors', 'duration-700');
+                        setTimeout(() => subCell.classList.remove('bg-success/30'), 1000);
+                    }
+                    const funcCell = tr.querySelector('[data-col="Func"]');
+                    if (funcCell) {
+                        funcCell.innerHTML = formatCellHtml('WORK', 'Func', 'character varying');
+                        funcCell.dataset.val = 'WORK';
+                    }
+                }
+            });
         } else {
             alert('Error: ' + (json.error || 'Failed to extend subscription'));
         }
@@ -891,6 +972,59 @@ function copyActiveRowJson() {
     if (activeInspectRow) {
         copyToClipboard(JSON.stringify(activeInspectRow, null, 2), 'Row JSON copied!');
     }
+}
+
+function isMatchingPk(rowData, pk) {
+    for (const k in pk) {
+        if (String(rowData[k]) !== String(pk[k])) return false;
+    }
+    return true;
+}
+
+function prependRowToGrid(newRow) {
+    const tbody = document.getElementById('dbTableBody');
+    if (!tbody) return;
+
+    const emptyTr = tbody.querySelector('td[colspan]');
+    if (emptyTr) emptyTr.parentElement.remove();
+
+    const tr = document.createElement('tr');
+    tr.className = 'hover group cursor-pointer bg-success/20 transition-all duration-700';
+    tr.ondblclick = () => openInspectRowModal(newRow);
+
+    let html = `<td class="text-center text-base-content/40 font-sans">#</td>`;
+    currentColumns.forEach(col => {
+        const colName = col.column_name;
+        const val = newRow[colName] !== undefined ? newRow[colName] : null;
+        const colTypeLower = (col.data_type || '').toLowerCase();
+        html += `<td class="whitespace-nowrap max-w-xs truncate py-2 select-text" 
+                    data-col="${escapeHtml(colName)}" 
+                    data-val="${escapeHtml(val !== null ? String(val) : '')}"
+                    onclick='handleCellClick(this, ${JSON.stringify(newRow).replace(/'/g, "&#39;")}, "${escapeHtml(colName)}", "${escapeHtml(colTypeLower)}")'>
+                    ${formatCellHtml(val, colName, colTypeLower)}
+                 </td>`;
+    });
+
+    html += `<td class="text-right whitespace-nowrap py-2" onclick="event.stopPropagation()">
+                <div class="flex justify-end gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                    <button onclick='openInspectRowModal(${JSON.stringify(newRow).replace(/'/g, "&#39;")})' 
+                            class="btn btn-ghost btn-xs text-base-content/60 hover:text-primary hover:bg-base-200" title="Inspect row details">
+                        <i class="fas fa-search-plus"></i>
+                    </button>
+                    <button onclick='openEditRowModal(${JSON.stringify(newRow).replace(/'/g, "&#39;")})' 
+                            class="btn btn-ghost btn-xs text-info hover:bg-info/10 db-edit-btn ${isDbEditingUnlocked ? '' : 'hidden'}" title="Edit row">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button onclick='confirmDeleteRow(${JSON.stringify(newRow).replace(/'/g, "&#39;")})' 
+                            class="btn btn-ghost btn-xs text-error hover:bg-error/10 db-edit-btn ${isDbEditingUnlocked ? '' : 'hidden'}" title="Delete row">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+             </td>`;
+
+    tr.innerHTML = html;
+    tbody.prepend(tr);
+    setTimeout(() => tr.classList.remove('bg-success/20'), 1000);
 }
 
 // ── Add Row Modal ───────────────────────────────────────────────────────────
@@ -930,7 +1064,10 @@ async function submitAddRow(e) {
         const json = await res.json();
         if (json.success) {
             showToast('Record inserted successfully!');
-            setTimeout(() => window.location.reload(), 500);
+            document.getElementById('addRowModal').close();
+            form.reset();
+            tableRows.unshift(dataObj);
+            prependRowToGrid(dataObj);
         } else {
             showToast('Error: ' + (json.error || 'Failed to insert row'), 'error');
         }
@@ -1016,7 +1153,34 @@ async function submitEditRow(e) {
         const json = await res.json();
         if (json.success) {
             showToast('Record updated successfully!');
-            setTimeout(() => window.location.reload(), 500);
+            document.getElementById('editRowModal').close();
+
+            // Update in-memory row
+            tableRows.forEach(r => {
+                if (isMatchingPk(r, activeEditPk)) {
+                    Object.assign(r, updatesObj);
+                }
+            });
+
+            // Update DOM row cells
+            document.querySelectorAll('#dbTableBody tr').forEach(tr => {
+                let match = false;
+                for (const pkCol in activeEditPk) {
+                    const cell = tr.querySelector(`[data-col="${pkCol}"]`);
+                    if (cell && cell.dataset.val == activeEditPk[pkCol]) match = true;
+                }
+                if (match) {
+                    for (const colName in updatesObj) {
+                        const cell = tr.querySelector(`[data-col="${colName}"]`);
+                        if (cell) {
+                            cell.innerHTML = formatCellHtml(updatesObj[colName], colName, '');
+                            cell.dataset.val = updatesObj[colName];
+                            cell.classList.add('bg-success/30', 'transition-colors', 'duration-700');
+                            setTimeout(() => cell.classList.remove('bg-success/30'), 1000);
+                        }
+                    }
+                }
+            });
         } else {
             showToast('Error: ' + (json.error || 'Failed to update row'), 'error');
         }
@@ -1060,7 +1224,17 @@ async function confirmDeleteRow(rowData) {
         const json = await res.json();
         if (json.success) {
             showToast('Row deleted successfully');
-            setTimeout(() => window.location.reload(), 500);
+            tableRows = tableRows.filter(r => !isMatchingPk(r, pk));
+
+            document.querySelectorAll('#dbTableBody tr').forEach(tr => {
+                for (const pkCol in pk) {
+                    const cell = tr.querySelector(`[data-col="${pkCol}"]`);
+                    if (cell && cell.dataset.val == pk[pkCol]) {
+                        tr.classList.add('opacity-0', 'transition-opacity', 'duration-300');
+                        setTimeout(() => tr.remove(), 300);
+                    }
+                }
+            });
         } else {
             showToast('Error: ' + (json.error || 'Failed to delete row'), 'error');
         }

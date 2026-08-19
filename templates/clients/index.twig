@@ -130,7 +130,7 @@
     <!-- ── GRID VIEW ────────────────────────────────────────────────────────── -->
     <div id="clientsGridView" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
         {% for client in clients %}
-        <div class="card bg-base-200 border border-base-300 shadow-md hover:shadow-xl hover:border-primary/40 hover:-translate-y-0.5 transition-all duration-200 group">
+        <div class="card bg-base-200 border border-base-300 shadow-md hover:shadow-xl hover:border-primary/40 hover:-translate-y-0.5 transition-all duration-200 group" data-client-card="{{ client.Code }}">
             <div class="card-body p-5">
                 <!-- Header row: Avatar + Code & Name + Subscription Badge -->
                 <div class="flex items-start justify-between gap-2 mb-3 pb-3 border-b border-base-300">
@@ -150,19 +150,19 @@
                     </div>
 
                     <!-- Status Badge -->
-                    <div class="shrink-0">
+                    <div class="shrink-0 client-badge-container">
                         {% if client.Func == 'PAUSE' %}
-                            <span class="badge badge-info gap-1 badge-sm"><i class="fas fa-pause-circle text-[9px]"></i>Paused</span>
+                            <span class="badge badge-info gap-1 badge-sm client-status-badge"><i class="fas fa-pause-circle text-[9px]"></i>Paused</span>
                         {% elseif client.ExpiryDate %}
                             {% if client.DaysLeft > 10 %}
-                                <span class="badge badge-success gap-1 badge-sm"><i class="fas fa-calendar-check text-[9px]"></i>Active</span>
+                                <span class="badge badge-success gap-1 badge-sm client-status-badge"><i class="fas fa-calendar-check text-[9px]"></i>Active</span>
                             {% elseif client.DaysLeft > 0 %}
-                                <span class="badge badge-warning gap-1 badge-sm animate-pulse"><i class="fas fa-exclamation-triangle text-[9px]"></i>Soon</span>
+                                <span class="badge badge-warning gap-1 badge-sm animate-pulse client-status-badge"><i class="fas fa-exclamation-triangle text-[9px]"></i>Soon</span>
                             {% else %}
-                                <span class="badge badge-error gap-1 badge-sm"><i class="fas fa-calendar-times text-[9px]"></i>Expired</span>
+                                <span class="badge badge-error gap-1 badge-sm client-status-badge"><i class="fas fa-calendar-times text-[9px]"></i>Expired</span>
                             {% endif %}
                         {% else %}
-                            <span class="badge badge-ghost badge-sm text-[10px]">No Sub</span>
+                            <span class="badge badge-ghost badge-sm text-[10px] client-status-badge">No Sub</span>
                         {% endif %}
                     </div>
                 </div>
@@ -174,12 +174,12 @@
                         <span class="text-[10px] text-base-content/40 uppercase font-semibold tracking-wider flex items-center gap-1">
                             <i class="fas fa-calendar-alt text-[9px] text-primary/70"></i>Subscription
                         </span>
-                        <div class="mt-0.5 font-medium truncate">
+                        <div class="mt-0.5 font-medium truncate client-expiry-container">
                             {% if client.ExpiryDate %}
-                                <span class="font-mono">{{ client.ExpiryDate }}</span>
-                                <span class="text-[10px] text-base-content/50">({{ client.DaysLeft }}d)</span>
+                                <span class="font-mono client-expiry-date">{{ client.ExpiryDate }}</span>
+                                <span class="text-[10px] text-base-content/50 client-days-left">({{ client.DaysLeft }}d)</span>
                             {% else %}
-                                <span class="text-base-content/30 italic">Not set</span>
+                                <span class="text-base-content/30 italic client-expiry-date">Not set</span>
                             {% endif %}
                         </div>
                     </div>
@@ -312,7 +312,7 @@
             </thead>
             <tbody>
                 {% for client in clients %}
-                <tr class="hover:bg-base-300/30 transition-colors">
+                <tr class="hover:bg-base-300/30 transition-colors" data-client-row="{{ client.Code }}">
                     <!-- Client Code & Name -->
                     <td>
                         <div class="flex items-center gap-2.5">
@@ -327,7 +327,7 @@
                     </td>
 
                     <!-- Status & Expiry -->
-                    <td>
+                    <td class="client-table-status-cell">
                         {% if client.Func == 'PAUSE' %}
                             <span class="badge badge-info gap-1 badge-sm"><i class="fas fa-pause-circle text-[9px]"></i>Paused</span>
                         {% elseif client.ExpiryDate %}
@@ -614,20 +614,26 @@ function triggerClientSync() {
         .then(res => {
             if (res.status === 200 && res.body.success) {
                 if (text) text.textContent = 'Synced!';
-                setTimeout(() => window.location.reload(), 500);
+                showToast(`Synchronized ${res.body.synced || 0} clients successfully!`);
+                setTimeout(() => {
+                    if (text) text.textContent = 'Sync DB';
+                    if (icon) icon.classList.remove('fa-spin');
+                    delete btn.dataset.syncing;
+                }, 1500);
             } else {
-                alert('Sync notice: ' + (res.body.error || res.body.message || 'Already synchronized'));
+                showToast('Sync notice: ' + (res.body.error || res.body.message || 'Already synchronized'), 'warning');
                 if (text) text.textContent = 'Sync DB';
                 if (icon) icon.classList.remove('fa-spin');
                 delete btn.dataset.syncing;
             }
         })
         .catch(err => {
-            alert('Sync error: ' + err.message);
+            showToast('Sync error: ' + err.message, 'error');
             if (text) text.textContent = 'Sync DB';
             if (icon) icon.classList.remove('fa-spin');
             delete btn.dataset.syncing;
         });
+}
 }
 
 document.addEventListener('click', function(e) {
@@ -728,6 +734,32 @@ async function openEditClientModal(code) {
     }
 }
 
+// ── Toast System ────────────────────────────────────────────────────────────
+function showToast(message, type = 'success') {
+    let container = document.getElementById('toastContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toastContainer';
+        container.className = 'toast toast-bottom toast-end z-[9999] p-4 pointer-events-none';
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    const bgClass = type === 'error' ? 'alert-error' : type === 'warning' ? 'alert-warning' : 'alert-success';
+    const icon = type === 'error' ? 'fa-exclamation-triangle' : 'fa-check-circle';
+    toast.className = `alert ${bgClass} shadow-2xl text-xs font-sans py-2.5 px-4 flex items-center gap-2 rounded-xl text-white pointer-events-auto transition-all transform duration-300 translate-y-2 opacity-0`;
+    toast.innerHTML = `<i class="fas ${icon}"></i> <span>${escapeHtml(message)}</span>`;
+    container.appendChild(toast);
+
+    requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+    });
+
+    setTimeout(() => {
+        toast.classList.add('translate-y-2', 'opacity-0');
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+
 async function submitEditClient(e) {
     e.preventDefault();
     const btn = document.getElementById('saveEditClientBtn');
@@ -736,6 +768,8 @@ async function submitEditClient(e) {
 
     const form = e.target;
     const formData = new FormData(form);
+    const code = document.getElementById('editOriginalCode').value;
+    const name = document.getElementById('editName').value;
 
     try {
         const res = await fetch('/api/clients/update', {
@@ -745,12 +779,27 @@ async function submitEditClient(e) {
         });
         const json = await res.json();
         if (json.success) {
-            window.location.reload();
+            document.getElementById('editClientModal').close();
+            showToast(`Client ${code} updated successfully!`);
+
+            // Update DOM card and table row
+            document.querySelectorAll(`[data-client-card="${code}"]`).forEach(card => {
+                const nameEl = card.querySelector('p.truncate');
+                if (nameEl) nameEl.textContent = name || 'No Name';
+                card.classList.add('ring-2', 'ring-info', 'transition-all', 'duration-700');
+                setTimeout(() => card.classList.remove('ring-2', 'ring-info'), 1000);
+            });
+            document.querySelectorAll(`[data-client-row="${code}"]`).forEach(row => {
+                const nameEl = row.querySelector('.text-base-content\\/50');
+                if (nameEl) nameEl.textContent = name || 'No Name';
+                row.classList.add('bg-info/20', 'transition-colors', 'duration-700');
+                setTimeout(() => row.classList.remove('bg-info/20'), 1000);
+            });
         } else {
-            alert('Error: ' + (json.error || 'Failed to update client'));
+            showToast('Error: ' + (json.error || 'Failed to update client'), 'error');
         }
     } catch (err) {
-        alert('Network Error: ' + err.message);
+        showToast('Network Error: ' + err.message, 'error');
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-check"></i> Update Record';
@@ -772,12 +821,23 @@ async function deleteClientFromModal() {
         });
         const json = await res.json();
         if (json.success) {
-            window.location.reload();
+            document.getElementById('editClientModal').close();
+            showToast(`Client ${code} deleted successfully`);
+
+            // Fade out and remove cards and rows
+            document.querySelectorAll(`[data-client-card="${code}"]`).forEach(el => {
+                el.classList.add('opacity-0', 'transition-opacity', 'duration-300');
+                setTimeout(() => el.remove(), 300);
+            });
+            document.querySelectorAll(`[data-client-row="${code}"]`).forEach(el => {
+                el.classList.add('opacity-0', 'transition-opacity', 'duration-300');
+                setTimeout(() => el.remove(), 300);
+            });
         } else {
-            alert('Error: ' + (json.error || 'Failed to delete client'));
+            showToast('Error: ' + (json.error || 'Failed to delete client'), 'error');
         }
     } catch (err) {
-        alert('Network Error: ' + err.message);
+        showToast('Network Error: ' + err.message, 'error');
     }
 }
 
@@ -839,6 +899,7 @@ async function submitQuickExtend(e) {
 
     const form = e.target;
     const formData = new FormData(form);
+    const months = parseInt(formData.get('months'), 10) || 1;
 
     try {
         const res = await fetch('/api/clients/extend', {
@@ -849,12 +910,57 @@ async function submitQuickExtend(e) {
         const json = await res.json();
         if (json.success) {
             document.getElementById('quickExtendModal').close();
-            window.location.reload();
+            showToast(`Extended ${json.code} by +${months} mo! New expiry: ${json.expiry_date || 'Updated'}`);
+
+            const code = json.code;
+            const expiry = json.expiry_date || '';
+            const days = json.days_left !== undefined ? json.days_left : 30;
+
+            // Live in-place update on Card
+            document.querySelectorAll(`[data-client-card="${code}"]`).forEach(card => {
+                const expiryDateEl = card.querySelector('.client-expiry-date');
+                const daysLeftEl = card.querySelector('.client-days-left');
+                if (expiryDateEl) expiryDateEl.textContent = expiry;
+                if (daysLeftEl) daysLeftEl.textContent = `(${days}d)`;
+
+                const badge = card.querySelector('.client-status-badge');
+                if (badge) {
+                    if (days > 10) {
+                        badge.className = 'badge badge-success gap-1 badge-sm client-status-badge';
+                        badge.innerHTML = '<i class="fas fa-calendar-check text-[9px]"></i>Active';
+                    } else if (days > 0) {
+                        badge.className = 'badge badge-warning gap-1 badge-sm animate-pulse client-status-badge';
+                        badge.innerHTML = '<i class="fas fa-exclamation-triangle text-[9px]"></i>Soon';
+                    } else {
+                        badge.className = 'badge badge-error gap-1 badge-sm client-status-badge';
+                        badge.innerHTML = '<i class="fas fa-calendar-times text-[9px]"></i>Expired';
+                    }
+                }
+
+                card.classList.add('ring-2', 'ring-success', 'transition-all', 'duration-700');
+                setTimeout(() => card.classList.remove('ring-2', 'ring-success'), 1200);
+            });
+
+            // Live in-place update on Table Row
+            document.querySelectorAll(`[data-client-row="${code}"]`).forEach(row => {
+                const statusCell = row.querySelector('.client-table-status-cell');
+                if (statusCell) {
+                    if (days > 10) {
+                        statusCell.innerHTML = `<span class="badge badge-success gap-1 badge-sm"><i class="fas fa-calendar-check text-[9px]"></i>${expiry} (${days}d)</span>`;
+                    } else if (days > 0) {
+                        statusCell.innerHTML = `<span class="badge badge-warning gap-1 badge-sm"><i class="fas fa-exclamation-triangle text-[9px]"></i>${expiry} (${days}d)</span>`;
+                    } else {
+                        statusCell.innerHTML = `<span class="badge badge-error gap-1 badge-sm"><i class="fas fa-calendar-times text-[9px]"></i>Expired ${expiry}</span>`;
+                    }
+                }
+                row.classList.add('bg-success/20', 'transition-colors', 'duration-700');
+                setTimeout(() => row.classList.remove('bg-success/20'), 1200);
+            });
         } else {
-            alert('Error: ' + (json.error || 'Failed to extend subscription'));
+            showToast('Error: ' + (json.error || 'Failed to extend subscription'), 'error');
         }
     } catch (err) {
-        alert('Network Error: ' + err.message);
+        showToast('Network Error: ' + err.message, 'error');
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-bolt"></i> Confirm Extension';
