@@ -629,7 +629,14 @@ class Finances {
             }
         }
 
-        try { ExtDB::sync(); } catch (Throwable $e) {}
+        // Fast instant local cache update for payment
+        if ($clientId !== null && strtolower($type) === 'income') {
+            try {
+                $localPdo = DB::conn();
+                $stmtPay = $localPdo->prepare("UPDATE ext_clients SET last_payment_date = ?, last_payment_amount = ? WHERE code = ?");
+                $stmtPay->execute([$date, $amount, $clientId]);
+            } catch (Throwable $e) {}
+        }
 
         return $res;
     }

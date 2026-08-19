@@ -1014,9 +1014,33 @@ document.addEventListener('DOMContentLoaded', () => {
         return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
+    // Expose dashboard and transaction reloader functions globally
+    window.loadTransactions = loadTransactions;
+    window.loadStats = loadStats;
+    window.loadDashboardData = loadDashboardData;
+
     // Initial Load
     loadDashboardData();
 });
+
+// Global functions for modals and external triggers
+function loadTransactions() {
+    if (typeof window.loadTransactions === 'function' && window.loadTransactions !== loadTransactions) {
+        return window.loadTransactions();
+    }
+}
+
+function loadStats() {
+    if (typeof window.loadStats === 'function' && window.loadStats !== loadStats) {
+        return window.loadStats();
+    }
+}
+
+function loadDashboardData() {
+    if (typeof window.loadDashboardData === 'function' && window.loadDashboardData !== loadDashboardData) {
+        return window.loadDashboardData();
+    }
+}
 
 // Global escapeHtml for modals and dropdowns
 function escapeHtml(str) {

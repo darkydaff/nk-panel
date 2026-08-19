@@ -749,8 +749,11 @@ class ExtDB
             }
         }
 
+        // Fast instant local cache update
         try {
-            self::sync();
+            $localPdo = DB::conn();
+            $stmtLoc = $localPdo->prepare("UPDATE ext_clients SET sub = ?, func = 'WORK' WHERE code = ?");
+            $stmtLoc->execute([$newSub, $code]);
         } catch (Throwable $e) {}
 
         return [
