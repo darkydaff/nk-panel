@@ -1126,6 +1126,66 @@ async function fetchFinancesClientCodes(inputEl, dropdownId, q) {
     }
 }
 
+function showAddTxClientInfo(c) {
+    const infoEl = document.getElementById('addTxClientInfo');
+    if (!infoEl) return;
+    
+    const daysText = (c.days_left !== null && c.days_left !== undefined)
+        ? (c.days_left > 0 ? `${c.days_left} days left` : `Expired ${Math.abs(c.days_left)} days ago`)
+        : '';
+
+    infoEl.innerHTML = `
+        <div class="flex items-center justify-between text-xs">
+            <span class="font-bold font-mono text-primary flex items-center gap-1.5">
+                <i class="fas fa-user-check text-success"></i> ${escapeHtml(c.code)} ${c.name ? `(${escapeHtml(c.name)})` : ''}
+            </span>
+            <span class="badge ${c.status === 'active' ? 'badge-success' : c.status === 'expiring' ? 'badge-warning' : c.status === 'expired' ? 'badge-error' : 'badge-ghost'} badge-xs">
+                ${c.status || 'WORK'}
+            </span>
+        </div>
+        <div class="text-[11px] text-base-content/70 flex flex-wrap gap-x-3 gap-y-0.5 font-mono">
+            <span>Start: ${escapeHtml(c.start_date || '-')}</span>
+            <span>Sub: ${c.sub || 0} mo</span>
+            <span>Expires: <strong>${escapeHtml(c.expiry_date || '-')}</strong></span>
+            ${daysText ? `<span class="${c.days_left <= 0 ? 'text-error font-semibold' : 'text-warning font-semibold'}">${escapeHtml(daysText)}</span>` : ''}
+        </div>
+    `;
+    infoEl.classList.remove('hidden');
+    updateAddTxExtendPreview();
+}
+
+function updateAddTxExtendPreview() {
+    const select = document.getElementById('addTxExtendSub');
+    const preview = document.getElementById('addTxExtendPreview');
+    if (!select || !preview) return;
+
+    const months = parseInt(select.value, 10);
+    if (months === 0) {
+        preview.textContent = 'Will not change client subscription in external database.';
+        return;
+    }
+
+    if (currentSelectedClient) {
+        const curSub = parseInt(currentSelectedClient.sub, 10) || 0;
+        const newSub = curSub + months;
+        preview.innerHTML = `Increments <code class="font-mono text-primary font-bold">Sub: ${curSub} &rarr; ${newSub}</code> (+${months * 30} days) without altering start date.`;
+    } else {
+        preview.textContent = `Increments client's Sub (+${months} mo) without altering start date.`;
+    }
+}
+
+function clearClientSelection() {
+    currentSelectedClient = null;
+    const clientInfo = document.getElementById('addTxClientInfo');
+    if (clientInfo) {
+        clientInfo.classList.add('hidden');
+        clientInfo.innerHTML = '';
+    }
+    const dd = document.getElementById('addTxClientDropdown');
+    if (dd) dd.classList.add('hidden');
+    updateAddTxExtendPreview();
+}
+
 async function submitAddTx(e) {
     e.preventDefault();
     const btn = document.getElementById('btnSaveAddTx');
