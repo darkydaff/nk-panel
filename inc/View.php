@@ -43,17 +43,42 @@ class View {
     }, ['is_safe' => ['html']]);
     self::$twig->addFilter($formatBytesFilter);
 
-    // Add format_date filter (formats YYYY-MM-DD to DD.MM.YYYY)
+    // Add format_date filter (formats YYYY-MM-DD to DD.MM.YYYY, handles timestamps and ISO formats)
     $formatDateFilter = new TwigFilter('format_date', function ($dateStr) {
-      if (empty($dateStr)) return '-';
+      if (empty($dateStr) || $dateStr === '-' || strtolower((string)$dateStr) === 'null') return '-';
       $str = trim((string)$dateStr);
-      if (preg_match('/^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}:\d{2}(?::\d{2})?))?$/', $str, $m)) {
+      if (is_numeric($str) && (int)$str > 100000000) {
+          return date('d.m.Y H:i', (int)$str);
+      }
+      if (preg_match('/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}:\d{2}(?::\d{2})?))?/', $str, $m)) {
           $datePart = "{$m[3]}.{$m[2]}.{$m[1]}";
-          return !empty($m[4]) ? "{$datePart} {$m[4]}" : $datePart;
+          $timePart = !empty($m[4]) ? substr($m[4], 0, 5) : '';
+          return $timePart !== '' && $timePart !== '00:00' ? "{$datePart} {$timePart}" : $datePart;
+      }
+      if (preg_match('/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}:\d{2}))?/', $str)) {
+          return $str;
+      }
+      $ts = strtotime($str);
+      if ($ts && $ts > 0) {
+          $hasTime = date('H:i', $ts) !== '00:00';
+          return date($hasTime ? 'd.m.Y H:i' : 'd.m.Y', $ts);
       }
       return $str;
     });
     self::$twig->addFilter($formatDateFilter);
+
+    // Add date_sort_val filter (produces ISO string or epoch for chronological HTML table sorting)
+    $dateSortFilter = new TwigFilter('date_sort_val', function ($dateStr) {
+      if (empty($dateStr) || $dateStr === '-') return '0000-00-00 00:00:00';
+      $str = trim((string)$dateStr);
+      if (preg_match('/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}:\d{2}(?::\d{2})?))?/', $str, $m)) {
+          $time = !empty($m[4]) ? $m[4] : '00:00:00';
+          return "{$m[3]}-{$m[2]}-{$m[1]} {$time}";
+      }
+      $ts = strtotime($str);
+      return $ts ? date('Y-m-d H:i:s', $ts) : $str;
+    });
+    self::$twig->addFilter($dateSortFilter);
 
     // Add flag emoji function
     $flagFunc = new TwigFunction('getFlag', function (string $langCode) {

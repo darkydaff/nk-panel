@@ -23,20 +23,35 @@
                 options = options || {};
                 const method = (options.method || 'GET').toUpperCase();
                 if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
-                    options.headers = options.headers || {};
-                    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+                    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token }}';
                     if (csrfToken) {
+                        // 1. Headers injection
                         if (typeof Headers !== 'undefined' && options.headers instanceof Headers) {
-                            if (!options.headers.has('X-CSRF-TOKEN')) {
-                                options.headers.append('X-CSRF-TOKEN', csrfToken);
+                            if (!options.headers.has('X-CSRF-TOKEN') && !options.headers.has('x-csrf-token') && !options.headers.has('X-CSRF-Token')) {
+                                options.headers.set('X-CSRF-TOKEN', csrfToken);
                             }
                         } else if (Array.isArray(options.headers)) {
                             if (!options.headers.some(([k]) => k.toLowerCase() === 'x-csrf-token')) {
                                 options.headers.push(['X-CSRF-TOKEN', csrfToken]);
                             }
                         } else {
-                            if (!options.headers['X-CSRF-TOKEN'] && !options.headers['x-csrf-token']) {
+                            options.headers = options.headers || {};
+                            let hasCsrfHeader = false;
+                            for (const key in options.headers) {
+                                if (key.toLowerCase() === 'x-csrf-token' || key.toLowerCase() === 'csrf-token') {
+                                    hasCsrfHeader = true;
+                                    break;
+                                }
+                            }
+                            if (!hasCsrfHeader) {
                                 options.headers['X-CSRF-TOKEN'] = csrfToken;
+                            }
+                        }
+
+                        // 2. FormData injection
+                        if (typeof FormData !== 'undefined' && options.body instanceof FormData) {
+                            if (!options.body.has('csrf_token') && !options.body.has('_token')) {
+                                options.body.append('csrf_token', csrfToken);
                             }
                         }
                     }
@@ -97,6 +112,7 @@
                         {% for lang in languages %}
                         <li>
                             <form method="POST" action="/language/change">
+                                {{ csrf_field() }}
                                 <input type="hidden" name="language" value="{{ lang.code }}">
                                 <input type="hidden" name="redirect" value="{{ current_uri }}">
                                 <button type="submit" class="flex items-center w-full {% if lang.code == current_language %}font-semibold bg-base-300{% endif %}">

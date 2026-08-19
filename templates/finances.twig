@@ -34,6 +34,9 @@
                     ExtDB Offline
                 </span>
             {% endif %}
+            <a href="/db-manager?table=Finances_2026" class="btn btn-outline btn-sm gap-1.5 whitespace-nowrap" title="Open Finances_2026 table in Database Manager">
+                <i class="fas fa-table-cells text-xs text-emerald-400"></i><span class="hidden md:inline">DB Manager</span>
+            </a>
             <button id="btnExportCsv" class="btn btn-outline btn-sm gap-2">
                 <i class="fas fa-download"></i>
                 Export CSV
@@ -409,8 +412,22 @@
             </div>
             <div class="form-control relative">
                 <label class="label py-1"><span class="label-text font-bold">Client ID / Code</span></label>
-                <input type="text" name="client_id" id="addTxClientId" placeholder="NK-12345" class="input input-bordered input-sm font-mono w-full" autocomplete="off" oninput="onFinancesClientInput(this, 'addTxClientDropdown')" onfocus="onFinancesClientInput(this, 'addTxClientDropdown')">
-                <div id="addTxClientDropdown" class="hidden absolute left-0 right-0 top-full z-[100] mt-1 bg-base-300 border border-base-content/10 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto text-xs font-mono"></div>
+                <input type="text" name="client_id" id="addTxClientId" placeholder="Search by #0032, 0065, name..." class="input input-bordered input-sm font-mono w-full" autocomplete="off" oninput="onFinancesClientInput(this, 'addTxClientDropdown')" onfocus="onFinancesClientInput(this, 'addTxClientDropdown')">
+                <div id="addTxClientDropdown" class="hidden absolute left-0 right-0 top-full z-[100] mt-1 bg-base-300 border border-base-content/15 rounded-xl shadow-2xl overflow-hidden max-h-56 overflow-y-auto text-xs font-mono"></div>
+                <!-- Selected Client Live Info -->
+                <div id="addTxClientInfo" class="hidden mt-2 p-2.5 bg-base-100 border border-base-300 rounded-lg text-xs space-y-1"></div>
+            </div>
+            <!-- Extend Subscription Option -->
+            <div id="addTxExtendSubContainer" class="form-control bg-base-100 p-2.5 rounded-lg border border-base-300">
+                <label class="label py-0.5"><span class="label-text font-bold text-xs flex items-center gap-1.5"><i class="fas fa-bolt text-warning"></i> Extend Client Subscription</span></label>
+                <select name="extend_sub_months" id="addTxExtendSub" onchange="updateAddTxExtendPreview()" class="select select-bordered select-sm w-full font-mono text-xs mt-1">
+                    <option value="1" selected>+1 Month (+30 days) — (Recommended)</option>
+                    <option value="3">+3 Months (+90 days)</option>
+                    <option value="6">+6 Months (+180 days)</option>
+                    <option value="12">+12 Months (+360 days)</option>
+                    <option value="0">Do not extend subscription</option>
+                </select>
+                <span class="text-[10px] text-base-content/60 mt-1" id="addTxExtendPreview">Increments client's Sub (+1) without altering start date.</span>
             </div>
             <div class="form-control">
                 <label class="label py-1"><span class="label-text font-bold">Description</span></label>
@@ -1240,10 +1257,12 @@ async function loadClientCodesDatalist() {
 }
 
 let financesClientSearchTimer = null;
+let currentSelectedClient = null;
+
 function onFinancesClientInput(inputEl, dropdownId) {
     clearTimeout(financesClientSearchTimer);
     const q = inputEl.value.trim();
-    financesClientSearchTimer = setTimeout(() => fetchFinancesClientCodes(inputEl, dropdownId, q), 180);
+    financesClientSearchTimer = setTimeout(() => fetchFinancesClientCodes(inputEl, dropdownId, q), 150);
 }
 
 async function fetchFinancesClientCodes(inputEl, dropdownId, q) {
@@ -1252,28 +1271,116 @@ async function fetchFinancesClientCodes(inputEl, dropdownId, q) {
     try {
         const res = await fetch('/api/ext-clients/search?q=' + encodeURIComponent(q));
         const data = await res.json();
+        const clients = data.clients || [];
         const codes = data.codes || [];
-        if (codes.length === 0) {
+
+        if (codes.length === 0 && clients.length === 0) {
             dropdown.classList.add('hidden');
             return;
         }
-        dropdown.innerHTML = codes.map(code => `
-            <div class="px-3 py-1.5 hover:bg-primary/20 hover:text-primary cursor-pointer font-mono text-xs border-b border-base-content/5 last:border-0 text-base-content/90 flex items-center justify-between">
-                <span>${escapeHtml(code)}</span>
-                <i class="fas fa-link text-[10px] opacity-40"></i>
+
+        dropdown.innerHTML = clients.map((c, idx) => {
+            const statusBadge = c.status === 'active' 
+                ? '<span class="badge badge-success badge-xs font-mono">active</span>'
+                : c.status === 'expiring'
+                ? '<span class="badge badge-warning badge-xs font-mono">expiring</span>'
+                : c.status === 'expired'
+                ? '<span class="badge badge-error badge-xs font-mono">expired</span>'
+                : '<span class="badge badge-ghost badge-xs font-mono">' + escapeHtml(c.func || 'WORK') + '</span>';
+
+            const daysText = c.days_left !== null 
+                ? (c.days_left > 0 ? `${c.days_left}d left` : `${Math.abs(c.days_left)}d ago`)
+                : '';
+
+            return `
+            <div class="px-3 py-2 hover:bg-primary/20 hover:text-primary cursor-pointer border-b border-base-content/5 last:border-0 flex items-center justify-between gap-2 transition-colors" data-index="${idx}">
+                <div class="min-w-0 flex-1">
+                    <div class="font-mono font-bold text-xs flex items-center gap-1.5 truncate">
+                        <i class="fas fa-user-circle text-primary/70"></i>
+                        <span>${escapeHtml(c.code)}</span>
+                        ${c.name ? `<span class="font-sans font-normal text-base-content/70 truncate">(${escapeHtml(c.name)})</span>` : ''}
+                    </div>
+                    <div class="text-[10px] text-base-content/60 mt-0.5 flex items-center gap-2">
+                        ${c.expiry_date && c.expiry_date !== '-' ? `<span>Expires: <strong class="font-mono">${c.expiry_date}</strong></span>` : '<span>Start: ' + (c.start_date || '-') + '</span>'}
+                        ${daysText ? `<span class="opacity-75">(${daysText})</span>` : ''}
+                        ${c.sub ? `<span class="opacity-75">Sub: ${c.sub}mo</span>` : ''}
+                    </div>
+                </div>
+                <div>
+                    ${statusBadge}
+                </div>
             </div>
-        `).join('');
+            `;
+        }).join('');
+
         dropdown.classList.remove('hidden');
-        dropdown.querySelectorAll('div').forEach((item, index) => {
+        dropdown.querySelectorAll('[data-index]').forEach((item) => {
             item.addEventListener('mousedown', (e) => {
                 e.preventDefault();
-                inputEl.value = codes[index];
+                const idx = parseInt(item.getAttribute('data-index'), 10);
+                const c = clients[idx];
+                if (!c) return;
+
+                inputEl.value = c.code;
                 dropdown.classList.add('hidden');
-                inputEl.dispatchEvent(new Event('input'));
+                currentSelectedClient = c;
+
+                // If this is the add transaction modal, display info chip and update preview
+                if (inputEl.id === 'addTxClientId') {
+                    showAddTxClientInfo(c);
+                }
             });
         });
     } catch (e) {
         dropdown.classList.add('hidden');
+    }
+}
+
+function showAddTxClientInfo(c) {
+    const infoEl = document.getElementById('addTxClientInfo');
+    if (!infoEl) return;
+    
+    const daysText = c.days_left !== null 
+        ? (c.days_left > 0 ? `${c.days_left} days left` : `Expired ${Math.abs(c.days_left)} days ago`)
+        : '';
+
+    infoEl.innerHTML = `
+        <div class="flex items-center justify-between text-xs">
+            <span class="font-bold font-mono text-primary flex items-center gap-1.5">
+                <i class="fas fa-user-check text-success"></i> ${escapeHtml(c.code)} ${c.name ? `(${escapeHtml(c.name)})` : ''}
+            </span>
+            <span class="badge ${c.status === 'active' ? 'badge-success' : c.status === 'expiring' ? 'badge-warning' : c.status === 'expired' ? 'badge-error' : 'badge-ghost'} badge-xs">
+                ${c.status || 'WORK'}
+            </span>
+        </div>
+        <div class="text-[11px] text-base-content/70 flex flex-wrap gap-x-3 gap-y-0.5 font-mono">
+            <span>Start: ${c.start_date || '-'}</span>
+            <span>Sub: ${c.sub || 0} mo</span>
+            <span>Expires: <strong>${c.expiry_date || '-'}</strong></span>
+            ${daysText ? `<span class="${c.days_left <= 0 ? 'text-error font-semibold' : 'text-warning font-semibold'}">${daysText}</span>` : ''}
+        </div>
+    `;
+    infoEl.classList.remove('hidden');
+    updateAddTxExtendPreview();
+}
+
+function updateAddTxExtendPreview() {
+    const select = document.getElementById('addTxExtendSub');
+    const preview = document.getElementById('addTxExtendPreview');
+    if (!select || !preview) return;
+
+    const months = parseInt(select.value, 10);
+    if (months === 0) {
+        preview.textContent = 'Will not change client subscription in external database.';
+        return;
+    }
+
+    if (currentSelectedClient) {
+        const curSub = parseInt(currentSelectedClient.sub, 10) || 0;
+        const newSub = curSub + months;
+        preview.innerHTML = `Increments <code class="font-mono text-primary font-bold">Sub: ${curSub} &rarr; ${newSub}</code> (+${months * 30} days) without altering start date.`;
+    } else {
+        preview.textContent = `Increments client's Sub (+${months} mo) without altering start date.`;
     }
 }
 

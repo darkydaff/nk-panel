@@ -590,7 +590,8 @@ class Finances {
             $pdo->exec("SELECT setval('\"Finances_2026_id_seq\"', COALESCE((SELECT MAX(id) FROM \"Finances_2026\"), 1));");
         } catch (Throwable $e) {}
 
-        $date = trim($data['date'] ?? $data['Date'] ?? date('Y-m-d'));
+        $rawDate = trim((string)($data['date'] ?? $data['Date'] ?? date('Y-m-d')));
+        $date = self::normalizeDate($rawDate) ?: date('Y-m-d');
         $type = trim($data['type'] ?? $data['Type'] ?? 'Income');
         $amount = (float)($data['amount'] ?? $data['Amount'] ?? 0);
         $description = trim($data['description'] ?? $data['Description'] ?? '');
@@ -618,6 +619,16 @@ class Finances {
             throw $e;
         }
 
+        // Check if subscription extension was requested for this client
+        $extendMonths = (int)($data['extend_sub_months'] ?? $data['extend_months'] ?? $data['extend_sub'] ?? 0);
+        if ($extendMonths > 0 && $clientId !== null) {
+            try {
+                ExtDB::extendClientSubscription($clientId, $extendMonths);
+            } catch (Throwable $e) {
+                // Log/proceed, transaction was already created
+            }
+        }
+
         try { ExtDB::sync(); } catch (Throwable $e) {}
 
         return $res;
@@ -630,7 +641,8 @@ class Finances {
         if (!self::isAvailable()) throw new Exception("PostgreSQL database is unreachable.");
         $pdo = ExtDB::conn();
 
-        $date = trim($data['date'] ?? $data['Date'] ?? date('Y-m-d'));
+        $rawDate = trim((string)($data['date'] ?? $data['Date'] ?? date('Y-m-d')));
+        $date = self::normalizeDate($rawDate) ?: date('Y-m-d');
         $type = trim($data['type'] ?? $data['Type'] ?? 'Income');
         $amount = (float)($data['amount'] ?? $data['Amount'] ?? 0);
         $description = trim($data['description'] ?? $data['Description'] ?? '');

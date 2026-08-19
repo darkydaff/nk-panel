@@ -72,24 +72,39 @@ class ExtDB
         $pdo = self::conn();
         $table = Config::get('EXT_PG_CLIENTS_TABLE', 'Clients');
 
+        $search = trim($search);
         if ($search !== '') {
+            $cleanSearch = ltrim($search, '#');
             $stmt = $pdo->prepare(
-                "SELECT \"Code\" FROM \"{$table}\" WHERE \"Code\" ILIKE ? ORDER BY \"Code\" LIMIT ? OFFSET ?"
+                "SELECT \"Code\", \"Name\", \"Start_Date\", \"Sub\", \"Func\", \"Router\", \"Domain\", \"tgid\" 
+                 FROM \"{$table}\" 
+                 WHERE \"Code\" ILIKE ? 
+                    OR \"Code\" ILIKE ? 
+                    OR \"Name\" ILIKE ? 
+                    OR \"tgid\"::text ILIKE ?
+                    OR \"Router\" ILIKE ?
+                 ORDER BY \"Code\" LIMIT ? OFFSET ?"
             );
             $stmt->bindValue(1, '%' . $search . '%', PDO::PARAM_STR);
-            $stmt->bindValue(2, $limit, PDO::PARAM_INT);
-            $stmt->bindValue(3, $offset, PDO::PARAM_INT);
+            $stmt->bindValue(2, '%' . $cleanSearch . '%', PDO::PARAM_STR);
+            $stmt->bindValue(3, '%' . $search . '%', PDO::PARAM_STR);
+            $stmt->bindValue(4, '%' . $cleanSearch . '%', PDO::PARAM_STR);
+            $stmt->bindValue(5, '%' . $search . '%', PDO::PARAM_STR);
+            $stmt->bindValue(6, $limit, PDO::PARAM_INT);
+            $stmt->bindValue(7, $offset, PDO::PARAM_INT);
             $stmt->execute();
         } else {
             $stmt = $pdo->prepare(
-                "SELECT \"Code\" FROM \"{$table}\" ORDER BY \"Code\" LIMIT ? OFFSET ?"
+                "SELECT \"Code\", \"Name\", \"Start_Date\", \"Sub\", \"Func\", \"Router\", \"Domain\", \"tgid\" 
+                 FROM \"{$table}\" 
+                 ORDER BY \"Code\" LIMIT ? OFFSET ?"
             );
             $stmt->bindValue(1, $limit, PDO::PARAM_INT);
             $stmt->bindValue(2, $offset, PDO::PARAM_INT);
             $stmt->execute();
         }
 
-        return $stmt->fetchAll();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
     /**
@@ -696,6 +711,59 @@ class ExtDB
     }
 
     /**
+     * Extend a client's subscription by N months (+30 days per month).
+     * Strictly increments Sub by N without altering Start_Date (leaving Start_Date to manual edits).
+     * Also activates status to WORK if paused.
+     */
+    public static function extendClientSubscription(string $code, int $months = 1): array
+    {
+        if (!self::isAvailable()) throw new Exception("PostgreSQL database is unreachable.");
+        $client = self::getClientByCode($code);
+        if (!$client) throw new Exception("Client with code '{$code}' not found in external database.");
+
+        $pdo = self::conn();
+        $table = Config::get('EXT_PG_CLIENTS_TABLE', 'Clients');
+
+        $startDateStr = $client['Start_Date'] ?? null;
+        $currentSub = isset($client['Sub']) && $client['Sub'] !== null && is_numeric($client['Sub']) ? (int)$client['Sub'] : 0;
+        
+        // Never change Start_Date; simply increment Sub
+        $newSub = max(1, $currentSub + $months);
+
+        $stmt = $pdo->prepare("
+            UPDATE \"{$table}\" 
+            SET \"Sub\" = ?, \"Func\" = 'WORK'
+            WHERE \"Code\" = ?
+        ");
+        $stmt->execute([$newSub, $code]);
+
+        // Compute new expiration date
+        $expiryFormatted = '-';
+        $daysLeft = null;
+        if ($startDateStr) {
+            $startTs = strtotime($startDateStr);
+            if ($startTs) {
+                $expiryTs = $startTs + ($newSub * 30 * 86400);
+                $expiryFormatted = date('d.m.Y', $expiryTs);
+                $daysLeft = (int)round(($expiryTs - strtotime(date('Y-m-d'))) / 86400);
+            }
+        }
+
+        try {
+            self::sync();
+        } catch (Throwable $e) {}
+
+        return [
+            'success' => true,
+            'code' => $code,
+            'start_date' => $startDateStr,
+            'sub' => $newSub,
+            'expiry_date' => $expiryFormatted,
+            'days_left' => $daysLeft
+        ];
+    }
+
+    /**
      * Create a new client record in PostgreSQL Clients table and sync locally.
      */
     public static function createClient(array $data): bool
@@ -717,9 +785,11 @@ class ExtDB
                 $cols[] = "\"{$col}\"";
                 $placeholders[] = '?';
                 $val = $data[$col];
-                if ($val === '') $val = null;
+                if ($val === '' || $val === '-' || strtolower((string)$val) === 'null') $val = null;
                 if ($col === 'Sub' || $col === 'Servers_id') {
                     $val = ($val !== null && $val !== '') ? (int)$val : null;
+                } elseif ($col === 'Start_Date' && $val !== null) {
+                    $val = self::normalizeDateToIso((string)$val);
                 }
                 $vals[] = $val;
             }
@@ -757,9 +827,11 @@ class ExtDB
             if (array_key_exists($col, $data)) {
                 $set[] = "\"{$col}\" = ?";
                 $val = $data[$col];
-                if ($val === '') $val = null;
+                if ($val === '' || $val === '-' || strtolower((string)$val) === 'null') $val = null;
                 if ($col === 'Sub' || $col === 'Servers_id') {
                     $val = ($val !== null && $val !== '') ? (int)$val : null;
+                } elseif ($col === 'Start_Date' && $val !== null) {
+                    $val = self::normalizeDateToIso((string)$val);
                 }
                 $params[] = $val;
             }
@@ -840,6 +912,42 @@ class ExtDB
     }
 
     /**
+     * Normalize a date string (e.g. DD.MM.YYYY, DD.MM.YYYY HH:MM:SS, ISO) into standard ISO YYYY-MM-DD [HH:MM:SS].
+     */
+    public static function normalizeDateToIso(?string $dateStr): ?string
+    {
+        if ($dateStr === null) return null;
+        $str = trim((string)$dateStr);
+        if ($str === '' || $str === '-' || strtolower($str) === 'null') return null;
+
+        // DD.MM.YYYY [HH:MM[:SS]]
+        if (preg_match('/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2}:\d{2}(?::\d{2})?))?$/', $str, $m)) {
+            $day = str_pad($m[1], 2, '0', STR_PAD_LEFT);
+            $month = str_pad($m[2], 2, '0', STR_PAD_LEFT);
+            $year = $m[3];
+            $time = !empty($m[4]) ? " " . $m[4] : "";
+            return "{$year}-{$month}-{$day}{$time}";
+        }
+
+        // YYYY-MM-DD [HH:MM[:SS]]
+        if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s](\d{1,2}:\d{2}(?::\d{2})?))?$/', $str, $m)) {
+            $year = $m[1];
+            $month = str_pad($m[2], 2, '0', STR_PAD_LEFT);
+            $day = str_pad($m[3], 2, '0', STR_PAD_LEFT);
+            $time = !empty($m[4]) ? " " . $m[4] : "";
+            return "{$year}-{$month}-{$day}{$time}";
+        }
+
+        $ts = strtotime($str);
+        if ($ts && $ts > 0) {
+            $hasTime = date('H:i:s', $ts) !== '00:00:00';
+            return date($hasTime ? 'Y-m-d H:i:s' : 'Y-m-d', $ts);
+        }
+
+        return $str;
+    }
+
+    /**
      * Get row data and total count for a given PostgreSQL table with search, sorting and pagination.
      */
     public static function getTableData(string $tableName, string $search = '', int $limit = 50, int $offset = 0, string $sortCol = '', string $sortDir = 'ASC'): array
@@ -851,6 +959,10 @@ class ExtDB
         if (empty($columns)) return ['rows' => [], 'total' => 0, 'columns' => []];
 
         $colNames = array_column($columns, 'column_name');
+        $colTypes = [];
+        foreach ($columns as $c) {
+            $colTypes[$c['column_name']] = strtolower((string)$c['data_type']);
+        }
 
         $whereSql = '';
         $params = [];
@@ -870,7 +982,15 @@ class ExtDB
         $orderSql = '';
         if ($sortCol !== '' && in_array($sortCol, $colNames, true)) {
             $dir = strtoupper($sortDir) === 'DESC' ? 'DESC' : 'ASC';
-            $orderSql = "ORDER BY \"{$sortCol}\" {$dir}";
+            $type = $colTypes[$sortCol] ?? '';
+            $sortLower = strtolower($sortCol);
+
+            // Chronological sorting for date/time columns
+            if (str_contains($type, 'date') || str_contains($type, 'time') || in_array($sortLower, ['date', 'start_date', 'created_at', 'updated_at', 'last_payment_date', 'last_handshake', 'last_login_at'])) {
+                $orderSql = "ORDER BY \"{$sortCol}\" {$dir} NULLS LAST";
+            } else {
+                $orderSql = "ORDER BY \"{$sortCol}\" {$dir}";
+            }
         } elseif (in_array('id', $colNames, true)) {
             $orderSql = 'ORDER BY "id" ASC';
         } elseif (in_array('Code', $colNames, true)) {
@@ -903,7 +1023,14 @@ class ExtDB
         $params = [];
         foreach ($fieldUpdates as $col => $val) {
             $set[] = "\"{$col}\" = ?";
-            $params[] = ($val === '' ? null : $val);
+            $colLower = strtolower($col);
+            if ($val === '' || $val === '-' || strtolower((string)$val) === 'null') {
+                $params[] = null;
+            } elseif (in_array($colLower, ['date', 'start_date', 'created_at', 'updated_at', 'last_payment_date', 'expiry_date'])) {
+                $params[] = self::normalizeDateToIso((string)$val);
+            } else {
+                $params[] = $val;
+            }
         }
 
         $where = [];
@@ -941,7 +1068,14 @@ class ExtDB
         foreach ($data as $col => $val) {
             $cols[] = "\"{$col}\"";
             $phs[] = '?';
-            $params[] = ($val === '' ? null : $val);
+            $colLower = strtolower($col);
+            if ($val === '' || $val === '-' || strtolower((string)$val) === 'null') {
+                $params[] = null;
+            } elseif (in_array($colLower, ['date', 'start_date', 'created_at', 'updated_at', 'last_payment_date', 'expiry_date'])) {
+                $params[] = self::normalizeDateToIso((string)$val);
+            } else {
+                $params[] = $val;
+            }
         }
 
         $colList = implode(', ', $cols);

@@ -206,8 +206,8 @@
                                     <td class="font-mono text-xs">
                                         {{ b.backup_size|format_bytes }}
                                     </td>
-                                    <td class="text-xs text-base-content/70">
-                                        {{ b.created_at }}
+                                    <td class="text-xs text-base-content/70 font-mono">
+                                        {{ b.created_at|format_date }}
                                     </td>
                                     <td class="text-right">
                                         <div class="flex items-center justify-end gap-2">

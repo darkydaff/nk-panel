@@ -1287,47 +1287,179 @@ Router::get('/clients', function () {
     ]);
 });
 
-// API: Autocomplete client codes from local cached MySQL table or external Postgres
+// API: Autocomplete client codes from local cached MySQL table or external Postgres with rich expiration info
 Router::get('/api/ext-clients/search', function () {
     requireAuth();
     header('Content-Type: application/json');
 
     $q = trim($_GET['q'] ?? '');
     $limit = min(50, max(1, (int) ($_GET['limit'] ?? 20)));
+    $clients = [];
     $codes = [];
 
     try {
         if (ExtDB::isAvailable()) {
             $extClients = ExtDB::searchClients($q, $limit, 0);
             foreach ($extClients as $c) {
-                if (!empty($c['Code'])) {
-                    $codes[] = $c['Code'];
+                $code = $c['Code'] ?? '';
+                if (!empty($code)) {
+                    $startDate = $c['Start_Date'] ?? null;
+                    $sub = isset($c['Sub']) && $c['Sub'] !== null && is_numeric($c['Sub']) ? (int)$c['Sub'] : 0;
+                    $func = $c['Func'] ?? 'WORK';
+                    
+                    $expiryFormatted = '-';
+                    $daysLeft = null;
+                    $status = 'unknown';
+
+                    if (strtoupper($func) === 'PAUSE') {
+                        $status = 'paused';
+                    } elseif ($startDate && $sub > 0) {
+                        $startTs = strtotime($startDate);
+                        if ($startTs) {
+                            $expiryTs = $startTs + ($sub * 30 * 86400);
+                            $expiryFormatted = date('d.m.Y', $expiryTs);
+                            $daysLeft = (int)round(($expiryTs - strtotime(date('Y-m-d'))) / 86400);
+                            if ($daysLeft > 10) {
+                                $status = 'active';
+                            } elseif ($daysLeft > 0) {
+                                $status = 'expiring';
+                            } else {
+                                $status = 'expired';
+                            }
+                        }
+                    }
+
+                    $clients[] = [
+                        'code' => $code,
+                        'name' => $c['Name'] ?? '',
+                        'start_date' => $startDate,
+                        'sub' => $sub,
+                        'func' => $func,
+                        'expiry_date' => $expiryFormatted,
+                        'days_left' => $daysLeft,
+                        'status' => $status
+                    ];
+                    $codes[] = $code;
                 }
             }
         }
 
         $pdo = DB::conn();
-        $stmt = $pdo->prepare('SELECT code FROM ext_clients WHERE code LIKE ? OR name LIKE ? ORDER BY code LIMIT ?');
+        $cleanQ = ltrim($q, '#');
+        $stmt = $pdo->prepare('SELECT code, name, start_date, sub, func FROM ext_clients WHERE code LIKE ? OR code LIKE ? OR name LIKE ? ORDER BY code LIMIT ?');
         $stmt->bindValue(1, '%' . $q . '%', PDO::PARAM_STR);
-        $stmt->bindValue(2, '%' . $q . '%', PDO::PARAM_STR);
-        $stmt->bindValue(3, $limit, PDO::PARAM_INT);
+        $stmt->bindValue(2, '%' . $cleanQ . '%', PDO::PARAM_STR);
+        $stmt->bindValue(3, '%' . $q . '%', PDO::PARAM_STR);
+        $stmt->bindValue(4, $limit, PDO::PARAM_INT);
         $stmt->execute();
-        $localCodes = $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
-        foreach ($localCodes as $lc) {
-            if (!empty($lc)) {
-                $codes[] = $lc;
+        $localClients = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        
+        $seenCodes = array_flip($codes);
+        foreach ($localClients as $lc) {
+            $code = $lc['code'] ?? '';
+            if (!empty($code) && !isset($seenCodes[$code])) {
+                $startDate = $lc['start_date'] ?? null;
+                $sub = isset($lc['sub']) && $lc['sub'] !== null && is_numeric($lc['sub']) ? (int)$lc['sub'] : 0;
+                $func = $lc['func'] ?? 'WORK';
+                
+                $expiryFormatted = '-';
+                $daysLeft = null;
+                $status = 'unknown';
+
+                if (strtoupper($func) === 'PAUSE') {
+                    $status = 'paused';
+                } elseif ($startDate && $sub > 0) {
+                    $startTs = strtotime($startDate);
+                    if ($startTs) {
+                        $expiryTs = $startTs + ($sub * 30 * 86400);
+                        $expiryFormatted = date('d.m.Y', $expiryTs);
+                        $daysLeft = (int)round(($expiryTs - strtotime(date('Y-m-d'))) / 86400);
+                        if ($daysLeft > 10) {
+                            $status = 'active';
+                        } elseif ($daysLeft > 0) {
+                            $status = 'expiring';
+                        } else {
+                            $status = 'expired';
+                        }
+                    }
+                }
+
+                $clients[] = [
+                    'code' => $code,
+                    'name' => $lc['name'] ?? '',
+                    'start_date' => $startDate,
+                    'sub' => $sub,
+                    'func' => $func,
+                    'expiry_date' => $expiryFormatted,
+                    'days_left' => $daysLeft,
+                    'status' => $status
+                ];
+                $codes[] = $code;
+                $seenCodes[$code] = true;
             }
         }
 
         $uniqueCodes = array_values(array_filter(array_unique($codes)));
         sort($uniqueCodes);
 
-        echo json_encode(['success' => true, 'codes' => array_slice($uniqueCodes, 0, $limit)]);
+        echo json_encode([
+            'success' => true, 
+            'codes' => array_slice($uniqueCodes, 0, $limit),
+            'clients' => array_slice($clients, 0, $limit)
+        ]);
     } catch (Throwable $e) {
         http_response_code(500);
-        echo json_encode(['error' => $e->getMessage(), 'codes' => []]);
+        echo json_encode(['error' => $e->getMessage(), 'codes' => [], 'clients' => []]);
     }
 });
+
+// API: Extend client subscription by N months (+30 days per month)
+$extendHandler = function () {
+    requireAuth();
+    Csrf::validateRequest();
+    header('Content-Type: application/json');
+
+    $body = json_decode(file_get_contents('php://input'), true) ?: $_POST;
+    $code = trim($body['code'] ?? $body['Code'] ?? $body['client_id'] ?? '');
+    $months = max(1, (int)($body['months'] ?? $body['extend_months'] ?? $body['sub'] ?? 1));
+    $recordPayment = !empty($body['record_payment']) && ($body['record_payment'] === true || $body['record_payment'] === '1' || $body['record_payment'] === 'true');
+    $amount = (float)($body['amount'] ?? 0);
+    $description = trim($body['description'] ?? "Subscription renewal (+{$months} mo)");
+
+    if (empty($code)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Client Code is required.']);
+        return;
+    }
+
+    try {
+        // Extend subscription in Postgres Clients table (increments Sub, keeps Start_Date unchanged)
+        $extResult = ExtDB::extendClientSubscription($code, $months);
+
+        // Optionally record transaction in Finances_2026
+        if ($recordPayment && $amount > 0 && Finances::isAvailable()) {
+            try {
+                Finances::addTransaction([
+                    'date' => date('Y-m-d'),
+                    'type' => 'Income',
+                    'amount' => $amount,
+                    'description' => $description,
+                    'client_id' => $code
+                ]);
+            } catch (Throwable $e) {
+                // Log and continue
+            }
+        }
+
+        echo json_encode(array_merge(['success' => true], $extResult));
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+};
+
+Router::post('/api/clients/extend', $extendHandler);
+Router::post('/api/ext-clients/extend', $extendHandler);
 
 // API: Manual trigger to synchronize Postgres to MySQL
 Router::post('/api/ext-clients/sync', function () {
@@ -2871,16 +3003,14 @@ Router::get('/api/servers/{id}/clients', function ($params) {
     }
 });
 
-// API: Create client
-Router::post('/api/clients/create', function () {
+// API: Create client (supports both VPN Client configuration creation and External DB Client creation)
+Router::post('/api/vpn-clients/create', function () {
     header('Content-Type: application/json');
-
-    $user = JWT::requireAuth();
-    if (!$user)
-        return;
+    $user = requireApiAuth();
+    if (!$user) return;
 
     $raw = file_get_contents('php://input');
-    $data = json_decode($raw, true);
+    $data = json_decode($raw, true) ?: $_POST;
 
     $serverId = (int) ($data['server_id'] ?? 0);
     $name = trim($data['name'] ?? '');
@@ -2894,11 +3024,9 @@ Router::post('/api/clients/create', function () {
 
     try {
         $clientId = VpnClient::create($serverId, $user['id'], $name, $expiresInDays);
-
         $client = new VpnClient($clientId);
         $clientData = $client->getData();
 
-        // Return client data
         echo json_encode([
             'success' => true,
             'client' => [
@@ -2915,6 +3043,63 @@ Router::post('/api/clients/create', function () {
     } catch (Exception $e) {
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
+    }
+});
+
+Router::post('/api/clients/create', function () {
+    header('Content-Type: application/json');
+    $user = requireApiAuth();
+    if (!$user) return;
+
+    $raw = file_get_contents('php://input');
+    $data = json_decode($raw, true) ?: $_POST;
+
+    // Case 1: VPN Client Configuration creation (has server_id)
+    if (!empty($data['server_id'])) {
+        $serverId = (int) $data['server_id'];
+        $name = trim($data['name'] ?? '');
+        $expiresInDays = isset($data['expires_in_days']) ? (int) $data['expires_in_days'] : null;
+
+        if (empty($name)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'name is required']);
+            return;
+        }
+
+        try {
+            $clientId = VpnClient::create($serverId, $user['id'], $name, $expiresInDays);
+            $client = new VpnClient($clientId);
+            $clientData = $client->getData();
+
+            echo json_encode([
+                'success' => true,
+                'client' => [
+                    'id' => $clientData['id'],
+                    'name' => $clientData['name'],
+                    'server_id' => $clientData['server_id'],
+                    'client_ip' => $clientData['client_ip'],
+                    'status' => $clientData['status'],
+                    'expires_at' => $clientData['expires_at'],
+                    'created_at' => $clientData['created_at'],
+                    'config' => $clientData['config'],
+                ]
+            ]);
+            return;
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(['error' => $e->getMessage()]);
+            return;
+        }
+    }
+
+    // Case 2: External PostgreSQL Client creation (has Code / Name)
+    requireAdmin();
+    try {
+        $res = ExtDB::createClient($data);
+        echo json_encode(['success' => $res, 'message' => 'Client created successfully']);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
     }
 });
 
@@ -4415,25 +4600,15 @@ Router::get('/api/clients/list', function () {
     echo json_encode(['success' => true, 'codes' => $codes]);
 });
 
-Router::post('/api/clients/create', function () {
-    header('Content-Type: application/json');
-    requireAdmin();
-    try {
-        $res = ExtDB::createClient($_POST);
-        echo json_encode(['success' => $res, 'message' => 'Client created successfully']);
-    } catch (Throwable $e) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
-    }
-});
-
 Router::post('/api/clients/update', function () {
     header('Content-Type: application/json');
     requireAdmin();
+    Csrf::validateRequest();
     try {
-        $origCode = trim($_POST['original_code'] ?? $_POST['Code'] ?? '');
+        $input = json_decode(file_get_contents('php://input'), true) ?: $_POST;
+        $origCode = trim($input['original_code'] ?? $input['Code'] ?? $input['code'] ?? '');
         if (empty($origCode)) throw new Exception("Original client code is required.");
-        $res = ExtDB::updateClient($origCode, $_POST);
+        $res = ExtDB::updateClient($origCode, $input);
         echo json_encode(['success' => $res, 'message' => 'Client updated successfully']);
     } catch (Throwable $e) {
         http_response_code(500);
@@ -4444,8 +4619,71 @@ Router::post('/api/clients/update', function () {
 Router::post('/api/clients/delete', function () {
     header('Content-Type: application/json');
     requireAdmin();
+    Csrf::validateRequest();
     try {
-        $code = trim($_POST['code'] ?? $_POST['Code'] ?? '');
+        $input = json_decode(file_get_contents('php://input'), true) ?: $_POST;
+        $code = trim($input['code'] ?? $input['Code'] ?? '');
+        if (empty($code)) throw new Exception("Client code is required.");
+        $res = ExtDB::deleteClient($code);
+        echo json_encode(['success' => $res, 'message' => 'Client deleted successfully']);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+});
+
+// Aliases for /api/ext-clients/*
+Router::get('/api/ext-clients/get', function () {
+    header('Content-Type: application/json');
+    $user = requireApiAuth();
+    if (!$user) return;
+    $code = trim($_GET['code'] ?? '');
+    $client = ExtDB::getClientByCode($code);
+    if ($client) {
+        echo json_encode(['success' => true, 'client' => $client]);
+    } else {
+        http_response_code(404);
+        echo json_encode(['success' => false, 'error' => 'Client not found']);
+    }
+});
+
+Router::post('/api/ext-clients/create', function () {
+    header('Content-Type: application/json');
+    requireAdmin();
+    Csrf::validateRequest();
+    try {
+        $input = json_decode(file_get_contents('php://input'), true) ?: $_POST;
+        $res = ExtDB::createClient($input);
+        echo json_encode(['success' => $res, 'message' => 'Client created successfully']);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+});
+
+Router::post('/api/ext-clients/update', function () {
+    header('Content-Type: application/json');
+    requireAdmin();
+    Csrf::validateRequest();
+    try {
+        $input = json_decode(file_get_contents('php://input'), true) ?: $_POST;
+        $origCode = trim($input['original_code'] ?? $input['Code'] ?? $input['code'] ?? '');
+        if (empty($origCode)) throw new Exception("Original client code is required.");
+        $res = ExtDB::updateClient($origCode, $input);
+        echo json_encode(['success' => $res, 'message' => 'Client updated successfully']);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    }
+});
+
+Router::post('/api/ext-clients/delete', function () {
+    header('Content-Type: application/json');
+    requireAdmin();
+    Csrf::validateRequest();
+    try {
+        $input = json_decode(file_get_contents('php://input'), true) ?: $_POST;
+        $code = trim($input['code'] ?? $input['Code'] ?? '');
         if (empty($code)) throw new Exception("Client code is required.");
         $res = ExtDB::deleteClient($code);
         echo json_encode(['success' => $res, 'message' => 'Client deleted successfully']);
@@ -4475,8 +4713,10 @@ Router::get('/api/finances/get', function () {
 Router::post('/api/finances/create', function () {
     header('Content-Type: application/json');
     requireAdmin();
+    Csrf::validateRequest();
     try {
-        $res = Finances::addTransaction($_POST);
+        $data = json_decode(file_get_contents('php://input'), true) ?: $_POST;
+        $res = Finances::addTransaction($data);
         echo json_encode(['success' => $res, 'message' => 'Transaction created successfully']);
     } catch (Throwable $e) {
         http_response_code(500);
@@ -4487,10 +4727,12 @@ Router::post('/api/finances/create', function () {
 Router::post('/api/finances/update', function () {
     header('Content-Type: application/json');
     requireAdmin();
+    Csrf::validateRequest();
     try {
-        $id = (int)($_POST['id'] ?? 0);
+        $data = json_decode(file_get_contents('php://input'), true) ?: $_POST;
+        $id = (int)($data['id'] ?? $_POST['id'] ?? 0);
         if ($id <= 0) throw new Exception("Valid transaction ID is required.");
-        $res = Finances::updateTransaction($id, $_POST);
+        $res = Finances::updateTransaction($id, $data);
         echo json_encode(['success' => $res, 'message' => 'Transaction updated successfully']);
     } catch (Throwable $e) {
         http_response_code(500);
@@ -4501,8 +4743,10 @@ Router::post('/api/finances/update', function () {
 Router::post('/api/finances/delete', function () {
     header('Content-Type: application/json');
     requireAdmin();
+    Csrf::validateRequest();
     try {
-        $id = (int)($_POST['id'] ?? 0);
+        $data = json_decode(file_get_contents('php://input'), true) ?: $_POST;
+        $id = (int)($data['id'] ?? $_POST['id'] ?? 0);
         if ($id <= 0) throw new Exception("Valid transaction ID is required.");
         $res = Finances::deleteTransaction($id);
         echo json_encode(['success' => $res, 'message' => 'Transaction deleted successfully']);
@@ -4600,6 +4844,7 @@ Router::get('/api/db-manager/table-data', function () {
 Router::post('/api/db-manager/row-insert', function () {
     header('Content-Type: application/json');
     requireAdmin();
+    Csrf::validateRequest();
     try {
         $input = json_decode(file_get_contents('php://input'), true) ?: $_POST;
         $table = trim($input['table'] ?? '');
@@ -4616,6 +4861,7 @@ Router::post('/api/db-manager/row-insert', function () {
 Router::post('/api/db-manager/row-update', function () {
     header('Content-Type: application/json');
     requireAdmin();
+    Csrf::validateRequest();
     try {
         $input = json_decode(file_get_contents('php://input'), true) ?: $_POST;
         $table = trim($input['table'] ?? '');
@@ -4633,6 +4879,7 @@ Router::post('/api/db-manager/row-update', function () {
 Router::post('/api/db-manager/row-delete', function () {
     header('Content-Type: application/json');
     requireAdmin();
+    Csrf::validateRequest();
     try {
         $input = json_decode(file_get_contents('php://input'), true) ?: $_POST;
         $table = trim($input['table'] ?? '');

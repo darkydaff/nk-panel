@@ -40,6 +40,9 @@
                 {% if search or code_filter %}<a href="/clients" class="btn btn-ghost btn-sm gap-2"><i class="fas fa-times"></i>Clear</a>{% endif %}
             </form>
 
+            <a href="/db-manager?table=Clients" class="btn btn-outline btn-sm gap-1.5 whitespace-nowrap text-xs" title="Open external Clients table in Database Manager">
+                <i class="fas fa-table-cells text-xs text-primary"></i><span class="hidden md:inline">DB Manager</span>
+            </a>
             <button type="button" onclick="triggerClientSync()" id="syncClientBtn" title="Sync clients with external DB" class="btn btn-ghost btn-sm gap-2 whitespace-nowrap text-xs">
                 <i class="fas fa-sync-alt" id="syncClientIcon"></i><span id="syncClientText">Sync DB</span>
             </button>
@@ -47,7 +50,7 @@
             <button type="button" onclick="toggleClientEditLock()" id="btnClientEditLock" class="btn btn-warning btn-outline btn-sm gap-2 whitespace-nowrap">
                 <i class="fas fa-lock" id="clientEditLockIcon"></i><span id="clientEditLockText">Unlock Editing</span>
             </button>
-            <button type="button" onclick="openAddClientModal()" id="btnAddClientHeader" class="btn btn-primary btn-sm gap-2 whitespace-nowrap hidden">
+            <button type="button" onclick="openAddClientModal()" id="btnAddClientHeader" class="btn btn-primary btn-sm gap-2 whitespace-nowrap hidden shadow-xs">
                 <i class="fas fa-user-plus"></i>Add Client
             </button>
             {% endif %}
@@ -263,6 +266,9 @@
                     <button onclick="openCreateForClient('{{ client.Code|e('js') }}')" class="btn btn-outline btn-primary btn-sm flex-1 gap-1.5">
                         <i class="fas fa-plus text-xs"></i>New Config
                     </button>
+                    <button onclick="openQuickExtendModal('{{ client.Code|e('js') }}', '{{ client.Name|e('js') }}', '{{ client.ExpiryDate|e('js') }}', {{ client.DaysLeft|default(0) }}, {{ client.Sub|default(1) }})" class="btn btn-ghost btn-sm btn-square text-warning hover:bg-warning/10" title="⚡ Extend Subscription (+30d)">
+                        <i class="fas fa-bolt text-xs"></i>
+                    </button>
                     <button onclick="openClientPaymentsModal('{{ client.Code|e('js') }}')" class="btn btn-ghost btn-sm btn-square text-emerald-400 hover:bg-emerald-500/10" title="View linked Finances transactions">
                         <i class="fas fa-receipt text-xs"></i>
                     </button>
@@ -373,6 +379,7 @@
                         <div class="flex items-center justify-end gap-1">
                             <a href="/clients?code={{ client.Code|url_encode }}" class="btn btn-ghost btn-xs gap-1" title="View configs"><i class="fas fa-eye"></i></a>
                             <button onclick="openCreateForClient('{{ client.Code|e('js') }}')" class="btn btn-ghost btn-xs text-primary gap-1" title="New config"><i class="fas fa-plus"></i></button>
+                            <button onclick="openQuickExtendModal('{{ client.Code|e('js') }}', '{{ client.Name|e('js') }}', '{{ client.ExpiryDate|e('js') }}', {{ client.DaysLeft|default(0) }}, {{ client.Sub|default(1) }})" class="btn btn-ghost btn-xs text-warning hover:bg-warning/10" title="⚡ Extend Subscription (+30d)"><i class="fas fa-bolt"></i></button>
                             <button onclick="openClientPaymentsModal('{{ client.Code|e('js') }}')" class="btn btn-ghost btn-xs text-emerald-400 hover:bg-emerald-500/10" title="View linked Payments"><i class="fas fa-receipt"></i></button>
                             {% if user.role == 'admin' %}
                             <button onclick="openEditClientModal('{{ client.Code|e('js') }}')" class="btn btn-ghost btn-xs text-info hover:bg-info/10 client-edit-btn hidden" title="Edit Client Record"><i class="fas fa-edit"></i></button>
@@ -681,6 +688,18 @@ async function submitAddClient(e) {
     }
 }
 
+function formatDateUser(dateStr) {
+    if (!dateStr) return '';
+    const str = String(dateStr).trim();
+    if (str === '' || str === '-' || str.toLowerCase() === 'null') return '';
+    const match = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}:\d{2}(?::\d{2})?))?/);
+    if (match) {
+        const [, y, m, d, time] = match;
+        return `${d}.${m}.${y}` + (time && time.substring(0,5) !== '00:00' ? ` ${time.substring(0,5)}` : '');
+    }
+    return str;
+}
+
 async function openEditClientModal(code) {
     try {
         const res = await fetch('/api/clients/get?code=' + encodeURIComponent(code));
@@ -694,7 +713,7 @@ async function openEditClientModal(code) {
         document.getElementById('editClientCodeHeading').textContent = c.Code || code;
         document.getElementById('editCode').value = c.Code || '';
         document.getElementById('editName').value = c.Name || '';
-        document.getElementById('editStartDate').value = c.Start_Date || '';
+        document.getElementById('editStartDate').value = formatDateUser(c.Start_Date || '');
         document.getElementById('editSub').value = c.Sub !== null ? c.Sub : '';
         document.getElementById('editFunc').value = c.Func || 'WORK';
         document.getElementById('editRouter').value = c.Router || '';
@@ -761,6 +780,86 @@ async function deleteClientFromModal() {
         alert('Network Error: ' + err.message);
     }
 }
+
+let quickExtendActiveClient = null;
+
+function openQuickExtendModal(code, name, expiryDate, daysLeft, sub) {
+    quickExtendActiveClient = { code, name, expiryDate, daysLeft, sub: parseInt(sub, 10) || 1 };
+    document.getElementById('quickExtendInputCode').value = code;
+    document.getElementById('quickExtendCode').textContent = code;
+    document.getElementById('quickExtendClientName').textContent = name ? `${name} (${code})` : code;
+    
+    const daysText = daysLeft !== undefined && daysLeft !== null 
+        ? (daysLeft > 0 ? ` (${daysLeft}d left)` : ` (Expired ${Math.abs(daysLeft)}d ago)`)
+        : '';
+    document.getElementById('quickExtendCurrentExpiry').textContent = (expiryDate || '-') + daysText;
+    document.getElementById('quickExtendCurrentSub').textContent = `${quickExtendActiveClient.sub} months`;
+
+    setQuickExtendMonths(1);
+    document.getElementById('quickExtendRecordPayment').checked = false;
+    toggleQuickExtendPaymentFields(false);
+
+    document.getElementById('quickExtendModal').showModal();
+}
+
+function setQuickExtendMonths(months) {
+    document.getElementById('quickExtendMonths').value = months;
+    [1, 3, 6, 12].forEach(m => {
+        const btn = document.getElementById('btnExtend' + m);
+        if (btn) {
+            if (m === months) {
+                btn.className = 'btn btn-sm btn-primary shadow-xs';
+            } else {
+                btn.className = 'btn btn-sm btn-outline';
+            }
+        }
+    });
+
+    const preview = document.getElementById('quickExtendPreviewText');
+    if (quickExtendActiveClient && preview) {
+        const curSub = quickExtendActiveClient.sub || 0;
+        const newSub = curSub + months;
+        preview.innerHTML = `Increments <code class="font-mono font-bold">Sub: ${curSub} &rarr; ${newSub}</code> (+${months * 30} days) without altering start date.`;
+    }
+}
+
+function toggleQuickExtendPaymentFields(show) {
+    const el = document.getElementById('quickExtendPaymentFields');
+    if (el) {
+        if (show) el.classList.remove('hidden');
+        else el.classList.add('hidden');
+    }
+}
+
+async function submitQuickExtend(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btnSubmitQuickExtend');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Extending...';
+
+    const form = e.target;
+    const formData = new FormData(form);
+
+    try {
+        const res = await fetch('/api/clients/extend', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': '{{ csrf_token() }}' },
+            body: formData
+        });
+        const json = await res.json();
+        if (json.success) {
+            document.getElementById('quickExtendModal').close();
+            window.location.reload();
+        } else {
+            alert('Error: ' + (json.error || 'Failed to extend subscription'));
+        }
+    } catch (err) {
+        alert('Network Error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-bolt"></i> Confirm Extension';
+    }
+}
 </script>
 
 <!-- Add Client Modal -->
@@ -771,6 +870,7 @@ async function deleteClientFromModal() {
         </h3>
         
         <form id="addClientForm" onsubmit="submitAddClient(event)" class="space-y-4 mt-4 max-h-[65vh] overflow-y-auto pr-1">
+            {{ csrf_field() }}
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                 <div>
                     <label class="label py-1"><span class="label-text font-bold">Client Code *</span></label>
@@ -782,7 +882,7 @@ async function deleteClientFromModal() {
                 </div>
                 <div>
                     <label class="label py-1"><span class="label-text font-bold">Start Date</span></label>
-                    <input type="date" name="Start_Date" class="input input-bordered input-sm w-full font-mono">
+                    <input type="text" name="Start_Date" placeholder="DD.MM.YYYY (e.g. 19.08.2026)" class="input input-bordered input-sm w-full font-mono">
                 </div>
                 <div>
                     <label class="label py-1"><span class="label-text font-bold">Subscription (Months)</span></label>
@@ -836,6 +936,7 @@ async function deleteClientFromModal() {
         </h3>
         
         <form id="editClientForm" onsubmit="submitEditClient(event)" class="space-y-4 mt-4 max-h-[65vh] overflow-y-auto pr-1">
+            {{ csrf_field() }}
             <input type="hidden" name="original_code" id="editOriginalCode">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                 <div>
@@ -848,7 +949,7 @@ async function deleteClientFromModal() {
                 </div>
                 <div>
                     <label class="label py-1"><span class="label-text font-bold">Start Date</span></label>
-                    <input type="date" name="Start_Date" id="editStartDate" class="input input-bordered input-sm w-full font-mono">
+                    <input type="text" name="Start_Date" id="editStartDate" placeholder="DD.MM.YYYY (e.g. 19.08.2026)" class="input input-bordered input-sm w-full font-mono">
                 </div>
                 <div>
                     <label class="label py-1"><span class="label-text font-bold">Subscription (Months)</span></label>
@@ -893,6 +994,71 @@ async function deleteClientFromModal() {
                         <i class="fas fa-check"></i> Update Record
                     </button>
                 </div>
+            </div>
+        </form>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- Quick Extend Modal -->
+<dialog id="quickExtendModal" class="modal">
+    <div class="modal-box max-w-md bg-base-100 border border-base-300 rounded-2xl shadow-2xl">
+        <h3 class="font-bold text-lg flex items-center gap-2 border-b border-base-300 pb-3">
+            <i class="fas fa-bolt text-warning"></i> Extend Subscription: <span id="quickExtendCode" class="font-mono text-primary"></span>
+        </h3>
+        <form id="quickExtendForm" onsubmit="submitQuickExtend(event)" class="space-y-4 mt-4 text-xs font-sans">
+            {{ csrf_field() }}
+            <input type="hidden" name="code" id="quickExtendInputCode">
+            <div class="p-3 bg-base-200 border border-base-300 rounded-xl space-y-1 font-mono">
+                <div class="flex items-center justify-between">
+                    <span class="text-base-content/70">Client:</span>
+                    <strong id="quickExtendClientName" class="text-base-content"></strong>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-base-content/70">Current Expiry:</span>
+                    <span id="quickExtendCurrentExpiry" class="font-bold"></span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-base-content/70">Current Sub:</span>
+                    <span id="quickExtendCurrentSub"></span>
+                </div>
+            </div>
+
+            <div class="form-control">
+                <label class="label py-1"><span class="label-text font-bold">Extension Duration</span></label>
+                <div class="grid grid-cols-4 gap-2">
+                    <button type="button" onclick="setQuickExtendMonths(1)" id="btnExtend1" class="btn btn-sm btn-primary">+1 Mo<br>(+30d)</button>
+                    <button type="button" onclick="setQuickExtendMonths(3)" id="btnExtend3" class="btn btn-sm btn-outline">+3 Mo<br>(+90d)</button>
+                    <button type="button" onclick="setQuickExtendMonths(6)" id="btnExtend6" class="btn btn-sm btn-outline">+6 Mo</button>
+                    <button type="button" onclick="setQuickExtendMonths(12)" id="btnExtend12" class="btn btn-sm btn-outline">+1 Yr</button>
+                </div>
+                <input type="hidden" name="months" id="quickExtendMonths" value="1">
+            </div>
+
+            <div class="p-2.5 bg-primary/10 border border-primary/20 rounded-lg text-primary font-mono text-[11px] flex items-center gap-2">
+                <i class="fas fa-info-circle text-xs"></i>
+                <span id="quickExtendPreviewText">Increments Sub (+1) without altering start date.</span>
+            </div>
+
+            <!-- Optional Record in Finances -->
+            <div class="p-3 bg-base-200 border border-base-300 rounded-xl space-y-2">
+                <label class="cursor-pointer flex items-center gap-2">
+                    <input type="checkbox" name="record_payment" id="quickExtendRecordPayment" value="1" onchange="toggleQuickExtendPaymentFields(this.checked)" class="checkbox checkbox-primary checkbox-xs">
+                    <span class="label-text text-xs font-semibold">Also record payment in Finances_2026</span>
+                </label>
+                <div id="quickExtendPaymentFields" class="hidden space-y-2 pt-1 border-t border-base-300">
+                    <div>
+                        <label class="label py-0.5"><span class="label-text text-[11px] font-medium">Payment Amount (₽)</span></label>
+                        <input type="number" step="0.01" name="amount" id="quickExtendAmount" placeholder="500.00" class="input input-bordered input-xs w-full font-mono">
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-action border-t border-base-300 pt-3">
+                <button type="button" onclick="document.getElementById('quickExtendModal').close()" class="btn btn-ghost btn-sm">Cancel</button>
+                <button type="submit" class="btn btn-warning btn-sm gap-2" id="btnSubmitQuickExtend">
+                    <i class="fas fa-bolt"></i> Confirm Extension
+                </button>
             </div>
         </form>
     </div>
