@@ -1004,7 +1004,7 @@ function toggleDeletePasswordVisibility() {
 function handleDeleteServerSubmit(e) {
     e.preventDefault();
     const visibleInput = document.getElementById('deleteServerPasswordVisible');
-    const password = visibleInput.value.trim();
+    const password = visibleInput.value;
     if (!password) { showDeleteServerError('Please enter your password.'); return false; }
     document.getElementById('deleteServerPasswordInput').value = password;
 
@@ -1019,9 +1019,10 @@ function handleDeleteServerSubmit(e) {
         headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
         body: new FormData(form)
     }).then(async res => {
-        if (res.ok) { window.location.href = '/servers'; }
-        else {
-            const data = await res.json().catch(() => ({}));
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.success) {
+            window.location.href = '/servers';
+        } else {
             showDeleteServerError(data.error || 'Incorrect password. Server not deleted.');
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-trash-alt mr-1.5"></i>Delete Server';

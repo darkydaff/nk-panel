@@ -914,6 +914,25 @@ class VpnClient
     public static function syncAllStatsForServer(int $serverId): int
     {
         $pdo = DB::conn();
+        $stmtServer = $pdo->prepare('SELECT host, port, status FROM vpn_servers WHERE id = ?');
+        $stmtServer->execute([$serverId]);
+        $serverRow = $stmtServer->fetch(PDO::FETCH_ASSOC);
+
+        if (!$serverRow || ($serverRow['status'] ?? '') !== 'active') {
+            return 0;
+        }
+
+        // Quick 1-second socket check to ensure server is actually reachable before running SSH commands
+        $host = $serverRow['host'] ?? '';
+        $port = (int) ($serverRow['port'] ?? 22);
+        if (!empty($host) && $port > 0) {
+            $fp = @fsockopen($host, $port, $errno, $errstr, 1);
+            if (!$fp) {
+                return 0; // Server is unreachable / down, abort SSH attempts immediately
+            }
+            fclose($fp);
+        }
+
         $stmt = $pdo->prepare('SELECT id FROM vpn_clients WHERE server_id = ? AND status = ?');
         $stmt->execute([$serverId, 'active']);
         $clientIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
@@ -925,7 +944,7 @@ class VpnClient
                 if ($client->syncStats()) {
                     $synced++;
                 }
-            } catch (Exception $e) {
+            } catch (\Throwable $e) {
                 error_log('Failed to sync stats for client ' . $clientId . ': ' . $e->getMessage());
             }
         }
