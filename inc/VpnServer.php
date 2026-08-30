@@ -861,16 +861,25 @@ BASH;
      */
     public function delete(): bool
     {
-        // Stop and remove container only if host is reachable
+        // Attempt remote container cleanup only if VPS is alive and listening
         try {
-            if ($this->testConnection(3)) {
-                $containerName = $this->data['container_name'] ?: 'nk-awg-v2';
-                $this->executeCommand("docker stop {$containerName} 2>/dev/null || true", true);
-                $this->executeCommand("docker rm -fv {$containerName} 2>/dev/null || true", true);
-                $this->executeCommand("rm -rf /opt/amnezia/nk-awg-v2", true);
+            $host = $this->data['host'] ?? '';
+            $port = (int) ($this->data['port'] ?? 22);
+            if (!empty($host) && $port > 0) {
+                // Quick 1-second socket check to ensure server exists & responds
+                $fp = @fsockopen($host, $port, $errno, $errstr, 1);
+                if ($fp) {
+                    fclose($fp);
+                    if ($this->testConnection(2)) {
+                        $containerName = $this->data['container_name'] ?: 'nk-awg-v2';
+                        $this->executeCommand("docker stop {$containerName} 2>/dev/null || true", true);
+                        $this->executeCommand("docker rm -fv {$containerName} 2>/dev/null || true", true);
+                        $this->executeCommand("rm -rf /opt/amnezia/nk-awg-v2", true);
+                    }
+                }
             }
-        } catch (Exception $e) {
-            // Ignore errors during remote cleanup
+        } catch (\Throwable $e) {
+            // Remote cleanup is best-effort only, never block DB deletion
         }
 
         // Delete from database
@@ -879,7 +888,7 @@ BASH;
         // Clear associated routers
         try {
             $pdo->prepare('UPDATE routers SET server_id = NULL, vpn_client_id = NULL WHERE server_id = ? OR vpn_client_id IN (SELECT id FROM vpn_clients WHERE server_id = ?)')->execute([$this->serverId, $this->serverId]);
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             // Ignore if routers table does not exist
         }
 
