@@ -203,12 +203,13 @@ class VpnServer
     /**
      * Test SSH connection to server
      */
-    private function testConnection(): bool
+    private function testConnection(int $timeout = 10): bool
     {
         $testCommand = sprintf(
-            "SSHPASS='%s' sshpass -e ssh -p %d -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=10 %s@%s 'echo test' 2>/dev/null",
+            "SSHPASS='%s' sshpass -e ssh -p %d -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -o ConnectTimeout=%d %s@%s 'echo test' 2>/dev/null",
             str_replace("'", "'\\''", $this->data['password']),
             $this->data['port'],
+            $timeout,
             $this->data['username'],
             $this->data['host']
         );
@@ -860,18 +861,28 @@ BASH;
      */
     public function delete(): bool
     {
-        // Stop and remove container
+        // Stop and remove container only if host is reachable
         try {
-            $containerName = $this->data['container_name'];
-            $this->executeCommand("docker stop {$containerName} 2>/dev/null || true", true);
-            $this->executeCommand("docker rm -fv {$containerName} 2>/dev/null || true", true);
-            $this->executeCommand("rm -rf /opt/amnezia/nk-awg-v2", true);
+            if ($this->testConnection(3)) {
+                $containerName = $this->data['container_name'] ?: 'nk-awg-v2';
+                $this->executeCommand("docker stop {$containerName} 2>/dev/null || true", true);
+                $this->executeCommand("docker rm -fv {$containerName} 2>/dev/null || true", true);
+                $this->executeCommand("rm -rf /opt/amnezia/nk-awg-v2", true);
+            }
         } catch (Exception $e) {
-            // Ignore errors during cleanup
+            // Ignore errors during remote cleanup
         }
 
         // Delete from database
         $pdo = DB::conn();
+
+        // Clear associated routers
+        try {
+            $pdo->prepare('UPDATE routers SET server_id = NULL, vpn_client_id = NULL WHERE server_id = ? OR vpn_client_id IN (SELECT id FROM vpn_clients WHERE server_id = ?)')->execute([$this->serverId, $this->serverId]);
+        } catch (Exception $e) {
+            // Ignore if routers table does not exist
+        }
+
         $stmt = $pdo->prepare('DELETE FROM vpn_servers WHERE id = ?');
         return $stmt->execute([$this->serverId]);
     }

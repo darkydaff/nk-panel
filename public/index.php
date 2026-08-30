@@ -749,9 +749,20 @@ Router::post('/servers/{id}/delete', function ($params) {
         }
 
         $server->delete();
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => true]);
+            exit;
+        }
         $_SESSION['success_message'] = 'Server deleted successfully';
         redirect('/servers');
     } catch (Exception $e) {
+        if ($isAjax) {
+            http_response_code(500);
+            header('Content-Type: application/json');
+            echo json_encode(['error' => $e->getMessage()]);
+            exit;
+        }
         $_SESSION['error_message'] = $e->getMessage();
         redirect('/servers');
     }
