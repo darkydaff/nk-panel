@@ -358,7 +358,7 @@ class VpnServer
         $dockerfile = <<<DOCKERFILE
 # Stage 1: Build amneziawg-go and amneziawg-tools
 FROM golang:alpine AS builder
-RUN apk add --no-cache git make build-base bash libmnl-dev pkgconfig
+RUN apk add --no-cache git make build-base bash libmnl-dev pkgconf
 
 ARG AMNEZIAWG_GO_REF=master
 ARG AMNEZIAWG_TOOLS_REF=61e741780e8465a67a7d7fb6cffe14a8a15d624a
